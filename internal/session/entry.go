@@ -12,16 +12,16 @@ import (
 type EntryType string
 
 const (
-	EntrySession         EntryType = "session"
-	EntryMessage         EntryType = "message"
-	EntryModelChange     EntryType = "model_change"
-	EntryThinkingChange  EntryType = "thinking_level_change"
-	EntryCompaction      EntryType = "compaction"
-	EntryBranchSummary   EntryType = "branch_summary"
-	EntryCustom          EntryType = "custom"
-	EntryCustomMessage   EntryType = "custom_message"
-	EntryLabel           EntryType = "label"
-	EntrySessionInfo     EntryType = "session_info"
+	EntrySession        EntryType = "session"
+	EntryMessage        EntryType = "message"
+	EntryModelChange    EntryType = "model_change"
+	EntryThinkingChange EntryType = "thinking_level_change"
+	EntryCompaction     EntryType = "compaction"
+	EntryBranchSummary  EntryType = "branch_summary"
+	EntryCustom         EntryType = "custom"
+	EntryCustomMessage  EntryType = "custom_message"
+	EntryLabel          EntryType = "label"
+	EntrySessionInfo    EntryType = "session_info"
 )
 
 // EntryBase contains common fields for all session entries.

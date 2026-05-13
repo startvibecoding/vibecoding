@@ -4,9 +4,12 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/glamour"
 	"github.com/spf13/cobra"
 
 	"github.com/fuckvibecoding/vibecoding/internal/agent"
@@ -23,19 +26,28 @@ import (
 )
 
 var version = "dev"
+var debugEnabled bool
+
+// debugLog prints debug messages to stderr if debug mode is enabled.
+func debugLog(format string, args ...interface{}) {
+	if debugEnabled {
+		fmt.Fprintf(os.Stderr, "[DEBUG] "+format+"\n", args...)
+	}
+}
 
 func main() {
 	var (
-		flagProvider  string
-		flagModel     string
-		flagMode      string
-		flagThinking  string
-		flagContinue  bool
-		flagResume    string
-		flagSession   string
-		flagSandbox    bool
-		flagPrint     bool
-		flagVerbose   bool
+		flagProvider string
+		flagModel    string
+		flagMode     string
+		flagThinking string
+		flagContinue bool
+		flagResume   string
+		flagSession  string
+		flagSandbox  bool
+		flagPrint    bool
+		flagVerbose  bool
+		flagDebug    bool
 	)
 
 	rootCmd := &cobra.Command{
@@ -56,6 +68,7 @@ func main() {
 				sandbox:   flagSandbox,
 				print:     flagPrint,
 				verbose:   flagVerbose,
+				debug:     flagDebug,
 			})
 		},
 	}
@@ -71,6 +84,7 @@ func main() {
 	flags.BoolVar(&flagSandbox, "sandbox", false, "Enable sandbox (bwrap) for secure execution")
 	flags.BoolVarP(&flagPrint, "print", "P", false, "Print response and exit (non-interactive)")
 	flags.BoolVar(&flagVerbose, "verbose", false, "Verbose output")
+	flags.BoolVar(&flagDebug, "debug", false, "Enable debug logging")
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
@@ -88,9 +102,16 @@ type runOptions struct {
 	sandbox   bool
 	print     bool
 	verbose   bool
+	debug     bool
 }
 
 func run(args []string, opts runOptions) error {
+	// Enable debug logging if requested
+	debugEnabled = opts.debug
+	if debugEnabled {
+		fmt.Fprintf(os.Stderr, "[DEBUG] Debug logging enabled\n")
+	}
+
 	// Load settings
 	settings, err := config.LoadSettings()
 	if err != nil {
@@ -101,6 +122,29 @@ func run(args []string, opts runOptions) error {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("get working directory: %w", err)
+	}
+
+	// Load context files (before provider creation so user always sees what's loaded)
+	var contextStr string
+	var contextFilesInfo string
+	if settings.ContextFiles.Enabled {
+		cfResult := contextfiles.LoadContextFiles(cwd, config.ConfigDir(), settings.ContextFiles.ExtraFiles)
+		contextStr = contextfiles.BuildContextString(cfResult)
+		if contextStr != "" {
+			// Build context files info string for TUI
+			var sb strings.Builder
+			sb.WriteString("📄 Loaded context files:\n")
+			for _, f := range cfResult.GlobalFiles {
+				sb.WriteString(fmt.Sprintf("  ✓ %s (global)\n", f.Name))
+			}
+			for _, f := range cfResult.ParentFiles {
+				sb.WriteString(fmt.Sprintf("  ✓ %s (parent: %s)\n", f.Name, filepath.Dir(f.Path)))
+			}
+			for _, f := range cfResult.ProjectFiles {
+				sb.WriteString(fmt.Sprintf("  ✓ %s (project)\n", f.Name))
+			}
+			contextFilesInfo = sb.String()
+		}
 	}
 
 	// Determine provider
@@ -134,17 +178,6 @@ func run(args []string, opts runOptions) error {
 	thinkingLevel := opts.thinking
 	if thinkingLevel == "" {
 		thinkingLevel = settings.DefaultThinkingLevel
-	}
-
-	// Load context files
-	var contextStr string
-	if settings.ContextFiles.Enabled {
-		cfResult := contextfiles.LoadContextFiles(cwd, config.ConfigDir(), settings.ContextFiles.ExtraFiles)
-		contextStr = contextfiles.BuildContextString(cfResult)
-		if opts.verbose && contextStr != "" {
-			fmt.Fprintf(os.Stderr, "Loaded context files: %d global, %d parent, %d project\n",
-				len(cfResult.GlobalFiles), len(cfResult.ParentFiles), len(cfResult.ProjectFiles))
-		}
 	}
 
 	// Load skills
@@ -209,8 +242,15 @@ func run(args []string, opts runOptions) error {
 	}
 
 	// Interactive mode
+	// Clear any pending stdin input (e.g., terminal color queries)
+	clearStdin()
+
 	app := tui.NewApp(p, model, settings, sess, registry, sbInfo, extraContext, skillsMgr)
-	p2 := tea.NewProgram(app, tea.WithAltScreen())
+	// Add context files info as initial message
+	if contextFilesInfo != "" {
+		app.SetInitialMessage(contextFilesInfo)
+	}
+	p2 := tea.NewProgram(app, tea.WithAltScreen(), tea.WithInputTTY(), tea.WithReportFocus())
 	if _, err := p2.Run(); err != nil {
 		return fmt.Errorf("run TUI: %w", err)
 	}
@@ -318,6 +358,30 @@ func convertModelConfigs(providerName string, models []config.ModelConfig) []*pr
 	return result
 }
 
+// clearStdin reads and discards any pending input from stdin.
+// This is needed because some terminals send color query sequences on startup.
+func clearStdin() {
+	// Use a goroutine with timeout to read any pending input
+	done := make(chan struct{})
+	go func() {
+		buf := make([]byte, 128)
+		for {
+			select {
+			case <-done:
+				return
+			default:
+				n, _ := os.Stdin.Read(buf)
+				if n == 0 {
+					return
+				}
+			}
+		}
+	}()
+	// Wait a short time for any pending input to be read
+	time.Sleep(50 * time.Millisecond)
+	close(done)
+}
+
 func runPrint(args []string, p provider.Provider, model *provider.Model, mode string, thinkingLevel provider.ThinkingLevel, settings *config.Settings, registry *tools.Registry, sess *session.Manager, extraContext string) error {
 	input := strings.Join(args, " ")
 	if input == "" {
@@ -329,6 +393,16 @@ func runPrint(args []string, p provider.Provider, model *provider.Model, mode st
 	}
 
 	fmt.Fprintf(os.Stderr, "Using %s/%s in %s mode\n", p.Name(), model.ID, mode)
+
+	// Create glamour renderer for markdown
+	renderer, err := glamour.NewTermRenderer(
+		glamour.WithAutoStyle(),
+		glamour.WithWordWrap(80),
+	)
+	if err != nil {
+		debugLog("Failed to create glamour renderer: %v", err)
+		renderer = nil
+	}
 
 	agentCfg := agent.Config{
 		Provider:      p,
@@ -346,19 +420,38 @@ func runPrint(args []string, p provider.Provider, model *provider.Model, mode st
 	ctx := context.Background()
 	eventCh := a.Run(ctx, input)
 
+	var textBuffer strings.Builder
+
 	for event := range eventCh {
 		switch event.Type {
 		case agent.EventTextDelta:
-			fmt.Print(event.TextDelta)
+			textBuffer.WriteString(event.TextDelta)
 		case agent.EventToolCall:
+			// Flush text buffer before tool call
+			if textBuffer.Len() > 0 {
+				flushTextBuffer(&textBuffer, renderer)
+			}
 			fmt.Fprintf(os.Stderr, "\n[tool: %s]\n", event.ToolCall.Name)
-		case agent.EventToolStart:
+		case agent.EventToolExecutionStart:
 			fmt.Fprintf(os.Stderr, "[running: %s] ", event.ToolName)
+		case agent.EventToolExecutionEnd:
+			if event.ToolError != nil {
+				fmt.Fprintf(os.Stderr, "error: %v\n", event.ToolError)
+			} else {
+				fmt.Fprintf(os.Stderr, "done\n")
+			}
 		case agent.EventToolResult:
-			fmt.Fprintf(os.Stderr, "done\n")
+			// Already handled by EventToolExecutionEnd
 		case agent.EventDone:
-			fmt.Println()
+			// Flush remaining text buffer
+			if textBuffer.Len() > 0 {
+				flushTextBuffer(&textBuffer, renderer)
+			}
 		case agent.EventError:
+			// Flush text buffer before error
+			if textBuffer.Len() > 0 {
+				flushTextBuffer(&textBuffer, renderer)
+			}
 			if event.Error != nil {
 				return event.Error
 			}
@@ -371,4 +464,22 @@ func runPrint(args []string, p provider.Provider, model *provider.Model, mode st
 	}
 
 	return nil
+}
+
+// flushTextBuffer renders and prints the accumulated text buffer.
+func flushTextBuffer(buffer *strings.Builder, renderer *glamour.TermRenderer) {
+	text := buffer.String()
+	buffer.Reset()
+
+	if renderer != nil {
+		rendered, err := renderer.Render(text)
+		if err != nil {
+			// Fallback to plain text
+			fmt.Print(text)
+		} else {
+			fmt.Print(rendered)
+		}
+	} else {
+		fmt.Print(text)
+	}
 }

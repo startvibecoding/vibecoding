@@ -12,10 +12,10 @@ import (
 
 // BwrapSandbox implements sandbox using bubblewrap (bwrap).
 type BwrapSandbox struct {
-	level       Level
-	projectDir  string
-	bwrapPath   string
-	available   *bool // cached availability check
+	level      Level
+	projectDir string
+	bwrapPath  string
+	available  *bool // cached availability check
 }
 
 // NewBwrapSandbox creates a new bubblewrap sandbox.

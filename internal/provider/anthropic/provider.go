@@ -71,13 +71,13 @@ func NewProviderWithModels(apiKey, baseURL string, models []*provider.Model) *Pr
 }
 
 type anthropicRequest struct {
-	Model    string             `json:"model"`
-	Messages []anthropicMessage `json:"messages"`
-	System   string             `json:"system,omitempty"`
-	Tools    []anthropicTool    `json:"tools,omitempty"`
-	MaxTokens int               `json:"max_tokens"`
-	Stream   bool               `json:"stream"`
-	Thinking *anthropicThinking `json:"thinking,omitempty"`
+	Model     string             `json:"model"`
+	Messages  []anthropicMessage `json:"messages"`
+	System    string             `json:"system,omitempty"`
+	Tools     []anthropicTool    `json:"tools,omitempty"`
+	MaxTokens int                `json:"max_tokens"`
+	Stream    bool               `json:"stream"`
+	Thinking  *anthropicThinking `json:"thinking,omitempty"`
 }
 
 type anthropicThinking struct {
@@ -91,16 +91,16 @@ type anthropicMessage struct {
 }
 
 type anthropicContentBlock struct {
-	Type      string          `json:"type"`
-	Text      string          `json:"text,omitempty"`
-	Thinking  string          `json:"thinking,omitempty"`
-	Source    *anthropicImage `json:"source,omitempty"`
-	ID        string          `json:"id,omitempty"`
-	Name      string          `json:"name,omitempty"`
+	Type      string                 `json:"type"`
+	Text      string                 `json:"text,omitempty"`
+	Thinking  string                 `json:"thinking,omitempty"`
+	Source    *anthropicImage        `json:"source,omitempty"`
+	ID        string                 `json:"id,omitempty"`
+	Name      string                 `json:"name,omitempty"`
 	Input     map[string]interface{} `json:"input,omitempty"`
-	ToolUseID string          `json:"tool_use_id,omitempty"`
-	Content   interface{}     `json:"content,omitempty"`
-	IsError   bool            `json:"is_error,omitempty"`
+	ToolUseID string                 `json:"tool_use_id,omitempty"`
+	Content   interface{}            `json:"content,omitempty"`
+	IsError   bool                   `json:"is_error,omitempty"`
 }
 
 type anthropicImage struct {
@@ -172,7 +172,9 @@ func (p *Provider) Chat(ctx context.Context, params provider.ChatParams) <-chan 
 		}
 
 		maxTokens := params.MaxTokens
-		if maxTokens == 0 { maxTokens = 16384 }
+		if maxTokens == 0 {
+			maxTokens = 16384
+		}
 
 		reqBody := anthropicRequest{
 			Model:     modelID,
@@ -181,7 +183,9 @@ func (p *Provider) Chat(ctx context.Context, params provider.ChatParams) <-chan 
 			MaxTokens: maxTokens,
 			Stream:    true,
 		}
-		if params.SystemPrompt != "" { reqBody.System = params.SystemPrompt }
+		if params.SystemPrompt != "" {
+			reqBody.System = params.SystemPrompt
+		}
 
 		if params.ThinkingLevel != provider.ThinkingOff {
 			reqBody.Thinking = &anthropicThinking{Type: "enabled", BudgetTokens: thinkingBudget(params.ThinkingLevel)}
@@ -225,14 +229,14 @@ func (p *Provider) parseSSE(ctx context.Context, body io.Reader, ch chan<- provi
 	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
 
 	var (
-		textContent     string
-		reasonContent   string
-		toolCalls       []provider.ToolCallBlock
-		toolCallBuffers = make(map[int]*strings.Builder)
-		stopReason      string
-		usage           *provider.Usage
-		currentBlockType  string
-		currentBlockIndex int
+		textContent      string
+		reasonContent    string
+		toolCalls        []provider.ToolCallBlock
+		toolCallBuffers  = make(map[int]*strings.Builder)
+		stopReason       string
+		usage            *provider.Usage
+		currentBlockType string
+		toolCallIndex    int = -1
 	)
 
 	ch <- provider.StreamEvent{Type: provider.StreamStart}
@@ -249,11 +253,15 @@ func (p *Provider) parseSSE(ctx context.Context, body io.Reader, ch chan<- provi
 		}
 
 		line := scanner.Text()
-		if !strings.HasPrefix(line, "data: ") { continue }
+		if !strings.HasPrefix(line, "data: ") {
+			continue
+		}
 		data := strings.TrimPrefix(line, "data: ")
 
 		var event anthropicResponse
-		if err := json.Unmarshal([]byte(data), &event); err != nil { continue }
+		if err := json.Unmarshal([]byte(data), &event); err != nil {
+			continue
+		}
 
 		switch event.Type {
 		case "message_start":
@@ -266,14 +274,16 @@ func (p *Provider) parseSSE(ctx context.Context, body io.Reader, ch chan<- provi
 		case "content_block_start":
 			if event.ContentBlock != nil {
 				currentBlockType = event.ContentBlock.Type
-				currentBlockIndex = event.Index
 				if event.ContentBlock.Type == "tool_use" {
+					toolCallIndex = len(toolCalls)
 					toolCalls = append(toolCalls, provider.ToolCallBlock{ID: event.ContentBlock.ID, Name: event.ContentBlock.Name})
-					toolCallBuffers[event.Index] = &strings.Builder{}
+					toolCallBuffers[toolCallIndex] = &strings.Builder{}
 				}
 			}
 		case "content_block_delta":
-			if event.Delta == nil { continue }
+			if event.Delta == nil {
+				continue
+			}
 			switch event.Delta.Type {
 			case "text_delta":
 				textContent += event.Delta.Text
@@ -282,19 +292,28 @@ func (p *Provider) parseSSE(ctx context.Context, body io.Reader, ch chan<- provi
 				reasonContent += event.Delta.Thinking
 				ch <- provider.StreamEvent{Type: provider.StreamThinkDelta, ThinkDelta: event.Delta.Thinking}
 			case "input_json_delta":
-				if buf, ok := toolCallBuffers[currentBlockIndex]; ok { buf.WriteString(event.Delta.PartialJSON) }
-			}
-		case "content_block_stop":
-			if currentBlockType == "tool_use" && currentBlockIndex < len(toolCalls) {
-				if buf, ok := toolCallBuffers[currentBlockIndex]; ok {
-					toolCalls[currentBlockIndex].Arguments = json.RawMessage(buf.String())
-					ch <- provider.StreamEvent{Type: provider.StreamToolCall, ToolCall: &toolCalls[currentBlockIndex]}
+				if toolCallIndex >= 0 {
+					if buf, ok := toolCallBuffers[toolCallIndex]; ok {
+						buf.WriteString(event.Delta.PartialJSON)
+					}
 				}
 			}
+		case "content_block_stop":
+			if currentBlockType == "tool_use" && toolCallIndex >= 0 && toolCallIndex < len(toolCalls) {
+				if buf, ok := toolCallBuffers[toolCallIndex]; ok {
+					toolCalls[toolCallIndex].Arguments = json.RawMessage(buf.String())
+					ch <- provider.StreamEvent{Type: provider.StreamToolCall, ToolCall: &toolCalls[toolCallIndex]}
+				}
+			}
+			toolCallIndex = -1
 		case "message_delta":
-			if event.Delta != nil && event.Delta.StopReason != "" { stopReason = event.Delta.StopReason }
+			if event.Delta != nil && event.Delta.StopReason != "" {
+				stopReason = event.Delta.StopReason
+			}
 			if event.Usage != nil {
-				if usage == nil { usage = &provider.Usage{} }
+				if usage == nil {
+					usage = &provider.Usage{}
+				}
 				usage.Output = event.Usage.OutputTokens
 			}
 		}
@@ -321,7 +340,9 @@ func (p *Provider) convertMessages(params provider.ChatParams) []anthropicMessag
 				case "text":
 					blocks = append(blocks, anthropicContentBlock{Type: "text", Text: c.Text})
 				case "image":
-					if c.Image != nil { blocks = append(blocks, anthropicContentBlock{Type: "image", Source: &anthropicImage{Type: "base64", MediaType: c.Image.MimeType, Data: c.Image.Data}}) }
+					if c.Image != nil {
+						blocks = append(blocks, anthropicContentBlock{Type: "image", Source: &anthropicImage{Type: "base64", MediaType: c.Image.MimeType, Data: c.Image.Data}})
+					}
 				case "thinking":
 					blocks = append(blocks, anthropicContentBlock{Type: "thinking", Thinking: c.Thinking})
 				case "toolCall":
@@ -332,7 +353,11 @@ func (p *Provider) convertMessages(params provider.ChatParams) []anthropicMessag
 					}
 				}
 			}
-			if len(blocks) == 1 && blocks[0].Type == "text" { am.Content = blocks[0].Text } else { am.Content = blocks }
+			if len(blocks) == 1 && blocks[0].Type == "text" {
+				am.Content = blocks[0].Text
+			} else {
+				am.Content = blocks
+			}
 		} else {
 			am.Content = msg.Content
 		}
@@ -351,11 +376,17 @@ func (p *Provider) convertTools(tools []provider.ToolDefinition) []anthropicTool
 
 func thinkingBudget(level provider.ThinkingLevel) int {
 	switch level {
-	case provider.ThinkingMinimal: return 1024
-	case provider.ThinkingLow: return 4096
-	case provider.ThinkingMedium: return 10240
-	case provider.ThinkingHigh: return 32768
-	case provider.ThinkingXHigh: return 65536
-	default: return 10240
+	case provider.ThinkingMinimal:
+		return 1024
+	case provider.ThinkingLow:
+		return 4096
+	case provider.ThinkingMedium:
+		return 10240
+	case provider.ThinkingHigh:
+		return 32768
+	case provider.ThinkingXHigh:
+		return 65536
+	default:
+		return 10240
 	}
 }

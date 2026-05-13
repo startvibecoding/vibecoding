@@ -73,13 +73,13 @@ func NewProviderWithModels(apiKey, baseURL string, models []*provider.Model) *Pr
 
 // openAIRequest represents the request body for OpenAI Chat Completions.
 type openAIRequest struct {
-	Model         string          `json:"model"`
-	Messages      []openAIMessage `json:"messages"`
-	Tools         []openAITool    `json:"tools,omitempty"`
-	MaxTokens     int             `json:"max_tokens,omitempty"`
-	Stream        bool            `json:"stream"`
-	StreamOptions *streamOptions  `json:"stream_options,omitempty"`
-	ReasoningEffort string        `json:"reasoning_effort,omitempty"`
+	Model           string          `json:"model"`
+	Messages        []openAIMessage `json:"messages"`
+	Tools           []openAITool    `json:"tools,omitempty"`
+	MaxTokens       int             `json:"max_tokens,omitempty"`
+	Stream          bool            `json:"stream"`
+	StreamOptions   *streamOptions  `json:"stream_options,omitempty"`
+	ReasoningEffort string          `json:"reasoning_effort,omitempty"`
 }
 
 type streamOptions struct {
@@ -116,9 +116,9 @@ type openAIFunction struct {
 }
 
 type openAIToolCall struct {
-	ID    string `json:"id"`
-	Index int    `json:"index"`
-	Type  string `json:"type"`
+	ID       string `json:"id"`
+	Index    int    `json:"index"`
+	Type     string `json:"type"`
 	Function struct {
 		Name      string `json:"name"`
 		Arguments string `json:"arguments"`
@@ -135,22 +135,22 @@ type openAIResponse struct {
 }
 
 type openAIChoice struct {
-	Index        int          `json:"index"`
-	Delta        openAIDelta  `json:"delta"`
-	FinishReason *string      `json:"finish_reason"`
+	Index        int         `json:"index"`
+	Delta        openAIDelta `json:"delta"`
+	FinishReason *string     `json:"finish_reason"`
 }
 
 type openAIDelta struct {
-	Role      string         `json:"role"`
-	Content   string         `json:"content"`
-	Reasoning *string        `json:"reasoning_content"`
+	Role      string           `json:"role"`
+	Content   string           `json:"content"`
+	Reasoning *string          `json:"reasoning_content"`
 	ToolCalls []openAIToolCall `json:"tool_calls"`
 }
 
 type openAIUsageResponse struct {
-	PromptTokens     int `json:"prompt_tokens"`
-	CompletionTokens int `json:"completion_tokens"`
-	TotalTokens      int `json:"total_tokens"`
+	PromptTokens        int `json:"prompt_tokens"`
+	CompletionTokens    int `json:"completion_tokens"`
+	TotalTokens         int `json:"total_tokens"`
 	PromptTokensDetails *struct {
 		CachedTokens int `json:"cached_tokens"`
 	} `json:"prompt_tokens_details"`
@@ -186,11 +186,11 @@ func (p *Provider) Chat(ctx context.Context, params provider.ChatParams) <-chan 
 		}
 
 		reqBody := openAIRequest{
-			Model:     modelID,
-			Messages:  messages,
-			Tools:     tools,
-			MaxTokens: maxTokens,
-			Stream:    true,
+			Model:         modelID,
+			Messages:      messages,
+			Tools:         tools,
+			MaxTokens:     maxTokens,
+			Stream:        true,
 			StreamOptions: &streamOptions{IncludeUsage: true},
 		}
 
@@ -306,11 +306,19 @@ func (p *Provider) parseSSE(ctx context.Context, body io.Reader, ch chan<- provi
 					toolCallBuffers[idx] = &strings.Builder{}
 					toolCalls = append(toolCalls, provider.ToolCallBlock{ID: tc.ID, Name: tc.Function.Name})
 				}
-				if tc.ID != "" { toolCalls[idx].ID = tc.ID }
-				if tc.Function.Name != "" { toolCalls[idx].Name = tc.Function.Name }
-				if tc.Function.Arguments != "" { toolCallBuffers[idx].WriteString(tc.Function.Arguments) }
+				if tc.ID != "" {
+					toolCalls[idx].ID = tc.ID
+				}
+				if tc.Function.Name != "" {
+					toolCalls[idx].Name = tc.Function.Name
+				}
+				if tc.Function.Arguments != "" {
+					toolCallBuffers[idx].WriteString(tc.Function.Arguments)
+				}
 			}
-			if choice.FinishReason != nil { stopReason = *choice.FinishReason }
+			if choice.FinishReason != nil {
+				stopReason = *choice.FinishReason
+			}
 		}
 	}
 

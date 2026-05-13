@@ -4,88 +4,97 @@ import (
 	"fmt"
 	"runtime"
 	"strings"
+
+	"github.com/fuckvibecoding/vibecoding/internal/provider"
 )
 
 // BuildSystemPrompt constructs the system prompt based on mode and context.
 func BuildSystemPrompt(mode string, toolNames []string, cwd string, extraContext string) string {
 	var sb strings.Builder
 
-	sb.WriteString(fmt.Sprintf(`You are VibeCoding, an AI coding assistant running in a terminal.
+	// Core identity and environment
+	sb.WriteString(fmt.Sprintf(`You are VibeCoding, an AI coding assistant operating in a terminal environment.
 
 ## Environment
 - Working directory: %s
 - OS: %s %s
 - Shell: /bin/bash
 
-## Mode: %s
+`, cwd, runtime.GOOS, runtime.GOARCH))
 
-`, cwd, runtime.GOOS, runtime.GOARCH, strings.ToUpper(mode)))
-
+	// Mode-specific instructions
 	switch mode {
 	case "plan":
-		sb.WriteString(`## Plan Mode
-You are in PLAN mode. You can only READ files and analyze code. You CANNOT:
-- Write or edit files
-- Execute commands that modify the system
-- Make any changes to the project
+		sb.WriteString(`## Mode: PLAN
+You are in READ-ONLY mode. You can analyze code and create plans but CANNOT modify files or execute commands.
 
-Your job is to:
-1. Analyze the user's request
-2. Read relevant files to understand the codebase
-3. Create a detailed plan with specific file changes
-4. Explain what needs to be done step by step
+Your responsibilities:
+1. Analyze the user's request thoroughly
+2. Read relevant files to understand the codebase structure
+3. Create a detailed, actionable plan
+4. Present your plan in a clear, structured format
 
-Present your plan in a clear, structured format with:
-- Files to create/modify
-- Exact changes needed
-- Order of operations
-- Potential risks or considerations
+Plan format:
+- List specific files to create/modify
+- Describe exact changes needed
+- Specify the order of operations
+- Note potential risks or considerations
 
-After presenting the plan, ask the user if they want to switch to Agent mode to execute it.
+After presenting your plan, ask if the user wants to switch to Agent mode to execute it.
 `)
 
 	case "agent":
-		sb.WriteString(`## Agent Mode (Default)
-You are in AGENT mode. You can read and write files, execute commands, and make changes to the project.
+		sb.WriteString(`## Mode: AGENT
+You can read/write files and execute commands to accomplish tasks.
 
-Guidelines:
-- Read files before modifying them
-- Use the edit tool for precise changes to existing files
+Best practices:
+- Read files before modifying them to understand context
+- Use the edit tool for precise, targeted changes
 - Use the write tool for new files or complete rewrites
-- Test your changes when possible
-- Explain what you're doing and why
+- Verify your changes work when possible
+- Explain your reasoning as you work
 `)
 
 	case "yolo":
-		sb.WriteString(`## YOLO Mode
-You are in YOLO mode. You have full system access with no sandbox restrictions.
+		sb.WriteString(`## Mode: YOLO
+You have unrestricted system access. Execute tasks efficiently without asking for permission.
 
 You can:
-- Read/write any file on the system
+- Read/write any file
 - Execute any command
-- Install packages
-- Access the network
-- Do whatever is needed to accomplish the task
+- Install packages and dependencies
+- Access network resources
+- Perform any system operation needed
 
-Be efficient. Get things done. No permission needed.
+Focus on getting the task done quickly and correctly.
 `)
+
+	default:
+		sb.WriteString(fmt.Sprintf("## Mode: %s\n", strings.ToUpper(mode)))
 	}
 
+	// Tools section
 	sb.WriteString(fmt.Sprintf(`
 ## Available Tools
-You have access to these tools: %s
+%s
 
-Use them to accomplish the user's requests. When using tools:
+Tool usage guidelines:
 - Provide clear, specific parameters
-- Handle errors gracefully
-- Verify your work when possible
+- Handle errors gracefully and report them
+- Verify results when possible
+- Use the most appropriate tool for each task
 
-## Behavior
-- Be concise and direct
+`, formatToolList(toolNames)))
+
+	// Behavior guidelines
+	sb.WriteString(`## Behavior
+- Be concise and direct in your responses
 - Focus on the task at hand
-- When in doubt, ask for clarification
-- Don't make assumptions about file contents - read them first
-`, strings.Join(toolNames, ", ")))
+- Ask for clarification when requirements are ambiguous
+- Don't assume file contents - read them first
+- Explain complex operations before executing them
+- Report errors clearly with context
+`)
 
 	// Append extra context from files and skills
 	if extraContext != "" {
@@ -93,4 +102,95 @@ Use them to accomplish the user's requests. When using tools:
 	}
 
 	return sb.String()
+}
+
+// formatToolList formats the tool list for the system prompt.
+func formatToolList(toolNames []string) string {
+	if len(toolNames) == 0 {
+		return "No tools available."
+	}
+
+	var sb strings.Builder
+	sb.WriteString("Tools: ")
+	for i, name := range toolNames {
+		if i > 0 {
+			sb.WriteString(", ")
+		}
+		sb.WriteString(name)
+	}
+	return sb.String()
+}
+
+// BuildSkillsContext builds context from loaded skills.
+func BuildSkillsContext(skills []SkillInfo) string {
+	if len(skills) == 0 {
+		return ""
+	}
+
+	var sb strings.Builder
+	sb.WriteString(`
+## Available Skills
+The following specialized instructions are available for specific tasks:
+`)
+
+	for _, skill := range skills {
+		sb.WriteString(fmt.Sprintf("\n### %s\n", skill.Name))
+		sb.WriteString(fmt.Sprintf("Description: %s\n", skill.Description))
+		sb.WriteString(fmt.Sprintf("Location: %s\n", skill.Path))
+	}
+
+	sb.WriteString(`
+When a task matches a skill's description, read the full skill file for detailed instructions.
+If a skill file references relative paths, resolve them against the skill directory.
+`)
+
+	return sb.String()
+}
+
+// SkillInfo represents information about a skill.
+type SkillInfo struct {
+	Name        string
+	Description string
+	Path        string
+}
+
+// BuildContextFilesContext builds context from loaded context files.
+func BuildContextFilesContext(files []ContextFileInfo) string {
+	if len(files) == 0 {
+		return ""
+	}
+
+	var sb strings.Builder
+	sb.WriteString(`
+## Project Context
+The following context files have been loaded:
+`)
+
+	for _, file := range files {
+		sb.WriteString(fmt.Sprintf("\n### %s (%s)\n", file.Name, file.Scope))
+		sb.WriteString(file.Content)
+		if !strings.HasSuffix(file.Content, "\n") {
+			sb.WriteString("\n")
+		}
+	}
+
+	return sb.String()
+}
+
+// ContextFileInfo represents information about a context file.
+type ContextFileInfo struct {
+	Name    string
+	Path    string
+	Scope   string // "global", "parent", "project"
+	Content string
+}
+
+// ConvertToProviderMessages converts agent messages to provider messages.
+func ConvertToProviderMessages(messages []provider.Message) []provider.Message {
+	return messages
+}
+
+// ConvertFromProviderMessages converts provider messages to agent messages.
+func ConvertFromProviderMessages(messages []provider.Message) []provider.Message {
+	return messages
 }

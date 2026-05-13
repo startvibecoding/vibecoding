@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/textarea"
+	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -19,11 +19,6 @@ import (
 )
 
 var (
-	titleStyle = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("205")).
-			MarginBottom(1)
-
 	userStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("86")).
 			Bold(true)
@@ -46,61 +41,56 @@ var (
 			Foreground(lipgloss.Color("240")).
 			Italic(true)
 
-	inputStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("62"))
+	footerStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("240")).
+			BorderTop(true).
+			BorderForeground(lipgloss.Color("240"))
 
-	modePlanStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("214")).
-			Bold(true)
-
-	modeAgentStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("42")).
-			Bold(true)
-
-	modeYOLOStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("196")).
-			Bold(true)
+	pasteMarkerStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("214")).
+				Bold(true)
 )
 
 // App is the main TUI application.
 type App struct {
-	provider    provider.Provider
-	model       *provider.Model
-	settings    *config.Settings
-	session     *session.Manager
-	registry    *tools.Registry
-	sandboxInfo string
-	mode        string
+	provider     provider.Provider
+	model        *provider.Model
+	settings     *config.Settings
+	session      *session.Manager
+	registry     *tools.Registry
+	sandboxInfo  string
+	mode         string
 	extraContext string
-	skillsMgr   *skills.Manager
+	skillsMgr    *skills.Manager
+
+	// UI Components
+	viewport viewport.Model
+	input    textinput.Model
 
 	// State
-	viewport   viewport.Model
-	editor     textarea.Model
-	messages   []displayMessage
+	messages   []string
 	isThinking bool
 	agent      *agent.Agent
 	eventCh    <-chan agent.Event
 	width      int
 	height     int
 	ready      bool
-	showThink  bool
-}
+	autoScroll bool
 
-type displayMessage struct {
-	role     string // "user", "assistant", "tool", "error", "system"
-	content  string
-	toolName string
+	// Paste markers storage
+	pasteCounter int
+	pastes       map[int]string // pasteId -> original content
+
+	// Initial message to display
+	initialMessage string
 }
 
 // NewApp creates a new TUI application.
 func NewApp(p provider.Provider, model *provider.Model, settings *config.Settings, sess *session.Manager, registry *tools.Registry, sandboxInfo string, extraContext string, skillsMgr *skills.Manager) *App {
-	editor := textarea.New()
-	editor.Placeholder = "Type a message... (@ for files, / for commands, Tab to switch mode)"
-	editor.Focus()
-	editor.SetHeight(3)
-	editor.ShowLineNumbers = false
+	input := textinput.New()
+	input.Placeholder = "Type a message..."
+	input.Focus()
+	input.CharLimit = 0
 
 	vp := viewport.New(80, 20)
 
@@ -114,22 +104,32 @@ func NewApp(p provider.Provider, model *provider.Model, settings *config.Setting
 		mode:         settings.DefaultMode,
 		extraContext: extraContext,
 		skillsMgr:    skillsMgr,
-		editor:       editor,
+		input:        input,
 		viewport:     vp,
-		showThink:    true,
+		autoScroll:   true,
+		pastes:       make(map[int]string),
 	}
+}
+
+// SetInitialMessage sets an initial message to display when the TUI starts.
+func (a *App) SetInitialMessage(msg string) {
+	a.initialMessage = msg
 }
 
 // Init implements tea.Model.
 func (a *App) Init() tea.Cmd {
-	return textarea.Blink
+	// Show initial message if set
+	if a.initialMessage != "" {
+		a.messages = append(a.messages, statusStyle.Render(a.initialMessage))
+	}
+	return textinput.Blink
 }
 
 // Update implements tea.Model.
 func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var (
-		editorCmd tea.Cmd
-		vpCmd     tea.Cmd
+		inputCmd tea.Cmd
+		vpCmd    tea.Cmd
 	)
 
 	switch msg := msg.(type) {
@@ -138,204 +138,232 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.height = msg.Height
 		a.ready = true
 
-		headerHeight := 1
-		footerHeight := 2
-		inputHeight := 5
-		available := msg.Height - headerHeight - footerHeight - inputHeight
-		if available < 5 {
-			available = 5
+		chatHeight := msg.Height - 5
+		if chatHeight < 3 {
+			chatHeight = 3
 		}
 
 		a.viewport.Width = msg.Width
-		a.viewport.Height = available
-		a.viewport.SetContent(a.renderMessages())
-		a.editor.SetWidth(msg.Width - 2)
+		a.viewport.Height = chatHeight
+		a.input.Width = msg.Width - 4
 
+		a.updateViewportContent()
 		return a, nil
 
 	case tea.KeyMsg:
 		switch msg.String() {
-
 		case "ctrl+c":
-			// Ctrl+C always quits
 			return a, tea.Quit
 
 		case "esc":
-			// Escape: abort current thinking/action if running
 			if a.isThinking {
 				if a.agent != nil {
 					a.agent.Abort()
 				}
 				a.isThinking = false
-				a.addMessage("system", "⏹ Aborted")
-				a.viewport.SetContent(a.renderMessages())
-				a.viewport.GotoBottom()
-				return a, nil
+				a.addMessage(statusStyle.Render("⏹ Aborted"))
+			} else {
+				a.input.Reset()
 			}
-			// If not thinking, clear input
-			a.editor.Reset()
 			return a, nil
 
 		case "tab":
-			// Tab: cycle Plan → Agent → YOLO
 			a.cycleMode()
 			return a, nil
 
 		case "enter":
-			// Check for special commands
-			input := strings.TrimSpace(a.editor.Value())
+			input := strings.TrimSpace(a.input.Value())
 			if input != "" {
-				a.editor.Reset()
-				return a, a.processInput(input)
+				a.input.Reset()
+				// Expand paste markers before processing
+				expandedInput := a.expandPasteMarkers(input)
+				return a, a.processInput(expandedInput)
 			}
 			return a, nil
 
-		case "ctrl+t":
-			// Toggle thinking block display
-			a.showThink = !a.showThink
-			a.viewport.SetContent(a.renderMessages())
+		case "pgup":
+			a.viewport.HalfViewUp()
+			a.autoScroll = false
+			return a, nil
+
+		case "pgdown":
+			a.viewport.HalfViewDown()
+			if a.viewport.AtBottom() {
+				a.autoScroll = true
+			}
+			return a, nil
+
+		case "home":
+			a.viewport.GotoTop()
+			a.autoScroll = false
+			return a, nil
+
+		case "end":
+			a.viewport.GotoBottom()
+			a.autoScroll = true
 			return a, nil
 		}
 
-	case agentDoneMsg:
-		a.isThinking = false
-		if msg.err != nil {
-			a.addMessage("error", msg.err.Error())
+		// Check for paste (multi-line input in a single key event)
+		if msg.Type == tea.KeyRunes && len(msg.Runes) > 0 {
+			input := string(msg.Runes)
+			if strings.Contains(input, "\n") {
+				a.handlePaste(input)
+				return a, nil
+			}
 		}
-		a.viewport.SetContent(a.renderMessages())
-		a.viewport.GotoBottom()
-		return a, nil
+
+	case agentStartMsg:
+		a.isThinking = true
+		a.addMessage(userStyle.Render("You: ") + msg.input)
+		return a, listenEvents(a.eventCh)
 
 	case agentEventMsg:
 		return a, a.handleAgentEvent(msg.event)
 
-	case agentStartMsg:
-		a.isThinking = true
-		a.addMessage("user", msg.input)
-		a.viewport.SetContent(a.renderMessages())
-		a.viewport.GotoBottom()
+	case agentDoneMsg:
+		a.isThinking = false
+		if msg.err != nil {
+			a.addMessage(errorStyle.Render("Error: ") + msg.err.Error())
+		}
 		return a, nil
 	}
 
-	a.editor, editorCmd = a.editor.Update(msg)
+	// Update components
+	a.input, inputCmd = a.input.Update(msg)
 	a.viewport, vpCmd = a.viewport.Update(msg)
 
-	return a, tea.Batch(editorCmd, vpCmd)
+	return a, tea.Batch(inputCmd, vpCmd)
+}
+
+// handlePaste handles large pastes by creating markers
+func (a *App) handlePaste(text string) {
+	// Normalize line endings
+	text = strings.ReplaceAll(text, "\r\n", "\n")
+	text = strings.ReplaceAll(text, "\r", "\n")
+
+	lines := strings.Split(text, "\n")
+	totalChars := len(text)
+
+	// Check if this is a large paste (> 5 lines or > 500 chars)
+	if len(lines) > 5 || totalChars > 500 {
+		a.pasteCounter++
+		pasteId := a.pasteCounter
+		a.pastes[pasteId] = text
+
+		// Create marker
+		var marker string
+		if len(lines) > 5 {
+			marker = fmt.Sprintf("[paste #%d +%d lines]", pasteId, len(lines))
+		} else {
+			marker = fmt.Sprintf("[paste #%d %d chars]", pasteId, totalChars)
+		}
+
+		// Insert marker into input
+		current := a.input.Value()
+		a.input.SetValue(current + marker)
+	} else {
+		// Small paste - insert directly
+		current := a.input.Value()
+		// Replace newlines with spaces for single-line input
+		cleanText := strings.ReplaceAll(text, "\n", " ")
+		a.input.SetValue(current + cleanText)
+	}
+}
+
+// expandPasteMarkers expands paste markers to their original content
+func (a *App) expandPasteMarkers(text string) string {
+	result := text
+	for pasteId, content := range a.pastes {
+		// Match markers like [paste #1 +15 lines] or [paste #2 1234 chars]
+		markerLine := fmt.Sprintf("+%d lines", strings.Count(content, "\n")+1)
+		markerChar := fmt.Sprintf("%d chars", len(content))
+
+		// Try line marker
+		marker1 := fmt.Sprintf("[paste #%d %s]", pasteId, markerLine)
+		if strings.Contains(result, marker1) {
+			result = strings.ReplaceAll(result, marker1, content)
+			continue
+		}
+
+		// Try char marker
+		marker2 := fmt.Sprintf("[paste #%d %s]", pasteId, markerChar)
+		if strings.Contains(result, marker2) {
+			result = strings.ReplaceAll(result, marker2, content)
+		}
+	}
+
+	// Clean up used pastes
+	a.pastes = make(map[int]string)
+	a.pasteCounter = 0
+
+	return result
 }
 
 // View implements tea.Model.
 func (a *App) View() string {
 	if !a.ready {
-		return "Initializing..."
+		return "\n  Loading...\n"
 	}
 
-	header := a.renderHeader()
 	footer := a.renderFooter()
-	editorView := inputStyle.Render(a.editor.View())
 
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
-		header,
 		a.viewport.View(),
-		editorView,
+		a.input.View(),
 		footer,
 	)
 }
 
-func (a *App) renderHeader() string {
+func (a *App) updateViewportContent() {
+	a.viewport.SetContent(strings.Join(a.messages, "\n\n"))
+	if a.autoScroll {
+		a.viewport.GotoBottom()
+	}
+}
+
+func (a *App) renderFooter() string {
 	modelName := "unknown"
 	if a.model != nil {
 		modelName = a.model.Name
 	}
 
-	thinking := a.settings.DefaultThinkingLevel
-	if thinking == "" {
-		thinking = "off"
-	}
-
-	// Mode display with color
-	var modeDisplay string
+	var modeStr string
 	switch a.mode {
 	case "plan":
-		modeDisplay = modePlanStyle.Render("🗒 PLAN")
+		modeStr = "🗒 PLAN"
 	case "agent":
-		modeDisplay = modeAgentStyle.Render("🔧 AGENT")
+		modeStr = "🔧 AGENT"
 	case "yolo":
-		modeDisplay = modeYOLOStyle.Render("🚀 YOLO")
+		modeStr = "🚀 YOLO"
 	default:
-		modeDisplay = strings.ToUpper(a.mode)
+		modeStr = strings.ToUpper(a.mode)
 	}
 
-	header := fmt.Sprintf("  VibeCoding | %s | %s | Think: %s",
-		modelName, modeDisplay, thinking)
-
-	return titleStyle.Width(a.width).Render(header)
-}
-
-func (a *App) renderFooter() string {
 	cwd := "."
 	if a.session != nil && a.session.GetHeader() != nil {
 		cwd = a.session.GetHeader().Cwd
 	}
+	if len(cwd) > 30 {
+		cwd = "..." + cwd[len(cwd)-27:]
+	}
 
-	status := fmt.Sprintf("  📁 %s  |  %s", cwd, a.sandboxInfo)
-
+	status := fmt.Sprintf(" %s | %s | %s", modeStr, modelName, cwd)
 	if a.isThinking {
-		status += "  |  ⏳ Processing... (Esc to abort)"
+		status += " | ⏳"
 	} else {
-		status += "  |  Tab: switch mode"
+		status += " | Tab:mode Esc:abort"
 	}
 
-	return statusStyle.Width(a.width).Render(status)
+	return footerStyle.Width(a.width).Render(status)
 }
 
-func (a *App) renderMessages() string {
-	var sb strings.Builder
-
-	for _, m := range a.messages {
-		switch m.role {
-		case "user":
-			sb.WriteString(userStyle.Render("You: "))
-			sb.WriteString(m.content)
-			sb.WriteString("\n\n")
-
-		case "assistant":
-			sb.WriteString(assistantStyle.Render("Assistant: "))
-			sb.WriteString(m.content)
-			sb.WriteString("\n\n")
-
-		case "thinking":
-			if a.showThink {
-				sb.WriteString(thinkStyle.Render("💭 Thinking: " + m.content))
-				sb.WriteString("\n\n")
-			}
-
-		case "tool":
-			sb.WriteString(toolStyle.Render(fmt.Sprintf("🔧 [%s] %s", m.toolName, m.content)))
-			sb.WriteString("\n\n")
-
-		case "error":
-			sb.WriteString(errorStyle.Render("❌ Error: " + m.content))
-			sb.WriteString("\n\n")
-
-		case "system":
-			sb.WriteString(toolStyle.Render("ℹ️ " + m.content))
-			sb.WriteString("\n\n")
-		}
-	}
-
-	return sb.String()
+func (a *App) addMessage(msg string) {
+	a.messages = append(a.messages, msg)
+	a.updateViewportContent()
 }
 
-func (a *App) addMessage(role, content string) {
-	a.messages = append(a.messages, displayMessage{role: role, content: content})
-}
-
-func (a *App) addToolMessage(toolName, content string) {
-	a.messages = append(a.messages, displayMessage{role: "tool", toolName: toolName, content: content})
-}
-
-// cycleMode cycles through Plan → Agent → YOLO modes.
 func (a *App) cycleMode() {
 	modes := []string{"plan", "agent", "yolo"}
 	current := 0
@@ -347,49 +375,25 @@ func (a *App) cycleMode() {
 	}
 	next := (current + 1) % len(modes)
 	a.mode = modes[next]
-
-	// Update sandbox for the new mode
-	sbMgr := a.registry.GetSandbox()
+	a.agent = nil
 
 	var modeLabel string
 	switch a.mode {
 	case "plan":
-		modeLabel = "🗒️  PLAN - Read-only analysis and planning"
-		if sbMgr != nil {
-			// Plan uses strict sandbox
-		}
+		modeLabel = "🗒️ PLAN - Read-only"
 	case "agent":
-		modeLabel = "🔧 AGENT - Standard read/write access"
-		if sbMgr != nil {
-			// Agent uses standard sandbox
-		}
+		modeLabel = "🔧 AGENT - Standard"
 	case "yolo":
-		modeLabel = "🚀 YOLO - Full system access, no restrictions"
-		if sbMgr != nil {
-			// YOLO uses no sandbox
-		}
+		modeLabel = "🚀 YOLO - Full access"
 	}
-
-	// Reset agent to pick up new mode on next message
-	a.agent = nil
-
-	a.addMessage("system", fmt.Sprintf("Mode: %s", modeLabel))
-	a.viewport.SetContent(a.renderMessages())
-	a.viewport.GotoBottom()
+	a.addMessage(statusStyle.Render(fmt.Sprintf("Mode: %s", modeLabel)))
 }
 
 func (a *App) processInput(input string) tea.Cmd {
-	// Handle commands
 	if strings.HasPrefix(input, "/") {
 		return a.handleCommand(input)
 	}
 
-	// Normal message: send to agent
-	a.addMessage("user", input)
-	a.viewport.SetContent(a.renderMessages())
-	a.viewport.GotoBottom()
-
-	// Create agent if not exists
 	if a.agent == nil {
 		agentCfg := agent.Config{
 			Provider:      a.provider,
@@ -407,7 +411,6 @@ func (a *App) processInput(input string) tea.Cmd {
 	ctx := context.Background()
 	a.eventCh = a.agent.Run(ctx, input)
 
-	// Start a goroutine to forward events to the TUI
 	return tea.Batch(
 		func() tea.Msg { return agentStartMsg{input: input} },
 		listenEvents(a.eventCh),
@@ -425,140 +428,111 @@ func (a *App) handleCommand(cmd string) tea.Cmd {
 			case "plan", "agent", "yolo":
 				a.mode = parts[1]
 				a.agent = nil
-				a.addMessage("system", fmt.Sprintf("Mode switched to: %s", strings.ToUpper(a.mode)))
+				a.addMessage(statusStyle.Render(fmt.Sprintf("Mode: %s", strings.ToUpper(a.mode))))
 			default:
-				a.addMessage("error", "Invalid mode. Use: plan, agent, yolo")
+				a.addMessage(errorStyle.Render("Invalid mode"))
 			}
 		} else {
-			a.addMessage("system", fmt.Sprintf("Current mode: %s\nUse /mode [plan|agent|yolo] or press Tab to switch.", strings.ToUpper(a.mode)))
+			a.addMessage(statusStyle.Render(fmt.Sprintf("Current mode: %s", strings.ToUpper(a.mode))))
 		}
 	case "/model":
-		a.addMessage("system", fmt.Sprintf("Model: %s (%s)", a.model.Name, a.model.Provider))
-	case "/think":
-		a.addMessage("system", fmt.Sprintf("Thinking level: %s\nChange in ~/.vibecoding/settings.json or with --thinking flag.", a.settings.DefaultThinkingLevel))
-	case "/help":
-		a.addMessage("system", `Commands:
-  /mode [plan|agent|yolo]  - Switch mode
-  /model                   - Show current model
-  /think                   - Show thinking level
-  /clear                   - Clear conversation
-  /quit                    - Exit
-
-Keys:
-  Tab       - Switch mode (Plan → Agent → YOLO)
-  Enter     - Send message
-  Escape    - Abort current action / Clear input
-  Ctrl+C    - Quit
-  Ctrl+T    - Toggle thinking display`)
+		a.addMessage(statusStyle.Render(fmt.Sprintf("Model: %s (%s)", a.model.Name, a.model.Provider)))
 	case "/clear":
 		a.messages = nil
 		a.agent = nil
-		a.addMessage("system", "Conversation cleared.")
+		a.pastes = make(map[int]string)
+		a.pasteCounter = 0
+		a.updateViewportContent()
 	case "/quit":
 		return tea.Quit
+	case "/help":
+		a.addMessage(statusStyle.Render("Commands: /mode, /model, /clear, /quit, /help"))
 	default:
-		a.addMessage("error", fmt.Sprintf("Unknown command: %s. Type /help for available commands.", command))
+		a.addMessage(errorStyle.Render(fmt.Sprintf("Unknown: %s", command)))
 	}
 
-	a.viewport.SetContent(a.renderMessages())
-	a.viewport.GotoBottom()
 	return nil
 }
 
 func (a *App) handleAgentEvent(event agent.Event) tea.Cmd {
 	switch event.Type {
 	case agent.EventTextDelta:
-		// Update last assistant message or create new one
-		found := false
-		for i := len(a.messages) - 1; i >= 0; i-- {
-			if a.messages[i].role == "assistant" {
-				a.messages[i].content += event.TextDelta
-				found = true
-				break
-			}
+		lastIdx := len(a.messages) - 1
+		if lastIdx >= 0 && isAssistantMsg(a.messages[lastIdx]) {
+			a.messages[lastIdx] += event.TextDelta
+		} else {
+			a.messages = append(a.messages, assistantStyle.Render("Assistant: ")+event.TextDelta)
 		}
-		if !found {
-			a.messages = append(a.messages, displayMessage{role: "assistant", content: event.TextDelta})
-		}
-		a.viewport.SetContent(a.renderMessages())
-		a.viewport.GotoBottom()
+		a.updateViewportContent()
+		return listenEvents(a.eventCh)
 
 	case agent.EventThinkDelta:
-		found := false
-		for i := len(a.messages) - 1; i >= 0; i-- {
-			if a.messages[i].role == "thinking" {
-				a.messages[i].content += event.ThinkDelta
-				found = true
-				break
-			}
+		lastIdx := len(a.messages) - 1
+		if lastIdx >= 0 && strings.HasPrefix(a.messages[lastIdx], thinkStyle.Render("💭 ")) {
+			a.messages[lastIdx] += event.ThinkDelta
+		} else {
+			a.messages = append(a.messages, thinkStyle.Render("💭 ")+event.ThinkDelta)
 		}
-		if !found {
-			a.messages = append(a.messages, displayMessage{role: "thinking", content: event.ThinkDelta})
-		}
-		a.viewport.SetContent(a.renderMessages())
-		a.viewport.GotoBottom()
+		a.updateViewportContent()
+		return listenEvents(a.eventCh)
 
 	case agent.EventToolCall:
 		if event.ToolCall != nil {
-			a.addToolMessage(event.ToolCall.Name, fmt.Sprintf("Calling %s...", event.ToolCall.Name))
+			a.addMessage(toolStyle.Render(fmt.Sprintf("🔧 [%s] ...", event.ToolCall.Name)))
 		}
-		a.viewport.SetContent(a.renderMessages())
-		a.viewport.GotoBottom()
-
-	case agent.EventToolStart:
-		// Already handled by EventToolCall
+		return listenEvents(a.eventCh)
 
 	case agent.EventToolResult:
-		// Find and update the tool message
 		for i := len(a.messages) - 1; i >= 0; i-- {
-			if a.messages[i].role == "tool" && a.messages[i].toolName == event.ToolName {
-				a.messages[i].content = event.ToolResult
+			if strings.Contains(a.messages[i], "🔧 [") {
+				a.messages[i] = toolStyle.Render(fmt.Sprintf("🔧 [%s] %s", event.ToolName, truncate(event.ToolResult, 80)))
 				break
 			}
 		}
-		a.viewport.SetContent(a.renderMessages())
-		a.viewport.GotoBottom()
+		a.updateViewportContent()
+		return listenEvents(a.eventCh)
 
 	case agent.EventDone:
 		a.isThinking = false
-		a.viewport.SetContent(a.renderMessages())
-		a.viewport.GotoBottom()
+		a.autoScroll = true
+		return listenEvents(a.eventCh)
 
 	case agent.EventError:
 		a.isThinking = false
 		if event.Error != nil {
-			a.addMessage("error", event.Error.Error())
+			a.addMessage(errorStyle.Render("Error: ") + event.Error.Error())
 		}
-		a.viewport.SetContent(a.renderMessages())
-		a.viewport.GotoBottom()
+		return listenEvents(a.eventCh)
 
 	case agent.EventUsage:
 		if event.Usage != nil {
-			costStr := fmt.Sprintf("Tokens: %d in / %d out | Cost: $%.4f",
+			costStr := fmt.Sprintf("Tokens: %d↓/%d↑ $%.4f",
 				event.Usage.Input, event.Usage.Output, event.Usage.Cost.Total)
-			a.addMessage("system", costStr)
+			a.addMessage(statusStyle.Render(costStr))
 		}
-		a.viewport.SetContent(a.renderMessages())
-		a.viewport.GotoBottom()
+		return listenEvents(a.eventCh)
+
+	default:
+		return listenEvents(a.eventCh)
 	}
-
-	return listenEvents(a.eventCh)
 }
 
-// Message types for BubbleTea
-type agentStartMsg struct {
-	input string
+func isAssistantMsg(s string) bool {
+	return strings.Contains(s, "Assistant: ")
 }
 
-type agentEventMsg struct {
-	event agent.Event
+func truncate(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
 }
 
-type agentDoneMsg struct {
-	err error
-}
+// Message types
+type agentStartMsg struct{ input string }
+type agentEventMsg struct{ event agent.Event }
+type agentDoneMsg struct{ err error }
 
-// listenEvents creates a tea.Cmd that listens for agent events and converts them to tea.Msg.
 func listenEvents(eventCh <-chan agent.Event) tea.Cmd {
 	return func() tea.Msg {
 		event, ok := <-eventCh

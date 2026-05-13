@@ -20,9 +20,9 @@ type Skill struct {
 
 // Manager manages skill discovery and loading.
 type Manager struct {
-	globalDir string // ~/.vibecoding/skills
+	globalDir  string // ~/.vibecoding/skills
 	projectDir string // .skills/ in project root
-	skills    map[string]*Skill
+	skills     map[string]*Skill
 }
 
 // NewManager creates a new skills manager.

@@ -16,30 +16,3 @@ type Provider interface {
 	// GetModel returns a model by ID, or nil if not found.
 	GetModel(id string) *Model
 }
-
-// BaseProvider provides common functionality for provider implementations.
-type BaseProvider struct {
-	name   string
-	models []*Model
-}
-
-func NewBaseProvider(name string, models []*Model) BaseProvider {
-	return BaseProvider{name: name, models: models}
-}
-
-func (p *BaseProvider) Name() string {
-	return p.name
-}
-
-func (p *BaseProvider) Models() []*Model {
-	return p.models
-}
-
-func (p *BaseProvider) GetModel(id string) *Model {
-	for _, m := range p.models {
-		if m.ID == id {
-			return m
-		}
-	}
-	return nil
-}

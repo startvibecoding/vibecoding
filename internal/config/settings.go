@@ -11,22 +11,22 @@ import (
 
 // Settings holds all configuration for vibecoding.
 type Settings struct {
-	Providers          map[string]ProviderConfig `json:"providers,omitempty"`
-	DefaultProvider    string                    `json:"defaultProvider,omitempty"`
-	DefaultModel       string                    `json:"defaultModel,omitempty"`
-	DefaultThinkingLevel string                  `json:"defaultThinkingLevel,omitempty"`
-	DefaultMode        string                    `json:"defaultMode,omitempty"`
-	MaxContextTokens   int                       `json:"maxContextTokens,omitempty"`
-	MaxOutputTokens    int                       `json:"maxOutputTokens,omitempty"`
-	ContextFiles       ContextFilesSettings      `json:"contextFiles"`
-	SkillsDir          string                    `json:"skillsDir,omitempty"`
-	Compaction         CompactionSettings         `json:"compaction"`
-	Sandbox            SandboxSettings            `json:"sandbox"`
-	SessionDir         string                    `json:"sessionDir,omitempty"`
-	ShellPath          string                    `json:"shellPath,omitempty"`
-	ShellCommandPrefix string                    `json:"shellCommandPrefix,omitempty"`
-	Theme              string                    `json:"theme,omitempty"`
-	Retry              RetrySettings             `json:"retry"`
+	Providers            map[string]ProviderConfig `json:"providers,omitempty"`
+	DefaultProvider      string                    `json:"defaultProvider,omitempty"`
+	DefaultModel         string                    `json:"defaultModel,omitempty"`
+	DefaultThinkingLevel string                    `json:"defaultThinkingLevel,omitempty"`
+	DefaultMode          string                    `json:"defaultMode,omitempty"`
+	MaxContextTokens     int                       `json:"maxContextTokens,omitempty"`
+	MaxOutputTokens      int                       `json:"maxOutputTokens,omitempty"`
+	ContextFiles         ContextFilesSettings      `json:"contextFiles"`
+	SkillsDir            string                    `json:"skillsDir,omitempty"`
+	Compaction           CompactionSettings        `json:"compaction"`
+	Sandbox              SandboxSettings           `json:"sandbox"`
+	SessionDir           string                    `json:"sessionDir,omitempty"`
+	ShellPath            string                    `json:"shellPath,omitempty"`
+	ShellCommandPrefix   string                    `json:"shellCommandPrefix,omitempty"`
+	Theme                string                    `json:"theme,omitempty"`
+	Retry                RetrySettings             `json:"retry"`
 }
 
 type ProviderConfig struct {
@@ -88,6 +88,9 @@ func DefaultSettings() *Settings {
 	return &Settings{
 		Providers: map[string]ProviderConfig{
 			"anthropic": {
+				BaseURL: "https://api.anthropic.com",
+				APIKey:  "${ANTHROPIC_API_KEY}",
+				API:     "anthropic-messages",
 				Models: []ModelConfig{
 					{ID: "claude-sonnet-4-20250514", Name: "Claude 4 Sonnet", Reasoning: true, ContextWindow: 200000, MaxTokens: 16384, Cost: &CostConfig{Input: 3, Output: 15, CacheRead: 0.3, CacheWrite: 3.75}, Input: []string{"text", "image"}},
 					{ID: "claude-3-5-sonnet-20241022", Name: "Claude 3.5 Sonnet", ContextWindow: 200000, MaxTokens: 8192, Cost: &CostConfig{Input: 3, Output: 15, CacheRead: 0.3, CacheWrite: 3.75}, Input: []string{"text", "image"}},
@@ -96,6 +99,9 @@ func DefaultSettings() *Settings {
 				},
 			},
 			"openai": {
+				BaseURL: "https://api.openai.com/v1",
+				APIKey:  "${OPENAI_API_KEY}",
+				API:     "openai-chat",
 				Models: []ModelConfig{
 					{ID: "gpt-4o", Name: "GPT-4o", ContextWindow: 128000, MaxTokens: 16384, Cost: &CostConfig{Input: 2.5, Output: 10, CacheRead: 1.25, CacheWrite: 2.5}, Input: []string{"text", "image"}},
 					{ID: "gpt-4o-mini", Name: "GPT-4o Mini", ContextWindow: 128000, MaxTokens: 16384, Cost: &CostConfig{Input: 0.15, Output: 0.6, CacheRead: 0.075, CacheWrite: 0.15}, Input: []string{"text", "image"}},
@@ -165,10 +171,18 @@ func LoadSettings() (*Settings, error) {
 		}
 	}
 
-	if v := os.Getenv("VIBECODING_PROVIDER"); v != "" { s.DefaultProvider = v }
-	if v := os.Getenv("VIBECODING_MODEL"); v != "" { s.DefaultModel = v }
-	if v := os.Getenv("VIBECODING_MODE"); v != "" { s.DefaultMode = v }
-	if v := os.Getenv("VIBECODING_THINKING"); v != "" { s.DefaultThinkingLevel = v }
+	if v := os.Getenv("VIBECODING_PROVIDER"); v != "" {
+		s.DefaultProvider = v
+	}
+	if v := os.Getenv("VIBECODING_MODEL"); v != "" {
+		s.DefaultModel = v
+	}
+	if v := os.Getenv("VIBECODING_MODE"); v != "" {
+		s.DefaultMode = v
+	}
+	if v := os.Getenv("VIBECODING_THINKING"); v != "" {
+		s.DefaultThinkingLevel = v
+	}
 
 	return s, nil
 }
@@ -215,7 +229,9 @@ func LoadAuth() (*AuthData, error) {
 	data := &AuthData{Entries: make(map[string]AuthEntry)}
 	raw, err := os.ReadFile(AuthFilePath())
 	if err != nil {
-		if os.IsNotExist(err) { return data, nil }
+		if os.IsNotExist(err) {
+			return data, nil
+		}
 		return nil, err
 	}
 	if err := json.Unmarshal(raw, &data.Entries); err != nil {
@@ -245,21 +261,31 @@ func (s *Settings) ResolveKey(providerName string) string {
 }
 
 func resolveKeyValue(key string) string {
-	if strings.HasPrefix(key, "!") { return resolveShellCommand(key[1:]) }
-	if v := os.Getenv(key); v != "" && !strings.Contains(key, " ") { return v }
+	if strings.HasPrefix(key, "!") {
+		return resolveShellCommand(key[1:])
+	}
+	if v := os.Getenv(key); v != "" && !strings.Contains(key, " ") {
+		return v
+	}
 	return key
 }
 
 func (s *Settings) GetProviderConfig(name string) *ProviderConfig {
-	if pc, ok := s.Providers[name]; ok { return &pc }
+	if pc, ok := s.Providers[name]; ok {
+		return &pc
+	}
 	return nil
 }
 
 func (s *Settings) GetModelConfig(providerName, modelID string) *ModelConfig {
 	pc := s.GetProviderConfig(providerName)
-	if pc == nil { return nil }
+	if pc == nil {
+		return nil
+	}
 	for _, m := range pc.Models {
-		if m.ID == modelID { return &m }
+		if m.ID == modelID {
+			return &m
+		}
 	}
 	return nil
 }
@@ -267,8 +293,12 @@ func (s *Settings) GetModelConfig(providerName, modelID string) *ModelConfig {
 func resolveShellCommand(cmd string) string { return "" }
 
 func (s *Settings) GetShell() string {
-	if s.ShellPath != "" { return s.ShellPath }
-	if runtime.GOOS == "windows" { return "cmd" }
+	if s.ShellPath != "" {
+		return s.ShellPath
+	}
+	if runtime.GOOS == "windows" {
+		return "cmd"
+	}
 	return "/bin/bash"
 }
 
@@ -296,8 +326,12 @@ func (s *Settings) GetGlobalSkillsDir() string {
 
 func SaveGlobalSettings(s *Settings) error {
 	dir := ConfigDir()
-	if err := os.MkdirAll(dir, 0700); err != nil { return err }
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return err
+	}
 	data, err := json.MarshalIndent(s, "", "  ")
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	return os.WriteFile(GlobalSettingsPath(), data, 0600)
 }

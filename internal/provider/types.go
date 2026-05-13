@@ -7,11 +7,11 @@ import (
 
 // ContentBlock represents a block of content in a message.
 type ContentBlock struct {
-	Type      string         `json:"type"` // "text", "image", "thinking", "toolCall"
-	Text      string         `json:"text,omitempty"`
-	Thinking  string         `json:"thinking,omitempty"`
-	Image     *ImageContent  `json:"image,omitempty"`
-	ToolCall  *ToolCallBlock `json:"toolCall,omitempty"`
+	Type     string         `json:"type"` // "text", "image", "thinking", "toolCall"
+	Text     string         `json:"text,omitempty"`
+	Thinking string         `json:"thinking,omitempty"`
+	Image    *ImageContent  `json:"image,omitempty"`
+	ToolCall *ToolCallBlock `json:"toolCall,omitempty"`
 }
 
 // ImageContent represents an image in a message.
@@ -70,12 +70,12 @@ func NewToolResultMessage(toolCallID, toolName, content string, isError bool) Me
 
 // Usage represents token usage and cost information.
 type Usage struct {
-	Input       int     `json:"input"`
-	Output      int     `json:"output"`
-	CacheRead   int     `json:"cacheRead"`
-	CacheWrite  int     `json:"cacheWrite"`
-	TotalTokens int     `json:"totalTokens"`
-	Cost        Cost    `json:"cost"`
+	Input       int  `json:"input"`
+	Output      int  `json:"output"`
+	CacheRead   int  `json:"cacheRead"`
+	CacheWrite  int  `json:"cacheWrite"`
+	TotalTokens int  `json:"totalTokens"`
+	Cost        Cost `json:"cost"`
 }
 
 // Cost represents the monetary cost of a request.
@@ -115,8 +115,8 @@ type Model struct {
 	ID            string       `json:"id"`
 	Name          string       `json:"name"`
 	Provider      string       `json:"provider"`
-	Reasoning     bool         `json:"reasoning"`     // supports extended thinking
-	Input         []string     `json:"input"`         // "text", "image"
+	Reasoning     bool         `json:"reasoning"` // supports extended thinking
+	Input         []string     `json:"input"`     // "text", "image"
 	Cost          ModelPricing `json:"cost"`
 	ContextWindow int          `json:"contextWindow"` // max context tokens
 	MaxTokens     int          `json:"maxTokens"`     // max output tokens
@@ -157,12 +157,12 @@ const (
 // StreamEvent represents a single event from a streaming response.
 type StreamEvent struct {
 	Type       StreamEventType
-	TextDelta  string          // for StreamTextDelta
-	ThinkDelta string          // for StreamThinkDelta
-	ToolCall   *ToolCallBlock  // for StreamToolCall
-	Usage      *Usage          // for StreamUsage
-	Error      error           // for StreamError
-	StopReason string          // for StreamDone: "stop", "length", "toolUse", "error", "aborted"
+	TextDelta  string         // for StreamTextDelta
+	ThinkDelta string         // for StreamThinkDelta
+	ToolCall   *ToolCallBlock // for StreamToolCall
+	Usage      *Usage         // for StreamUsage
+	Error      error          // for StreamError
+	StopReason string         // for StreamDone: "stop", "length", "toolUse", "error", "aborted"
 }
 
 // ChatParams contains all parameters for a chat request.
