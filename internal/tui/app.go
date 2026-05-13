@@ -86,6 +86,10 @@ type App struct {
 	extraContext string
 	skillsMgr   *skills.Manager
 
+	// Skills state: base extraContext (without skills) and active skill names
+	baseExtraContext string            // extraContext without skill content
+	activeSkills     map[string]string // skill name -> skill context string
+
 	// UI Components
 	viewport viewport.Model
 	input    textinput.Model
@@ -160,6 +164,8 @@ func NewApp(p provider.Provider, model *provider.Model, settings *config.Setting
 		sandboxInfo:    sandboxInfo,
 		mode:           settings.DefaultMode,
 		extraContext:   extraContext,
+		baseExtraContext: extraContext,
+		activeSkills:    make(map[string]string),
 		skillsMgr:      skillsMgr,
 		input:          input,
 		viewport:       vp,
@@ -853,22 +859,108 @@ func (a *App) handleCommand(cmd string) tea.Cmd {
 		}
 	case "/model":
 		a.addMessage(statusStyle.Render(fmt.Sprintf("Model: %s (%s)", a.model.Name, a.model.Provider)))
+	case "/skills":
+		a.listSkills()
+	case "/skill":
+		if len(parts) > 1 {
+			a.activateSkill(parts[1])
+		} else {
+			a.listSkills()
+		}
 	case "/clear":
 		a.messages = nil
 		a.agent = nil
 		a.contextUsage = nil
 		a.pastes = make(map[int]string)
 		a.pasteCounter = 0
+		a.activeSkills = make(map[string]string)
+		a.extraContext = a.baseExtraContext
 		a.updateViewportContent()
 	case "/quit":
 		return tea.Quit
 	case "/help":
-		a.addMessage(statusStyle.Render("Commands: /mode, /model, /clear, /quit, /help"))
+		a.addMessage(statusStyle.Render("Commands: /mode, /model, /skills, /skill <name>, /clear, /quit, /help"))
 	default:
-		a.addMessage(errorStyle.Render(fmt.Sprintf("Unknown: %s", command)))
+		// Handle /skill:<name> syntax (colon-separated)
+		if strings.HasPrefix(command, "/skill:") {
+			skillName := strings.TrimPrefix(command, "/skill:")
+			if skillName != "" {
+				a.activateSkill(skillName)
+			} else {
+				a.listSkills()
+			}
+		} else {
+			a.addMessage(errorStyle.Render(fmt.Sprintf("Unknown: %s", command)))
+		}
 	}
 
 	return nil
+}
+
+// listSkills displays all available skills.
+func (a *App) listSkills() {
+	if a.skillsMgr == nil {
+		a.addMessage(statusStyle.Render("No skills manager available."))
+		return
+	}
+	skillList := a.skillsMgr.List()
+	if len(skillList) == 0 {
+		a.addMessage(statusStyle.Render("No skills found."))
+		return
+	}
+
+	var sb strings.Builder
+	sb.WriteString("Available skills:\n")
+	for _, s := range skillList {
+		marker := " "
+		if _, ok := a.activeSkills[s.Name]; ok {
+			marker = "*"
+		}
+		sb.WriteString(fmt.Sprintf("  [%s] %s (%s): %s\n", marker, s.Name, s.Source, s.Description))
+	}
+	sb.WriteString("\nUse /skill <name> or /skill:<name> to activate a skill.")
+	a.addMessage(statusStyle.Render(sb.String()))
+}
+
+// activateSkill loads a skill's content into the extra context.
+func (a *App) activateSkill(name string) {
+	if a.skillsMgr == nil {
+		a.addMessage(errorStyle.Render("No skills manager available."))
+		return
+	}
+	skill := a.skillsMgr.Get(name)
+	if skill == nil {
+		a.addMessage(errorStyle.Render(fmt.Sprintf("Skill not found: %s", name)))
+		return
+	}
+
+	// Check if already active
+	if _, ok := a.activeSkills[name]; ok {
+		a.addMessage(statusStyle.Render(fmt.Sprintf("Skill '%s' is already active.", name)))
+		return
+	}
+
+	// Add skill content to active skills
+	skillCtx := a.skillsMgr.BuildSkillContext(name)
+	a.activeSkills[name] = skillCtx
+
+	// Rebuild extraContext from base + all active skills
+	a.rebuildExtraContext()
+
+	// Reset agent so next message uses the updated context
+	a.agent = nil
+
+	a.addMessage(statusStyle.Render(fmt.Sprintf("✅ Skill '%s' activated (%s): %s", name, skill.Source, skill.Description)))
+}
+
+// rebuildExtraContext rebuilds extraContext from base context + all active skills.
+func (a *App) rebuildExtraContext() {
+	sb := strings.Builder{}
+	sb.WriteString(a.baseExtraContext)
+	for _, ctx := range a.activeSkills {
+		sb.WriteString(ctx)
+	}
+	a.extraContext = sb.String()
 }
 
 func (a *App) handleAgentEvent(event agent.Event) tea.Cmd {
