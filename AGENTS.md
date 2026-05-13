@@ -16,10 +16,21 @@ VibeCoding is a terminal-based AI coding assistant written in Go, inspired by [p
 ```
 vibecoding/
 ├── cmd/vibecoding/          # CLI entry point (main.go)
+├── docs/                    # Project documentation
+│   ├── architecture.md      # Architecture details
+│   ├── cli-reference.md     # CLI command reference
+│   ├── configuration.md     # Configuration guide
+│   ├── development.md       # Development guide
+│   ├── security.md          # Security documentation
+│   ├── sessions.md          # Session management
+│   ├── tools.md             # Tools documentation
+│   ├── zh/                  # Chinese documentation
+│   └── en/                  # English documentation
 ├── internal/
 │   ├── agent/               # Core agent loop and system prompts
 │   ├── config/              # Settings, auth, configuration
 │   ├── contextfiles/        # Context file discovery (AGENTS.md, CLAUDE.md, etc.)
+│   ├── platform/            # Cross-platform compatibility utilities
 │   ├── provider/            # LLM provider abstraction
 │   │   ├── anthropic/       # Anthropic Messages API
 │   │   └── openai/          # OpenAI Chat Completions API
