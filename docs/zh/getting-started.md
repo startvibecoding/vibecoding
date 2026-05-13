@@ -12,17 +12,31 @@
 
 ### 方法一: 一键安装 (推荐)
 
+**Linux/macOS:**
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/fuckvibecoding/vibecoding/main/install.sh | bash
+```
+
+**Windows (PowerShell):**
+
+```powershell
+irm https://raw.githubusercontent.com/fuckvibecoding/vibecoding/main/install.ps1 | iex
 ```
 
 或者指定安装目录:
 
 ```bash
+# Linux/macOS
 INSTALL_DIR=~/.local/bin curl -fsSL https://raw.githubusercontent.com/fuckvibecoding/vibecoding/main/install.sh | bash
+
+# Windows
+$env:VIBECODING_INSTALL_DIR="C:\Tools\vibecoding"; irm https://raw.githubusercontent.com/fuckvibecoding/vibecoding/main/install.ps1 | iex
 ```
 
-这将自动从 GitHub 下载最新版本并安装二进制文件到 `/usr/local/bin` (或你指定的 `INSTALL_DIR`)。
+这将自动从 GitHub 下载最新版本并安装二进制文件。默认安装位置：
+- Linux/macOS: `/usr/local/bin`
+- Windows: `%LOCALAPPDATA%\vibecoding`
 
 ### 方法二: Go Install
 
