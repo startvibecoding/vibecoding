@@ -1,8 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Show error location on failure
+trap 'error "Installation failed at line $LINENO. Set INSTALL_DIR to a writable path or run with sudo."' ERR
+
 # VibeCoding Installer
 # Downloads and installs the latest release from GitHub
+#
+# Repository: https://github.com/fuckvibecoding/vibecoding
+# Author:     zhenruyan
+# Blog:       https://pkold.com
 
 REPO="fuckvibecoding/vibecoding"
 BINARY_NAME="vibecoding"
@@ -92,7 +99,7 @@ verify_checksum() {
     fi
     
     local expected
-    expected=$(grep "$(basename "$file")" "$checksum_file" | awk '{print $1}')
+    expected=$(grep "$(basename "$file")" "$checksum_file" | awk '{print $1}' || true)
     
     if [ -z "$expected" ]; then
         warn "Checksum not found for $(basename "$file")"
@@ -123,7 +130,11 @@ install_binary() {
     # Create install directory if it doesn't exist
     if [ ! -d "$INSTALL_DIR" ]; then
         info "Creating install directory: ${INSTALL_DIR}"
-        sudo mkdir -p "$INSTALL_DIR"
+        if [ -w "$(dirname "$INSTALL_DIR")" ]; then
+            mkdir -p "$INSTALL_DIR"
+        else
+            sudo mkdir -p "$INSTALL_DIR" || error "Failed to create ${INSTALL_DIR}. Run with sudo or set INSTALL_DIR to a writable path."
+        fi
     fi
     
     # Check if we need sudo
@@ -132,7 +143,7 @@ install_binary() {
         chmod +x "${INSTALL_DIR}/${BINARY_NAME}"
     else
         info "Requesting sudo privileges to install to ${INSTALL_DIR}"
-        sudo mv "$binary_path" "${INSTALL_DIR}/${BINARY_NAME}"
+        sudo mv "$binary_path" "${INSTALL_DIR}/${BINARY_NAME}" || error "Failed to move binary. Run with sudo or set INSTALL_DIR to a writable path."
         sudo chmod +x "${INSTALL_DIR}/${BINARY_NAME}"
     fi
     
@@ -159,7 +170,9 @@ check_path() {
 main() {
     echo ""
     echo "╔═══════════════════════════════════════════════════════════════╗"
-    echo "║                   VibeCoding Installer                       ║"
+    echo "║                   VibeCoding Installer                        ║"
+    echo "║               https://github.com/fuckvibecoding/vibecoding    ║"
+    echo "║                  Author: zhenruyan | pkold.com                ║"
     echo "╚═══════════════════════════════════════════════════════════════╝"
     echo ""
     
