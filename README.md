@@ -28,14 +28,26 @@
 
 **Option 1: One-line Install (Recommended)**
 
+Linux/macOS:
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/fuckvibecoding/vibecoding/main/install.sh | bash
+```
+
+Windows (PowerShell):
+
+```powershell
+irm https://raw.githubusercontent.com/fuckvibecoding/vibecoding/main/install.ps1 | iex
 ```
 
 Or with custom install directory:
 
 ```bash
+# Linux/macOS
 INSTALL_DIR=~/.local/bin curl -fsSL https://raw.githubusercontent.com/fuckvibecoding/vibecoding/main/install.sh | bash
+
+# Windows
+$env:VIBECODING_INSTALL_DIR="C:\Tools\vibecoding"; irm https://raw.githubusercontent.com/fuckvibecoding/vibecoding/main/install.ps1 | iex
 ```
 
 **Option 2: Go Install**
