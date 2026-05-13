@@ -1,0 +1,112 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a2e"/>
+      <stop offset="100%" style="stop-color:#16213e"/>
+    </linearGradient>
+    <linearGradient id="accentGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#00d4ff"/>
+      <stop offset="100%" style="stop-color:#7b2ff7"/>
+    </linearGradient>
+    <linearGradient id="codeGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#00d4ff"/>
+      <stop offset="50%" style="stop-color:#7b2ff7"/>
+      <stop offset="100%" style="stop-color:#ff6b6b"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="512" height="512" rx="96" fill="url(#bgGradient)"/>
+  
+  <!-- Subtle grid pattern -->
+  <g opacity="0.03" stroke="white" stroke-width="1">
+    <line x1="0" y1="64" x2="512" y2="64"/>
+    <line x1="0" y1="128" x2="512" y2="128"/>
+    <line x1="0" y1="192" x2="512" y2="192"/>
+    <line x1="0" y1="256" x2="512" y2="256"/>
+    <line x1="0" y1="320" x2="512" y2="320"/>
+    <line x1="0" y1="384" x2="512" y2="384"/>
+    <line x1="0" y1="448" x2="512" y2="448"/>
+    <line x1="64" y1="0" x2="64" y2="512"/>
+    <line x1="128" y1="0" x2="128" y2="512"/>
+    <line x1="192" y1="0" x2="192" y2="512"/>
+    <line x1="256" y1="0" x2="256" y2="512"/>
+    <line x1="320" y1="0" x2="320" y2="512"/>
+    <line x1="384" y1="0" x2="384" y2="512"/>
+    <line x1="448" y1="0" x2="448" y2="512"/>
+  </g>
+  
+  <!-- Terminal window -->
+  <g transform="translate(80, 100)">
+    <!-- Window frame -->
+    <rect x="0" y="0" width="352" height="280" rx="16" fill="#0a0a1a" stroke="#333" stroke-width="2"/>
+    
+    <!-- Title bar -->
+    <rect x="0" y="0" width="352" height="48" rx="16" fill="#1a1a2e"/>
+    <rect x="0" y="32" width="352" height="16" fill="#1a1a2e"/>
+    
+    <!-- Window buttons -->
+    <circle cx="24" cy="24" r="8" fill="#ff5f56"/>
+    <circle cx="48" cy="24" r="8" fill="#ffbd2e"/>
+    <circle cx="72" cy="24" r="8" fill="#27ca40"/>
+    
+    <!-- Code lines -->
+    <g filter="url(#glow)">
+      <!-- Prompt line 1 -->
+      <text x="24" y="88" font-family="monospace" font-size="20" fill="#00d4ff" font-weight="bold">❯</text>
+      <text x="52" y="88" font-family="monospace" font-size="20" fill="#e0e0e0"> vibecoding</text>
+      <text x="220" y="88" font-family="monospace" font-size="16" fill="#666"> --mode agent</text>
+      
+      <!-- Response line -->
+      <text x="24" y="120" font-family="monospace" font-size="16" fill="#7b2ff7">⠋</text>
+      <text x="48" y="120" font-family="monospace" font-size="16" fill="#888"> Analyzing codebase...</text>
+      
+      <!-- Code output -->
+      <rect x="24" y="140" width="280" height="2" fill="url(#codeGradient)" opacity="0.5"/>
+      
+      <text x="32" y="172" font-family="monospace" font-size="15" fill="#27ca40">✓</text>
+      <text x="56" y="172" font-family="monospace" font-size="15" fill="#aaa"> Found 12 files</text>
+      
+      <text x="32" y="196" font-family="monospace" font-size="15" fill="#27ca40">✓</text>
+      <text x="56" y="196" font-family="monospace" font-size="15" fill="#aaa"> Analyzing structure</text>
+      
+      <text x="32" y="220" font-family="monospace" font-size="15" fill="#ffbd2e">→</text>
+      <text x="56" y="220" font-family="monospace" font-size="15" fill="#aaa"> Generating solution</text>
+      
+      <!-- Blinking cursor -->
+      <rect x="24" y="248" width="12" height="20" fill="#00d4ff" opacity="0.8">
+        <animate attributeName="opacity" values="0.8;0.2;0.8" dur="1.2s" repeatCount="indefinite"/>
+      </rect>
+    </g>
+  </g>
+  
+  <!-- AI Brain symbol -->
+  <g transform="translate(340, 320)" filter="url(#glow)">
+    <!-- Neural network nodes -->
+    <circle cx="0" cy="0" r="24" fill="none" stroke="url(#accentGradient)" stroke-width="3"/>
+    <circle cx="0" cy="0" r="8" fill="url(#accentGradient)"/>
+    
+    <!-- Connection lines -->
+    <line x1="-20" y1="-12" x2="-48" y2="-32" stroke="url(#accentGradient)" stroke-width="2" opacity="0.6"/>
+    <line x1="20" y1="-12" x2="48" y2="-32" stroke="url(#accentGradient)" stroke-width="2" opacity="0.6"/>
+    <line x1="-20" y1="12" x2="-48" y2="32" stroke="url(#accentGradient)" stroke-width="2" opacity="0.6"/>
+    <line x1="20" y1="12" x2="48" y2="32" stroke="url(#accentGradient)" stroke-width="2" opacity="0.6"/>
+    
+    <!-- Outer nodes -->
+    <circle cx="-48" cy="-32" r="6" fill="#00d4ff" opacity="0.8"/>
+    <circle cx="48" cy="-32" r="6" fill="#7b2ff7" opacity="0.8"/>
+    <circle cx="-48" cy="32" r="6" fill="#7b2ff7" opacity="0.8"/>
+    <circle cx="48" cy="32" r="6" fill="#ff6b6b" opacity="0.8"/>
+  </g>
+  
+  <!-- Brand text -->
+  <text x="256" y="460" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="48" font-weight="700" fill="white" letter-spacing="-1">VibeCoding</text>
+  <text x="256" y="490" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="18" fill="#666" letter-spacing="4">AI ASSISTANT</text>
+</svg>

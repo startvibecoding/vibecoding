@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a2e"/>
+      <stop offset="100%" style="stop-color:#16213e"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#00d4ff"/>
+      <stop offset="100%" style="stop-color:#7b2ff7"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="128" height="128" rx="24" fill="url(#bg)"/>
+  
+  <!-- Terminal -->
+  <rect x="20" y="24" width="88" height="72" rx="8" fill="#0a0a1a" stroke="#333" stroke-width="1.5"/>
+  
+  <!-- Title bar -->
+  <rect x="20" y="24" width="88" height="16" rx="8" fill="#1a1a2e"/>
+  <rect x="20" y="32" width="88" height="8" fill="#1a1a2e"/>
+  
+  <!-- Window dots -->
+  <circle cx="32" cy="32" r="3" fill="#ff5f56"/>
+  <circle cx="42" cy="32" r="3" fill="#ffbd2e"/>
+  <circle cx="52" cy="32" r="3" fill="#27ca40"/>
+  
+  <!-- Code -->
+  <text x="28" y="58" font-family="monospace" font-size="13" fill="#00d4ff" font-weight="bold">❯</text>
+  <text x="40" y="58" font-family="monospace" font-size="11" fill="#e0e0e0">vc</text>
+  <text x="28" y="74" font-family="monospace" font-size="9" fill="#27ca40">✓ Ready</text>
+  
+  <!-- Cursor -->
+  <rect x="28" y="82" width="8" height="12" fill="#00d4ff" opacity="0.8">
+    <animate attributeName="opacity" values="0.8;0.2;0.8" dur="1.2s" repeatCount="indefinite"/>
+  </rect>
+  
+  <!-- AI Brain -->
+  <g transform="translate(88, 88)">
+    <circle cx="0" cy="0" r="14" fill="none" stroke="url(#accent)" stroke-width="2"/>
+    <circle cx="0" cy="0" r="5" fill="url(#accent)"/>
+    <line x1="-12" y1="-7" x2="-22" y2="-14" stroke="#00d4ff" stroke-width="1.5" opacity="0.6"/>
+    <line x1="12" y1="-7" x2="22" y2="-14" stroke="#7b2ff7" stroke-width="1.5" opacity="0.6"/>
+    <line x1="-12" y1="7" x2="-22" y2="14" stroke="#7b2ff7" stroke-width="1.5" opacity="0.6"/>
+    <line x1="12" y1="7" x2="22" y2="14" stroke="#ff6b6b" stroke-width="1.5" opacity="0.6"/>
+    <circle cx="-22" cy="-14" r="3" fill="#00d4ff" opacity="0.8"/>
+    <circle cx="22" cy="-14" r="3" fill="#7b2ff7" opacity="0.8"/>
+    <circle cx="-22" cy="14" r="3" fill="#7b2ff7" opacity="0.8"/>
+    <circle cx="22" cy="14" r="3" fill="#ff6b6b" opacity="0.8"/>
+  </g>
+</svg>

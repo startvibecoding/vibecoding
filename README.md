@@ -1,6 +1,12 @@
-# VibeCoding
+<p align="center">
+  <img src="assets/logo.svg" alt="VibeCoding" width="128" height="128">
+</p>
 
-A terminal-based AI coding assistant written in Go, inspired by [pi.dev](https://pi.dev).
+<h1 align="center">VibeCoding</h1>
+
+<p align="center">
+  A terminal-based AI coding assistant written in Go, inspired by <a href="https://pi.dev">pi.dev</a>
+</p>
 
 ## Features
 

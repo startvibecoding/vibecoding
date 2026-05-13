@@ -83,6 +83,14 @@
             font-weight: 500;
             letter-spacing: 0.02em;
             flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .app-bar__logo {
+            width: 32px;
+            height: 32px;
         }
 
         .app-bar__actions {
@@ -487,7 +495,10 @@
         <button class="app-bar__menu" onclick="toggleDrawer()" aria-label="Menu">
             <span class="material-icons">menu</span>
         </button>
-        <span class="app-bar__title">VibeCoding Documentation</span>
+        <span class="app-bar__title">
+            <img src="../assets/logo.svg" alt="VibeCoding" class="app-bar__logo">
+            VibeCoding Documentation
+        </span>
         <div class="app-bar__actions">
             <button class="lang-chip active" onclick="switchLanguage('en')">English</button>
             <button class="lang-chip" onclick="switchLanguage('zh')">中文</button>
