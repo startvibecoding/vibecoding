@@ -20,11 +20,25 @@ A terminal-based AI coding assistant written in Go, inspired by [pi.dev](https:/
 
 ### Install
 
+**Option 1: One-line Install (Recommended)**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/fuckvibecoding/vibecoding/main/install.sh | bash
+```
+
+Or with custom install directory:
+
+```bash
+INSTALL_DIR=~/.local/bin curl -fsSL https://raw.githubusercontent.com/fuckvibecoding/vibecoding/main/install.sh | bash
+```
+
+**Option 2: Go Install**
+
 ```bash
 go install github.com/fuckvibecoding/vibecoding/cmd/vibecoding@latest
 ```
 
-Or build from source:
+**Option 3: Build from Source**
 
 ```bash
 git clone https://github.com/fuckvibecoding/vibecoding.git

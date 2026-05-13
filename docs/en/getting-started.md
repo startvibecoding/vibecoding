@@ -10,13 +10,27 @@ This guide helps you get started with VibeCoding in 5 minutes.
 
 ## Installation
 
-### Method 1: Go Install (Recommended)
+### Method 1: One-line Install (Recommended)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/fuckvibecoding/vibecoding/main/install.sh | bash
+```
+
+Or with custom install directory:
+
+```bash
+INSTALL_DIR=~/.local/bin curl -fsSL https://raw.githubusercontent.com/fuckvibecoding/vibecoding/main/install.sh | bash
+```
+
+This will automatically download the latest release from GitHub and install the binary to `/usr/local/bin` (or your custom `INSTALL_DIR`).
+
+### Method 2: Go Install
 
 ```bash
 go install github.com/fuckvibecoding/vibecoding/cmd/vibecoding@latest
 ```
 
-### Method 2: Build from Source
+### Method 3: Build from Source
 
 ```bash
 # Clone repository
@@ -29,7 +43,7 @@ make build
 # Binary is located at bin/vibecoding
 ```
 
-### Method 3: Install to System
+### Method 4: Install to System
 
 ```bash
 # After building from source

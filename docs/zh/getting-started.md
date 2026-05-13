@@ -10,13 +10,27 @@
 
 ## 安装
 
-### 方法一: Go Install (推荐)
+### 方法一: 一键安装 (推荐)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/fuckvibecoding/vibecoding/main/install.sh | bash
+```
+
+或者指定安装目录:
+
+```bash
+INSTALL_DIR=~/.local/bin curl -fsSL https://raw.githubusercontent.com/fuckvibecoding/vibecoding/main/install.sh | bash
+```
+
+这将自动从 GitHub 下载最新版本并安装二进制文件到 `/usr/local/bin` (或你指定的 `INSTALL_DIR`)。
+
+### 方法二: Go Install
 
 ```bash
 go install github.com/fuckvibecoding/vibecoding/cmd/vibecoding@latest
 ```
 
-### 方法二: 从源码构建
+### 方法三: 从源码构建
 
 ```bash
 # 克隆仓库
@@ -29,7 +43,7 @@ make build
 # 二进制文件位于 bin/vibecoding
 ```
 
-### 方法三: 安装到系统
+### 方法四: 安装到系统
 
 ```bash
 # 从源码构建后
