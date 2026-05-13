@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/cellbuf"
 
 	"github.com/fuckvibecoding/vibecoding/internal/agent"
 	"github.com/fuckvibecoding/vibecoding/internal/config"
@@ -624,11 +625,25 @@ func (a *App) updateViewportContent() {
 		}
 	}
 	
-	a.viewport.SetContent(strings.Join(displayMessages, "\n\n"))
 	a.fullContent = strings.Join(displayMessages, "\n\n")
+	a.viewport.SetContent(a.wrapContent(a.fullContent))
 	if a.autoScroll {
 		a.viewport.GotoBottom()
 	}
+}
+
+// wrapContent wraps content to fit within the viewport width.
+// This ensures logical lines in the viewport match visual lines after wrapping.
+func (a *App) wrapContent(content string) string {
+	if a.width <= 0 {
+		return content
+	}
+	lines := strings.Split(content, "\n")
+	wrapped := make([]string, 0, len(lines))
+	for _, line := range lines {
+		wrapped = append(wrapped, cellbuf.Wrap(line, a.width, ""))
+	}
+	return strings.Join(wrapped, "\n")
 }
 
 // formatToolArgs formats tool arguments for display
@@ -793,8 +808,13 @@ func (a *App) showNextApproval() {
 		a.addMessage(warningStyle.Render(fmt.Sprintf("⚠️  Approval required for [%s]", next.toolName)))
 	}
 	if len(next.args) > 0 {
-		argsJSON, _ := json.MarshalIndent(next.args, "", "  ")
-		a.addMessage(warningStyle.Render(string(argsJSON)))
+		var buf strings.Builder
+		enc := json.NewEncoder(&buf)
+		enc.SetEscapeHTML(false)
+		enc.SetIndent("", "  ")
+		if err := enc.Encode(next.args); err == nil {
+			a.addMessage(warningStyle.Render(strings.TrimRight(buf.String(), "\n")))
+		}
 	}
 	a.addMessage(warningStyle.Render("Approve? (y/n): "))
 }

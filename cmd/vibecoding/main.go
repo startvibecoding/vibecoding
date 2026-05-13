@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/term"
+
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/glamour"
 	"github.com/spf13/cobra"
@@ -259,7 +261,7 @@ func run(args []string, opts runOptions) error {
 	// Clear any pending stdin input (e.g., terminal color queries)
 	clearStdin()
 
-	app := tui.NewApp(p, model, settings, sess, registry, sbInfo, extraContext, skillsMgr)
+	app := tui.NewApp(p, model, settings, sess, registry, sbInfo, extraContext, skillsMgr, mode)
 	// Add context files info and session info as initial message
 	var initialMsg string
 	if contextFilesInfo != "" {
@@ -419,9 +421,13 @@ func runPrint(args []string, p provider.Provider, model *provider.Model, mode st
 	fmt.Fprintf(os.Stderr, "Using %s/%s in %s mode\n", p.Name(), model.ID, mode)
 
 	// Create glamour renderer for markdown
+	wordWrap := 80
+	if w, _, err := term.GetSize(int(os.Stdout.Fd())); err == nil && w > 0 {
+		wordWrap = w
+	}
 	renderer, err := glamour.NewTermRenderer(
 		glamour.WithAutoStyle(),
-		glamour.WithWordWrap(80),
+		glamour.WithWordWrap(wordWrap),
 	)
 	if err != nil {
 		debugLog("Failed to create glamour renderer: %v", err)
