@@ -190,10 +190,11 @@ main() {
     
     # Construct download URL
     local archive_name
+    local version_num="${version#v}"
     if [ "$os" = "windows" ]; then
-        archive_name="${BINARY_NAME}-${os}-${arch}.zip"
+        archive_name="${BINARY_NAME}-${version_num}-${os}-${arch}.zip"
     else
-        archive_name="${BINARY_NAME}-${os}-${arch}.tar.gz"
+        archive_name="${BINARY_NAME}-${version_num}-${os}-${arch}.tar.gz"
     fi
     
     local download_url="https://github.com/${REPO}/releases/download/${version}/${archive_name}"

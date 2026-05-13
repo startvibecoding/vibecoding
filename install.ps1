@@ -41,7 +41,8 @@ try {
 }
 
 # Find download URL
-$archiveName = "vibecoding-windows-$arch.zip"
+$versionNum = $release.tag_name -replace '^v', ''
+$archiveName = "vibecoding-${versionNum}-windows-$arch.zip"
 $asset = $release.assets | Where-Object { $_.name -eq $archiveName }
 
 if (-not $asset) {
