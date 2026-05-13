@@ -10,18 +10,23 @@ import (
 var Version = "dev"
 
 // UserAgent returns the User-Agent string for vibecoding.
-// Format: vibecoding/{version} ({os}; go/{go_version}; {arch})
+// Format: Claude-User (vibecoding/{version}; +https://github.com/fuckvibecoding/vibecoding)
 func UserAgent() string {
-	return fmt.Sprintf("vibecoding/%s (%s; go/%s; %s)",
+	return fmt.Sprintf("Claude-User (vibecoding/%s; +https://github.com/fuckvibecoding/vibecoding)",
 		Version,
-		runtime.GOOS,
-		runtime.Version()[2:], // Remove "go" prefix
-		runtime.GOARCH,
 	)
 }
 
 // ProviderUserAgent returns the User-Agent string for provider API calls.
-// Format: vibecoding/{version} ({os}; go/{go_version}; {arch})
 func ProviderUserAgent() string {
 	return UserAgent()
+}
+
+// DetailedUserAgent returns a more detailed User-Agent string with OS info.
+func DetailedUserAgent() string {
+	return fmt.Sprintf("Claude-User (vibecoding/%s; %s; %s; +https://github.com/fuckvibecoding/vibecoding)",
+		Version,
+		runtime.GOOS,
+		runtime.GOARCH,
+	)
 }
