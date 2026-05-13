@@ -157,7 +157,14 @@ func (s *BwrapSandbox) buildBwrapArgs(opts ExecOpts, shell, cmd string) []string
 		}
 	}
 
-	// Project directory binding
+	// Home directory: use tmpfs to prevent access to real home
+	// NOTE: This must be set BEFORE project directory binding if project is under home
+	homeDir, _ := os.UserHomeDir()
+	if homeDir != "" {
+		args = append(args, "--tmpfs", homeDir)
+	}
+
+	// Project directory binding (must be after home tmpfs if project is under home)
 	if s.projectDir != "" {
 		if s.level == LevelStrict {
 			// Read-only in strict mode
@@ -180,12 +187,6 @@ func (s *BwrapSandbox) buildBwrapArgs(opts ExecOpts, shell, cmd string) []string
 		if _, err := os.Stat(p); err == nil {
 			args = append(args, "--bind", p, p)
 		}
-	}
-
-	// Home directory: use tmpfs to prevent access to real home
-	homeDir, _ := os.UserHomeDir()
-	if homeDir != "" {
-		args = append(args, "--tmpfs", homeDir)
 	}
 
 	// Set hostname
