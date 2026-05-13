@@ -1,8 +1,0 @@
-c1356819d9a13c3592dbdad6a97e573429144e40f1989751f7bab6c85caca1f3  ./deb/vibecoding_0.0.4_amd64.deb
-664cf915b987f1dd97d3eced6c67ee95a59cb1718a9fcf8f6fb0cc7775d49dc2  ./deb/vibecoding_0.0.4_arm64.deb
-706a79566d7ba5eca77d8f9f5420b841d916cf6dc13fa0d67edabb23ad029a99  ./tarball/vibecoding-0.0.4-darwin-amd64.tar.gz
-d3bacacf0b466d7d7794612812b0c240c68803686b3ac2a3f5c8591a3fdb108d  ./tarball/vibecoding-0.0.4-darwin-arm64.tar.gz
-50367f68a7684191f4bef0fb678305f70d0601436b671850dd3bc766b85c0f30  ./tarball/vibecoding-0.0.4-linux-amd64.tar.gz
-a32c58dec96d00d449fe7fc78e657896fc0b86a1e181335ef2d6c5b60df204f6  ./tarball/vibecoding-0.0.4-linux-arm64.tar.gz
-0cfbb693c8a19fdef3c92ae264dac9c5717f9fbd937d2875ec89d97ca968da0f  ./zip/vibecoding-0.0.4-windows-amd64.zip
-df73d7f35243623643a08230abf92d57f31bb961b38c25043b4559c8f94c29a4  ./zip/vibecoding-0.0.4-windows-arm64.zip

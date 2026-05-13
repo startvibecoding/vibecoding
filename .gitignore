@@ -24,3 +24,5 @@ Thumbs.db
 
 # Project
 .vibe/
+dist/
+/vibecoding
