@@ -66,6 +66,7 @@ type toolResult struct {
 	toolArgs    map[string]any // Tool call arguments
 	summary     string         // Short summary for collapsed view
 	fullContent string         // Full content for expanded view
+	msgIndex    int            // Index in a.messages where this tool message lives
 }
 
 // App is the main TUI application.
@@ -457,12 +458,9 @@ func (a *App) View() string {
 
 	footer := a.renderFooter()
 
-	// Use full content so the terminal's native scrollbar works
-	viewportContent := a.fullContent
-	
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
-		viewportContent,
+		a.viewport.View(),
 		a.input.View(),
 		footer,
 	)
@@ -535,19 +533,20 @@ func (a *App) expandPasteMarkers(text string) string {
 func (a *App) updateViewportContent() {
 	// Rebuild messages based on expansion state
 	var displayMessages []string
-	toolResultIdx := 0
-	
-	for _, msg := range a.messages {
-		if strings.Contains(msg, "🔧 [") && toolResultIdx < len(a.toolResults) {
-			// This is a tool result message
-			result := a.toolResults[toolResultIdx]
-			toolResultIdx++
-			
+
+	// Build a set of message indices that are tool results
+	toolMsgIndices := make(map[int]int) // msgIndex -> toolResults index
+	for i, tr := range a.toolResults {
+		toolMsgIndices[tr.msgIndex] = i
+	}
+
+	for idx, msg := range a.messages {
+		if trIdx, ok := toolMsgIndices[idx]; ok {
+			result := a.toolResults[trIdx]
 			if a.toolOutputExpanded {
 				// Show full content with arguments
 				var content string
 				if result.toolArgs != nil {
-					// Show tool arguments (path, content, etc.)
 					argsStr := formatToolArgs(result.toolName, result.toolArgs)
 					if result.fullContent != "" {
 						content = fmt.Sprintf("🔧 [%s]\n%s\n---\n%s", result.toolName, argsStr, result.fullContent)
@@ -861,9 +860,11 @@ func (a *App) handleAgentEvent(event agent.Event) tea.Cmd {
 	case agent.EventToolCall:
 		if event.ToolCall != nil {
 			// Store tool args for later display
+			msgIdx := len(a.messages) // Will be the index after append
 			a.toolResults = append(a.toolResults, toolResult{
 				toolName: event.ToolCall.Name,
 				toolArgs: event.ToolArgs,
+				msgIndex: msgIdx,
 			})
 			a.addMessage(toolStyle.Render(fmt.Sprintf("🔧 [%s] ...", event.ToolCall.Name)))
 		}
@@ -893,16 +894,15 @@ func (a *App) handleAgentEvent(event agent.Event) tea.Cmd {
 			}
 		}
 		
-		// Update the display message
-		for i := len(a.messages) - 1; i >= 0; i-- {
-			if strings.Contains(a.messages[i], "🔧 [") {
-				// Get the last tool result for display
-				if len(a.toolResults) > 0 {
-					lastResult := a.toolResults[len(a.toolResults)-1]
+		// Update the message at the stored index
+		for j := len(a.toolResults) - 1; j >= 0; j-- {
+			if a.toolResults[j].toolName == event.ToolName && a.toolResults[j].fullContent == "" {
+				idx := a.toolResults[j].msgIndex
+				if idx >= 0 && idx < len(a.messages) {
 					if event.ToolName == "bash" || a.toolOutputExpanded {
-						a.messages[i] = toolStyle.Render(fmt.Sprintf("🔧 [%s]\n%s", event.ToolName, event.ToolResult))
+						a.messages[idx] = toolStyle.Render(fmt.Sprintf("🔧 [%s]\n%s", event.ToolName, event.ToolResult))
 					} else {
-						a.messages[i] = toolStyle.Render(fmt.Sprintf("🔧 [%s] %s", event.ToolName, lastResult.summary))
+						a.messages[idx] = toolStyle.Render(fmt.Sprintf("🔧 [%s] %s", event.ToolName, a.toolResults[j].summary))
 					}
 				}
 				break
