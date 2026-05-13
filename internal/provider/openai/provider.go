@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/fuckvibecoding/vibecoding/internal/provider"
+	"github.com/fuckvibecoding/vibecoding/internal/ua"
 )
 
 // Provider implements the OpenAI Chat Completions API.
@@ -220,6 +221,7 @@ func (p *Provider) Chat(ctx context.Context, params provider.ChatParams) <-chan 
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+p.apiKey)
 		req.Header.Set("Accept", "text/event-stream")
+		req.Header.Set("User-Agent", ua.ProviderUserAgent())
 
 		resp, err := p.client.Do(req)
 		if err != nil {

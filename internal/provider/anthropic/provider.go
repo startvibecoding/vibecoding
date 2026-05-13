@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/fuckvibecoding/vibecoding/internal/provider"
+	"github.com/fuckvibecoding/vibecoding/internal/ua"
 )
 
 // Provider implements the Anthropic Messages API.
@@ -206,6 +207,7 @@ func (p *Provider) Chat(ctx context.Context, params provider.ChatParams) <-chan 
 		req.Header.Set("x-api-key", p.apiKey)
 		req.Header.Set("anthropic-version", "2023-06-01")
 		req.Header.Set("Accept", "text/event-stream")
+		req.Header.Set("User-Agent", ua.ProviderUserAgent())
 
 		resp, err := p.client.Do(req)
 		if err != nil {
