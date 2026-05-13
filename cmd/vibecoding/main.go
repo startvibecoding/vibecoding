@@ -213,16 +213,24 @@ func run(args []string, opts runOptions) error {
 
 	// Setup session
 	var sess *session.Manager
+	var sessionInfo string
 	if opts.continue_ {
 		sess, err = session.ContinueRecent(cwd, settings.GetSessionDir())
 		if err != nil {
 			return fmt.Errorf("continue session: %w", err)
+		}
+		if sess.GetHeader() != nil {
+			sessionInfo = fmt.Sprintf("📂 Continuing session: %s", sess.GetFile())
+			if messages := sess.GetMessages(); len(messages) > 0 {
+				sessionInfo += fmt.Sprintf(" (%d messages)", len(messages))
+			}
 		}
 	} else if opts.session != "" {
 		sess, err = session.Open(opts.session)
 		if err != nil {
 			return fmt.Errorf("open session: %w", err)
 		}
+		sessionInfo = fmt.Sprintf("📂 Opened session: %s", sess.GetFile())
 	} else {
 		sess = session.New(cwd, settings.GetSessionDir())
 		if err := sess.Init(); err != nil {
@@ -247,9 +255,19 @@ func run(args []string, opts runOptions) error {
 	clearStdin()
 
 	app := tui.NewApp(p, model, settings, sess, registry, sbInfo, extraContext, skillsMgr)
-	// Add context files info as initial message
+	// Add context files info and session info as initial message
+	var initialMsg string
 	if contextFilesInfo != "" {
-		app.SetInitialMessage(contextFilesInfo)
+		initialMsg = contextFilesInfo
+	}
+	if sessionInfo != "" {
+		if initialMsg != "" {
+			initialMsg += "\n"
+		}
+		initialMsg += sessionInfo
+	}
+	if initialMsg != "" {
+		app.SetInitialMessage(initialMsg)
 	}
 	p2 := tea.NewProgram(app, tea.WithInputTTY(), tea.WithReportFocus())
 	if _, err := p2.Run(); err != nil {

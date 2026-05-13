@@ -121,6 +121,10 @@ type App struct {
 	// Spinner state
 	spinnerIndex int
 
+	// Session history
+	sessionMu      sync.Mutex
+	historyLoaded  bool
+
 	// Render throttling
 	lastRender     time.Time
 	renderPending  bool
@@ -163,12 +167,56 @@ func (a *App) SetInitialMessage(msg string) {
 	a.initialMessage = msg
 }
 
+// LoadHistoryMessages loads messages from session history into TUI display.
+func (a *App) LoadHistoryMessages() {
+	a.sessionMu.Lock()
+	defer a.sessionMu.Unlock()
+
+	if a.session == nil {
+		return
+	}
+
+	historyMessages := a.session.GetMessages()
+	if len(historyMessages) == 0 {
+		return
+	}
+
+	a.historyLoaded = true
+
+	// Display history messages in TUI
+	for _, msg := range historyMessages {
+		switch msg.Role {
+		case "user":
+			a.addMessage(userStyle.Render("You: ") + msg.Content)
+		case "assistant":
+			// Extract text content from assistant message
+			var textContent string
+			if msg.Content != "" {
+				textContent = msg.Content
+			} else if len(msg.Contents) > 0 {
+				for _, block := range msg.Contents {
+					if block.Type == "text" && block.Text != "" {
+						textContent += block.Text
+					}
+				}
+			}
+			if textContent != "" {
+				a.addMessage(assistantStyle.Render(textContent))
+			}
+		}
+	}
+}
+
 // Init implements tea.Model.
 func (a *App) Init() tea.Cmd {
 	// Show initial message if set
 	if a.initialMessage != "" {
 		a.messages = append(a.messages, statusStyle.Render(a.initialMessage))
 	}
+
+	// Load history messages from session
+	a.LoadHistoryMessages()
+
 	return tea.Batch(textinput.Blink, a.processInputQueue())
 }
 
@@ -248,6 +296,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if a.isThinking {
 				if a.agent != nil {
 					a.agent.Abort()
+					a.agent = nil // Reset agent so next request creates a fresh one with new abort channel
 				}
 				a.isThinking = false
 				a.addMessage(statusStyle.Render("⏹ Aborted"))
@@ -727,6 +776,17 @@ func (a *App) processInput(input string) tea.Cmd {
 			CompactionSettings: compactionSettings,
 		}
 		a.agent = agent.New(agentCfg, a.registry)
+
+		// Load history messages from session if available and not yet loaded
+		if a.session != nil && !a.historyLoaded {
+			a.sessionMu.Lock()
+			historyMessages := a.session.GetMessages()
+			a.sessionMu.Unlock()
+
+			if len(historyMessages) > 0 {
+				a.agent.LoadHistoryMessages(historyMessages)
+			}
+		}
 	}
 
 	ctx := context.Background()

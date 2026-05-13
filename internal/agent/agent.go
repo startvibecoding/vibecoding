@@ -167,6 +167,12 @@ func NewWithLoopConfig(cfg AgentLoopConfig, registry *tools.Registry) *Agent {
 	}
 }
 
+// LoadHistoryMessages loads historical messages from session into agent context.
+func (a *Agent) LoadHistoryMessages(messages []provider.Message) {
+	a.messages = append(a.messages, messages...)
+	a.context.Messages = append(a.context.Messages, messages...)
+}
+
 // Abort signals the agent to stop processing.
 func (a *Agent) Abort() {
 	a.abortOnce.Do(func() {
