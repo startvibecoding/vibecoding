@@ -83,8 +83,8 @@ func NewManager(projectDir string) *Manager {
 
 	// Register sandbox implementations
 	m.sandboxes[LevelNone] = NewNoneSandbox()
-	m.sandboxes[LevelStandard] = NewBwrapSandbox(projectDir, LevelStandard)
-	m.sandboxes[LevelStrict] = NewBwrapSandbox(projectDir, LevelStrict)
+	m.sandboxes[LevelStandard] = newPlatformSandbox(projectDir, LevelStandard)
+	m.sandboxes[LevelStrict] = newPlatformSandbox(projectDir, LevelStrict)
 
 	return m
 }

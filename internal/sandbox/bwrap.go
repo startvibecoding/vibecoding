@@ -271,11 +271,12 @@ func FormatSandboxInfo(s Sandbox) string {
 		available = "✗"
 	}
 
+	name := s.Name()
 	switch s.Level() {
 	case LevelStrict:
-		return fmt.Sprintf("🔒 Strict sandbox [bwrap: %s] - read-only project, no network", available)
+		return fmt.Sprintf("🔒 Strict sandbox [%s: %s] - read-only project, no network", name, available)
 	case LevelStandard:
-		return fmt.Sprintf("🔒 Standard sandbox [bwrap: %s] - read-write project, no network", available)
+		return fmt.Sprintf("🔒 Standard sandbox [%s: %s] - read-write project, no network", name, available)
 	default:
 		return "🔓 No sandbox"
 	}
