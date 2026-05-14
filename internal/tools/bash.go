@@ -10,7 +10,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/fuckvibecoding/vibecoding/internal/platform"
@@ -127,7 +126,7 @@ func (t *BashTool) Execute(ctx context.Context, params map[string]any) (string, 
 		cmd = exec.CommandContext(cmdCtx, shell, args...)
 		cmd.Dir = workDir
 		// Detach child process group so background children don't block the shell.
-		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+		setSysProcAttr(cmd)
 		// If the shell exits while a background child still holds stdio,
 		// don't wait forever – give it 100ms then force-close.
 		cmd.WaitDelay = 100 * time.Millisecond
