@@ -2,10 +2,12 @@
 set -euo pipefail
 
 # Show error location on failure
-trap 'error "Installation failed at line $LINENO. Set INSTALL_DIR to a writable path or run with sudo."' ERR
+trap 'error "Installation failed at line $LINENO."' ERR
 
 # VibeCoding Installer
 # Downloads and installs the latest release from GitHub
+#
+# Supports non-root installation to ~/.vibecoding/bin
 #
 # Repository: https://github.com/fuckvibecoding/vibecoding
 # Author:     zhenruyan
@@ -13,13 +15,26 @@ trap 'error "Installation failed at line $LINENO. Set INSTALL_DIR to a writable 
 
 REPO="fuckvibecoding/vibecoding"
 BINARY_NAME="vibecoding"
-INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
+
+# User-level install directory (no root required)
+USER_INSTALL_DIR="${HOME}/.vibecoding/bin"
+
+# Default install directory: auto-detect based on write permission
+# Priority: INSTALL_DIR env > writable /usr/local/bin > ~/.vibecoding/bin
+if [ -n "${INSTALL_DIR:-}" ]; then
+    : # User explicitly set INSTALL_DIR
+elif [ -w "/usr/local/bin" ] || [ -w "/usr/local" ]; then
+    INSTALL_DIR="/usr/local/bin"
+else
+    INSTALL_DIR="$USER_INSTALL_DIR"
+fi
 
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 info() {
@@ -123,36 +138,156 @@ verify_checksum() {
     success "Checksum verified"
 }
 
-# Install binary
+# Install binary (no sudo for user-level install)
 install_binary() {
     local binary_path="$1"
     
     # Create install directory if it doesn't exist
     if [ ! -d "$INSTALL_DIR" ]; then
         info "Creating install directory: ${INSTALL_DIR}"
-        if [ -w "$(dirname "$INSTALL_DIR")" ]; then
-            mkdir -p "$INSTALL_DIR"
-        else
-            sudo mkdir -p "$INSTALL_DIR" || error "Failed to create ${INSTALL_DIR}. Run with sudo or set INSTALL_DIR to a writable path."
-        fi
+        mkdir -p "$INSTALL_DIR" || error "Failed to create ${INSTALL_DIR}. Check permissions."
     fi
     
-    # Check if we need sudo
-    if [ -w "$INSTALL_DIR" ]; then
-        mv "$binary_path" "${INSTALL_DIR}/${BINARY_NAME}"
-        chmod +x "${INSTALL_DIR}/${BINARY_NAME}"
-    else
-        info "Requesting sudo privileges to install to ${INSTALL_DIR}"
-        sudo mv "$binary_path" "${INSTALL_DIR}/${BINARY_NAME}" || error "Failed to move binary. Run with sudo or set INSTALL_DIR to a writable path."
-        sudo chmod +x "${INSTALL_DIR}/${BINARY_NAME}"
-    fi
+    # Install binary
+    mv "$binary_path" "${INSTALL_DIR}/${BINARY_NAME}"
+    chmod +x "${INSTALL_DIR}/${BINARY_NAME}"
     
     success "Installed ${BINARY_NAME} to ${INSTALL_DIR}/${BINARY_NAME}"
 }
 
+# Detect user's shell and config file
+detect_shell_config() {
+    local shell_name
+    shell_name="$(basename "${SHELL:-bash}")"
+    
+    case "$shell_name" in
+        zsh)
+            # Prefer .zshenv for PATH (loaded by all zsh modes)
+            if [ -f "${HOME}/.zshenv" ]; then
+                echo "${HOME}/.zshenv"
+            elif [ -f "${HOME}/.zshrc" ]; then
+                echo "${HOME}/.zshrc"
+            else
+                echo "${HOME}/.zshenv"
+            fi
+            ;;
+        bash)
+            # .bashrc is most common; .bash_profile for login shells on macOS
+            if [ -f "${HOME}/.bashrc" ]; then
+                echo "${HOME}/.bashrc"
+            elif [ -f "${HOME}/.bash_profile" ]; then
+                echo "${HOME}/.bash_profile"
+            else
+                if [ "$(uname -s)" = "Darwin" ]; then
+                    echo "${HOME}/.bash_profile"
+                else
+                    echo "${HOME}/.bashrc"
+                fi
+            fi
+            ;;
+        fish)
+            echo "${HOME}/.config/fish/config.fish"
+            ;;
+        *)
+            echo "${HOME}/.profile"
+            ;;
+    esac
+}
+
+# Add INSTALL_DIR to PATH in shell config
+add_to_path() {
+    local config_file="$1"
+    local config_dir
+    config_dir="$(dirname "$config_file")"
+    
+    # Create config directory if needed (e.g. ~/.config/fish/)
+    if [ ! -d "$config_dir" ]; then
+        mkdir -p "$config_dir"
+    fi
+    
+    # Create config file if it doesn't exist
+    if [ ! -f "$config_file" ]; then
+        touch "$config_file"
+    fi
+    
+    # Check if already in PATH config
+    if grep -q "\.vibecoding/bin" "$config_file" 2>/dev/null; then
+        info "PATH already configured in ${config_file}"
+        return 0
+    fi
+    
+    local shell_name
+    shell_name="$(basename "${SHELL:-bash}")"
+    
+    local path_line
+    case "$shell_name" in
+        fish)
+            path_line="set -gx PATH ${INSTALL_DIR} \$PATH"
+            ;;
+        *)
+            path_line="export PATH=\"${INSTALL_DIR}:\$PATH\""
+            ;;
+    esac
+    
+    echo "" >> "$config_file"
+    echo "# VibeCoding" >> "$config_file"
+    echo "$path_line" >> "$config_file"
+    
+    success "Added ${INSTALL_DIR} to PATH in ${config_file}"
+}
+
 # Check if installed directory is in PATH
 check_path() {
-    if ! echo "$PATH" | grep -q "$INSTALL_DIR"; then
+    # If already in PATH, nothing to do
+    if echo "$PATH" | tr ':' '\n' | grep -qx "$INSTALL_DIR"; then
+        return 0
+    fi
+    
+    # For user-level install, auto-add to shell config
+    if [ "$INSTALL_DIR" = "$USER_INSTALL_DIR" ]; then
+        local config_file
+        config_file=$(detect_shell_config)
+        
+        echo ""
+        info "Detected shell: $(basename "${SHELL:-bash}")"
+        info "Shell config: ${config_file}"
+        echo ""
+        
+        # Ask user (default yes)
+        local answer
+        read -rp "Add ${INSTALL_DIR} to PATH automatically? [Y/n] " answer
+        answer="${answer:-Y}"
+        
+        if [[ "$answer" =~ ^[Yy]$ ]]; then
+            add_to_path "$config_file"
+            echo ""
+            warn "Run this to apply immediately:"
+            echo ""
+            local shell_name
+            shell_name="$(basename "${SHELL:-bash}")"
+            case "$shell_name" in
+                fish)
+                    echo -e "  ${CYAN}source ${config_file}${NC}"
+                    ;;
+                *)
+                    echo -e "  ${CYAN}source ${config_file}${NC}"
+                    ;;
+            esac
+            echo ""
+        else
+            warn "${INSTALL_DIR} is not in your PATH"
+            echo ""
+            echo "Add it manually to your shell configuration:"
+            echo ""
+            echo -e "  ${CYAN}# bash/zsh:${NC}"
+            echo -e "  ${CYAN}export PATH=\"${INSTALL_DIR}:\$PATH\"${NC}"
+            echo ""
+            echo -e "  ${CYAN}# fish:${NC}"
+            echo -e "  ${CYAN}set -gx PATH ${INSTALL_DIR} \$PATH${NC}"
+            echo ""
+        fi
+    else
+        # System install dir not in PATH (unusual)
         warn "${INSTALL_DIR} is not in your PATH"
         echo ""
         echo "Add it to your shell configuration:"
@@ -174,6 +309,15 @@ main() {
     echo "║               https://github.com/fuckvibecoding/vibecoding    ║"
     echo "║                  Author: zhenruyan | pkold.com                ║"
     echo "╚═══════════════════════════════════════════════════════════════╝"
+    echo ""
+    
+    # Show install mode
+    if [ "$INSTALL_DIR" = "$USER_INSTALL_DIR" ]; then
+        info "Install mode: user-level (no root required)"
+    else
+        info "Install mode: system-level"
+    fi
+    info "Install directory: ${INSTALL_DIR}"
     echo ""
     
     # Detect platform
@@ -233,10 +377,10 @@ main() {
         error "Binary not found in archive"
     fi
     
-    # Install binary
+    # Install binary (no sudo needed for user-level)
     install_binary "$binary_path"
     
-    # Check PATH
+    # Check PATH and offer to configure
     check_path
     
     # Verify installation
@@ -254,10 +398,11 @@ main() {
     else
         success "Installation complete!"
         echo ""
-        echo "  Restart your shell or run:"
-        echo "    export PATH=\"${INSTALL_DIR}:\$PATH\""
+        echo "  Binary installed to:"
+        echo "    ${INSTALL_DIR}/${BINARY_NAME}"
         echo ""
-        echo "  Then verify with:"
+        echo "  To use right now:"
+        echo "    export PATH=\"${INSTALL_DIR}:\$PATH\""
         echo "    ${BINARY_NAME} --help"
         echo ""
     fi
