@@ -9,11 +9,11 @@ trap 'error "Installation failed at line $LINENO."' ERR
 #
 # Supports non-root installation to ~/.vibecoding/bin
 #
-# Repository: https://github.com/fuckvibecoding/vibecoding
+# Repository: https://github.com/startvibecoding/vibecoding
 # Author:     zhenruyan
 # Blog:       https://pkold.com
 
-REPO="fuckvibecoding/vibecoding"
+REPO="startvibecoding/vibecoding"
 BINARY_NAME="vibecoding"
 
 # User-level install directory (no root required)
@@ -306,7 +306,7 @@ main() {
     echo ""
     echo "╔═══════════════════════════════════════════════════════════════╗"
     echo "║                   VibeCoding Installer                        ║"
-    echo "║               https://github.com/fuckvibecoding/vibecoding    ║"
+    echo "║               https://github.com/startvibecoding/vibecoding    ║"
     echo "║                  Author: zhenruyan | pkold.com                ║"
     echo "╚═══════════════════════════════════════════════════════════════╝"
     echo ""

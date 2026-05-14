@@ -3,7 +3,7 @@ package agent
 import (
 	"context"
 
-	"github.com/fuckvibecoding/vibecoding/internal/provider"
+	"github.com/startvibecoding/vibecoding/internal/provider"
 )
 
 // Provider is the interface that all LLM providers must implement.

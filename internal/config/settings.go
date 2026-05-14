@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/fuckvibecoding/vibecoding/internal/platform"
+	"github.com/startvibecoding/vibecoding/internal/platform"
 )
 
 // Settings holds all configuration for vibecoding.

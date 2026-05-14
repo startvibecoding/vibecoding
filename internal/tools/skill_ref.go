@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/fuckvibecoding/vibecoding/internal/skills"
+	"github.com/startvibecoding/vibecoding/internal/skills"
 )
 
 // SkillRefTool loads on-demand reference files from skills.

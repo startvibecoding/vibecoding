@@ -7,7 +7,7 @@
 # Variables
 BINARY_NAME=vibecoding
 VERSION=$(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
-LDFLAGS=-ldflags "-X main.version=$(VERSION) -X github.com/fuckvibecoding/vibecoding/internal/ua.Version=$(VERSION)"
+LDFLAGS=-ldflags "-X main.version=$(VERSION) -X github.com/startvibecoding/vibecoding/internal/ua.Version=$(VERSION)"
 DIST_DIR=dist
 CHECKSUM_FILE=$(DIST_DIR)/checksums.txt
 

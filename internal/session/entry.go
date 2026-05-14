@@ -5,7 +5,7 @@ import (
 	"encoding/hex"
 	"time"
 
-	"github.com/fuckvibecoding/vibecoding/internal/provider"
+	"github.com/startvibecoding/vibecoding/internal/provider"
 )
 
 // EntryType identifies the type of a session entry.

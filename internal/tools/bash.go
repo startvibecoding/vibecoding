@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fuckvibecoding/vibecoding/internal/platform"
-	"github.com/fuckvibecoding/vibecoding/internal/sandbox"
+	"github.com/startvibecoding/vibecoding/internal/platform"
+	"github.com/startvibecoding/vibecoding/internal/sandbox"
 )
 
 // BashTool executes shell commands.

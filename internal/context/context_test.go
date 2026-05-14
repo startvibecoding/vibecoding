@@ -3,7 +3,7 @@ package context
 import (
 	"testing"
 
-	"github.com/fuckvibecoding/vibecoding/internal/provider"
+	"github.com/startvibecoding/vibecoding/internal/provider"
 )
 
 func TestEstimateTokens(t *testing.T) {

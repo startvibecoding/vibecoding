@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/fuckvibecoding/vibecoding/internal/provider"
-	"github.com/fuckvibecoding/vibecoding/internal/sandbox"
+	"github.com/startvibecoding/vibecoding/internal/provider"
+	"github.com/startvibecoding/vibecoding/internal/sandbox"
 )
 
 // Tool is the interface that all tools must implement.

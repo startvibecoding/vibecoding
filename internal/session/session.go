@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/fuckvibecoding/vibecoding/internal/provider"
+	"github.com/startvibecoding/vibecoding/internal/provider"
 )
 
 const CurrentVersion = 3

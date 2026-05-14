@@ -14,13 +14,13 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/cellbuf"
 
-	"github.com/fuckvibecoding/vibecoding/internal/agent"
-	"github.com/fuckvibecoding/vibecoding/internal/config"
-	ctxpkg "github.com/fuckvibecoding/vibecoding/internal/context"
-	"github.com/fuckvibecoding/vibecoding/internal/provider"
-	"github.com/fuckvibecoding/vibecoding/internal/session"
-	"github.com/fuckvibecoding/vibecoding/internal/skills"
-	"github.com/fuckvibecoding/vibecoding/internal/tools"
+	"github.com/startvibecoding/vibecoding/internal/agent"
+	"github.com/startvibecoding/vibecoding/internal/config"
+	ctxpkg "github.com/startvibecoding/vibecoding/internal/context"
+	"github.com/startvibecoding/vibecoding/internal/provider"
+	"github.com/startvibecoding/vibecoding/internal/session"
+	"github.com/startvibecoding/vibecoding/internal/skills"
+	"github.com/startvibecoding/vibecoding/internal/tools"
 )
 
 var (

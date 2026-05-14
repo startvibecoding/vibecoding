@@ -9,7 +9,7 @@ BINARY_NAME="vibecoding"
 PACKAGE_NAME="vibecoding"
 MAINTAINER="VibeCoding Team <team@vibecoding.dev>"
 DESCRIPTION="AI-powered terminal coding assistant"
-HOMEPAGE="https://github.com/fuckvibecoding/vibecoding"
+HOMEPAGE="https://github.com/startvibecoding/vibecoding"
 
 # Parse arguments
 ARCH="${1:-amd64}"

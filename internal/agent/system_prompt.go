@@ -5,8 +5,8 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/fuckvibecoding/vibecoding/internal/platform"
-	"github.com/fuckvibecoding/vibecoding/internal/provider"
+	"github.com/startvibecoding/vibecoding/internal/platform"
+	"github.com/startvibecoding/vibecoding/internal/provider"
 )
 
 // BuildSystemPrompt constructs the system prompt based on mode and context.

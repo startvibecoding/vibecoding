@@ -1,8 +1,8 @@
 package agent
 
 import (
-	ctxpkg "github.com/fuckvibecoding/vibecoding/internal/context"
-	"github.com/fuckvibecoding/vibecoding/internal/provider"
+	ctxpkg "github.com/startvibecoding/vibecoding/internal/context"
+	"github.com/startvibecoding/vibecoding/internal/provider"
 )
 
 // EventType identifies the type of agent event.

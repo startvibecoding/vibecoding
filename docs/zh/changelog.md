@@ -128,4 +128,4 @@
 
 ---
 
-**完整变更日志**: https://github.com/fuckvibecoding/vibecoding/compare/v0.0.1...v0.0.5
+**完整变更日志**: https://github.com/startvibecoding/vibecoding/compare/v0.0.1...v0.0.5

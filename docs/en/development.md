@@ -14,7 +14,7 @@ This document describes how to contribute code to VibeCoding.
 ### Get Source Code
 
 ```bash
-git clone https://github.com/fuckvibecoding/vibecoding.git
+git clone https://github.com/startvibecoding/vibecoding.git
 cd vibecoding
 ```
 
@@ -223,7 +223,7 @@ package myprovider
 
 import (
     "context"
-    "github.com/fuckvibecoding/vibecoding/internal/provider"
+    "github.com/startvibecoding/vibecoding/internal/provider"
 )
 
 type MyProvider struct {

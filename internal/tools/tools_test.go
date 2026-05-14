@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fuckvibecoding/vibecoding/internal/sandbox"
+	"github.com/startvibecoding/vibecoding/internal/sandbox"
 )
 
 func TestNewRegistry(t *testing.T) {

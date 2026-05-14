@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fuckvibecoding/vibecoding/internal/provider"
+	"github.com/startvibecoding/vibecoding/internal/provider"
 )
 
 func TestNew(t *testing.T) {

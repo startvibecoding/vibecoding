@@ -1,7 +1,7 @@
 package context
 
 import (
-	"github.com/fuckvibecoding/vibecoding/internal/provider"
+	"github.com/startvibecoding/vibecoding/internal/provider"
 )
 
 // ContextUsage holds the current context usage information.

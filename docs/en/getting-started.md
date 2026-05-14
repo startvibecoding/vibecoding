@@ -23,23 +23,23 @@ This will automatically download the correct binary for your platform.
 **Linux/macOS:**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/fuckvibecoding/vibecoding/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/startvibecoding/vibecoding/main/install.sh | bash
 ```
 
 **Windows (PowerShell):**
 
 ```powershell
-irm https://raw.githubusercontent.com/fuckvibecoding/vibecoding/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/startvibecoding/vibecoding/main/install.ps1 | iex
 ```
 
 Or with custom install directory:
 
 ```bash
 # Linux/macOS
-INSTALL_DIR=~/.local/bin curl -fsSL https://raw.githubusercontent.com/fuckvibecoding/vibecoding/main/install.sh | bash
+INSTALL_DIR=~/.local/bin curl -fsSL https://raw.githubusercontent.com/startvibecoding/vibecoding/main/install.sh | bash
 
 # Windows
-$env:VIBECODING_INSTALL_DIR="C:\Tools\vibecoding"; irm https://raw.githubusercontent.com/fuckvibecoding/vibecoding/main/install.ps1 | iex
+$env:VIBECODING_INSTALL_DIR="C:\Tools\vibecoding"; irm https://raw.githubusercontent.com/startvibecoding/vibecoding/main/install.ps1 | iex
 ```
 
 This will automatically download the latest release from GitHub and install the binary. Default install locations:
@@ -49,14 +49,14 @@ This will automatically download the latest release from GitHub and install the 
 ### Method 3: Go Install
 
 ```bash
-go install github.com/fuckvibecoding/vibecoding/cmd/vibecoding@latest
+go install github.com/startvibecoding/vibecoding/cmd/vibecoding@latest
 ```
 
 ### Method 4: Build from Source
 
 ```bash
 # Clone repository
-git clone https://github.com/fuckvibecoding/vibecoding.git
+git clone https://github.com/startvibecoding/vibecoding.git
 cd vibecoding
 
 # Build

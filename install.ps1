@@ -3,7 +3,7 @@
 
 $ErrorActionPreference = "Stop"
 
-$REPO = "fuckvibecoding/vibecoding"
+$REPO = "startvibecoding/vibecoding"
 $BINARY_NAME = "vibecoding.exe"
 $DEFAULT_INSTALL_DIR = "$env:LOCALAPPDATA\vibecoding"
 

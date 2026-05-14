@@ -43,8 +43,8 @@ export OPENAI_API_KEY=sk-...
 
 ## More Information
 
-- [GitHub Repository](https://github.com/fuckvibecoding/vibecoding)
-- [Documentation](https://github.com/fuckvibecoding/vibecoding/tree/main/docs)
+- [GitHub Repository](https://github.com/startvibecoding/vibecoding)
+- [Documentation](https://github.com/startvibecoding/vibecoding/tree/main/docs)
 
 ## License
 

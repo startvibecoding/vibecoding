@@ -18,10 +18,10 @@ A:
 A: 
 ```bash
 # Go install
-go install github.com/fuckvibecoding/vibecoding/cmd/vibecoding@latest
+go install github.com/startvibecoding/vibecoding/cmd/vibecoding@latest
 
 # 或从源码
-git clone https://github.com/fuckvibecoding/vibecoding.git
+git clone https://github.com/startvibecoding/vibecoding.git
 cd vibecoding
 make build
 ```

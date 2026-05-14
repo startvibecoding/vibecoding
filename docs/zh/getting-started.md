@@ -23,23 +23,23 @@ npm install -g vibecoding-installer
 **Linux/macOS:**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/fuckvibecoding/vibecoding/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/startvibecoding/vibecoding/main/install.sh | bash
 ```
 
 **Windows (PowerShell):**
 
 ```powershell
-irm https://raw.githubusercontent.com/fuckvibecoding/vibecoding/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/startvibecoding/vibecoding/main/install.ps1 | iex
 ```
 
 或者指定安装目录:
 
 ```bash
 # Linux/macOS
-INSTALL_DIR=~/.local/bin curl -fsSL https://raw.githubusercontent.com/fuckvibecoding/vibecoding/main/install.sh | bash
+INSTALL_DIR=~/.local/bin curl -fsSL https://raw.githubusercontent.com/startvibecoding/vibecoding/main/install.sh | bash
 
 # Windows
-$env:VIBECODING_INSTALL_DIR="C:\Tools\vibecoding"; irm https://raw.githubusercontent.com/fuckvibecoding/vibecoding/main/install.ps1 | iex
+$env:VIBECODING_INSTALL_DIR="C:\Tools\vibecoding"; irm https://raw.githubusercontent.com/startvibecoding/vibecoding/main/install.ps1 | iex
 ```
 
 这将自动从 GitHub 下载最新版本并安装二进制文件。默认安装位置：
@@ -49,14 +49,14 @@ $env:VIBECODING_INSTALL_DIR="C:\Tools\vibecoding"; irm https://raw.githubusercon
 ### 方法三: Go Install
 
 ```bash
-go install github.com/fuckvibecoding/vibecoding/cmd/vibecoding@latest
+go install github.com/startvibecoding/vibecoding/cmd/vibecoding@latest
 ```
 
 ### 方法四: 从源码构建
 
 ```bash
 # 克隆仓库
-git clone https://github.com/fuckvibecoding/vibecoding.git
+git clone https://github.com/startvibecoding/vibecoding.git
 cd vibecoding
 
 # 构建

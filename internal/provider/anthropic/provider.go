@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fuckvibecoding/vibecoding/internal/provider"
-	"github.com/fuckvibecoding/vibecoding/internal/ua"
+	"github.com/startvibecoding/vibecoding/internal/provider"
+	"github.com/startvibecoding/vibecoding/internal/ua"
 )
 
 // Provider implements the Anthropic Messages API.

@@ -8,12 +8,12 @@ import (
 	"sync"
 	"time"
 
-	ctxpkg "github.com/fuckvibecoding/vibecoding/internal/context"
-	"github.com/fuckvibecoding/vibecoding/internal/config"
-	"github.com/fuckvibecoding/vibecoding/internal/provider"
-	"github.com/fuckvibecoding/vibecoding/internal/sandbox"
-	"github.com/fuckvibecoding/vibecoding/internal/session"
-	"github.com/fuckvibecoding/vibecoding/internal/tools"
+	ctxpkg "github.com/startvibecoding/vibecoding/internal/context"
+	"github.com/startvibecoding/vibecoding/internal/config"
+	"github.com/startvibecoding/vibecoding/internal/provider"
+	"github.com/startvibecoding/vibecoding/internal/sandbox"
+	"github.com/startvibecoding/vibecoding/internal/session"
+	"github.com/startvibecoding/vibecoding/internal/tools"
 )
 
 // Config holds the agent configuration.

@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fuckvibecoding/vibecoding/internal/provider"
-	"github.com/fuckvibecoding/vibecoding/internal/sandbox"
-	"github.com/fuckvibecoding/vibecoding/internal/tools"
+	"github.com/startvibecoding/vibecoding/internal/provider"
+	"github.com/startvibecoding/vibecoding/internal/sandbox"
+	"github.com/startvibecoding/vibecoding/internal/tools"
 )
 
 func TestNewAgent(t *testing.T) {
