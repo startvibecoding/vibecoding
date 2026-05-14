@@ -419,6 +419,22 @@ git push --tags
 make build-all
 ```
 
+### 发布到 npm
+
+```bash
+# 发布正式版本
+make npm-publish
+
+# 发布预发布版本
+make npm-publish-pre
+```
+
+用户可以通过 npm 安装:
+
+```bash
+npm install -g vibecoding-installer
+```
+
 ## 常见问题
 
 ### Q: 如何添加新的工具?

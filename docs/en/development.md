@@ -419,6 +419,22 @@ git push --tags
 make build-all
 ```
 
+### Publish to npm
+
+```bash
+# Publish release version
+make npm-publish
+
+# Publish pre-release version
+make npm-publish-pre
+```
+
+Users can install via npm:
+
+```bash
+npm install -g vibecoding-installer
+```
+
 ## Frequently Asked Questions
 
 ### Q: How to add a new tool?

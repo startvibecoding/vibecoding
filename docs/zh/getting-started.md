@@ -10,7 +10,15 @@
 
 ## 安装
 
-### 方法一: 一键安装 (推荐)
+### 方法一: npm 安装 (推荐)
+
+```bash
+npm install -g vibecoding-installer
+```
+
+这将自动下载适合你平台的二进制文件。
+
+### 方法二: 一键安装
 
 **Linux/macOS:**
 
@@ -38,13 +46,13 @@ $env:VIBECODING_INSTALL_DIR="C:\Tools\vibecoding"; irm https://raw.githubusercon
 - Linux/macOS: `/usr/local/bin`
 - Windows: `%LOCALAPPDATA%\vibecoding`
 
-### 方法二: Go Install
+### 方法三: Go Install
 
 ```bash
 go install github.com/fuckvibecoding/vibecoding/cmd/vibecoding@latest
 ```
 
-### 方法三: 从源码构建
+### 方法四: 从源码构建
 
 ```bash
 # 克隆仓库
@@ -57,7 +65,7 @@ make build
 # 二进制文件位于 bin/vibecoding
 ```
 
-### 方法四: 安装到系统
+### 方法五: 安装到系统
 
 ```bash
 # 从源码构建后

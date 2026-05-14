@@ -10,7 +10,15 @@ This guide helps you get started with VibeCoding in 5 minutes.
 
 ## Installation
 
-### Method 1: One-line Install (Recommended)
+### Method 1: npm (Recommended)
+
+```bash
+npm install -g vibecoding-installer
+```
+
+This will automatically download the correct binary for your platform.
+
+### Method 2: One-line Install
 
 **Linux/macOS:**
 
@@ -38,13 +46,13 @@ This will automatically download the latest release from GitHub and install the 
 - Linux/macOS: `/usr/local/bin`
 - Windows: `%LOCALAPPDATA%\vibecoding`
 
-### Method 2: Go Install
+### Method 3: Go Install
 
 ```bash
 go install github.com/fuckvibecoding/vibecoding/cmd/vibecoding@latest
 ```
 
-### Method 3: Build from Source
+### Method 4: Build from Source
 
 ```bash
 # Clone repository
@@ -57,7 +65,7 @@ make build
 # Binary is located at bin/vibecoding
 ```
 
-### Method 4: Install to System
+### Method 5: Install to System
 
 ```bash
 # After building from source

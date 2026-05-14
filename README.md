@@ -29,7 +29,7 @@
 **Option 1: npm (Recommended)**
 
 ```bash
-npm install -g vibecoding
+npm install -g vibecoding-installer
 ```
 
 **Option 2: One-line Install**
