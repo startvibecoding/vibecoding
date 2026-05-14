@@ -1,5 +1,37 @@
 # 更新日志
 
+## v0.0.5
+
+### ✨ 新功能
+
+- **非 root 安装**
+  - `install.sh` 现在支持无需 root 或 sudo 权限安装
+  - 自动检测可写安装目录：优先使用 `/usr/local/bin`，若不可写则回退到 `~/.vibecoding/bin`
+  - 移除所有 `sudo` 调用 — 用户级安装不再需要提升权限
+
+- **自动 PATH 配置**
+  - 自动检测用户 shell（bash、zsh、fish）并在相应配置文件中配置 PATH
+  - 支持 `.bashrc`、`.bash_profile`、`.zshrc`、`.zshenv`、`config.fish` 和 `.profile`
+  - 若 PATH 条目已存在则跳过配置（避免重复）
+  - Fish shell 使用 `set -gx PATH` 语法；bash/zsh 使用 `export PATH=...`
+
+### 🛠 改进
+
+- **环境变量**
+  - `INSTALL_DIR` — 覆盖安装目录（不变）
+  - `AUTO_SETUP_PATH=0` — 禁用自动 PATH 配置
+  - 更好的权限问题错误提示
+
+- **安装体验**
+  - 开始时显示安装目录和 PATH 自动配置状态
+  - 更清晰的彩色状态消息输出
+
+### 📖 文档
+
+- 新增 v0.0.5 发布说明
+
+---
+
 ## v0.0.4
 
 ### ✨ 新功能
@@ -96,4 +128,4 @@
 
 ---
 
-**完整变更日志**: https://github.com/fuckvibecoding/vibecoding/compare/v0.0.1...v0.0.4
+**完整变更日志**: https://github.com/fuckvibecoding/vibecoding/compare/v0.0.1...v0.0.5
