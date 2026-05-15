@@ -94,6 +94,7 @@ VibeCoding 使用两个配置文件:
 | `baseUrl` | string | ✓ | API 基础 URL |
 | `apiKey` | string | - | API 密钥 (可选，也可通过环境变量) |
 | `api` | string | - | API 类型: `openai-chat` 或 `anthropic-messages` |
+| `thinkingFormat` | string | - | 思考参数格式: `""`, `"openai"`, `"anthropic"`, `"xiaomi"` |
 | `models` | array | - | 可用模型列表 |
 
 #### api 字段
@@ -104,6 +105,30 @@ VibeCoding 使用两个配置文件:
 如果未指定，会根据 `baseUrl` 自动检测:
 - 包含 "anthropic" → `anthropic-messages`
 - 其他 → `openai-chat`
+
+#### thinkingFormat 字段
+
+指定思考/推理参数如何发送到 API:
+
+- `""` (空): 根据 URL 自动检测
+- `"openai"`: 使用 OpenAI `reasoning_effort` 格式
+- `"anthropic"`: 使用 Anthropic `thinking` 带 `budget_tokens`
+- `"xiaomi"`: 使用 `thinking: {type: "enabled"}` 格式 (用于小米 MiMo API)
+
+未设置时，如果 URL 包含 `xiaomimimo` 则自动检测为 `xiaomi` 格式。
+
+```json
+{
+  "providers": {
+    "xiaomi": {
+      "baseUrl": "https://api.xiaomimimo.com/v1",
+      "apiKey": "sk-...",
+      "api": "openai-chat",
+      "thinkingFormat": "xiaomi"
+    }
+  }
+}
+```
 
 #### models 数组
 

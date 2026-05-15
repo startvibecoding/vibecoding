@@ -94,6 +94,7 @@ Multi-provider configuration. Each provider contains:
 | `baseUrl` | string | ✓ | API base URL |
 | `apiKey` | string | - | API key (optional, can also use environment variables) |
 | `api` | string | - | API type: `openai-chat` or `anthropic-messages` |
+| `thinkingFormat` | string | - | Thinking parameter format: `""`, `"openai"`, `"anthropic"`, `"xiaomi"` |
 | `models` | array | - | List of available models |
 
 #### api field
@@ -104,6 +105,30 @@ Multi-provider configuration. Each provider contains:
 If not specified, auto-detected based on `baseUrl`:
 - Contains "anthropic" → `anthropic-messages`
 - Others → `openai-chat`
+
+#### thinkingFormat field
+
+Specifies how thinking/reasoning parameters are sent to the API:
+
+- `""` (empty): Auto-detect based on URL
+- `"openai"`: Use OpenAI `reasoning_effort` format
+- `"anthropic"`: Use Anthropic `thinking` with `budget_tokens`
+- `"xiaomi"`: Use `thinking: {type: "enabled"}` format (for Xiaomi MiMo API)
+
+When not set, automatically detects `xiaomi` format if URL contains `xiaomimimo`.
+
+```json
+{
+  "providers": {
+    "xiaomi": {
+      "baseUrl": "https://api.xiaomimimo.com/v1",
+      "apiKey": "sk-...",
+      "api": "openai-chat",
+      "thinkingFormat": "xiaomi"
+    }
+  }
+}
+```
 
 #### models array
 

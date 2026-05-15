@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0] - 2026-05-15
+
+### Added
+- **MiMo thinking format support**: New `thinkingFormat` config option in provider settings to support Xiaomi MiMo API format
+- **OpenAI provider**: Use `thinking: {type: "enabled"}` format for xiaomi endpoints
+- **Anthropic provider**: Make `budget_tokens` optional (omit for xiaomi endpoints)
+- **URL auto-detect**: Automatic detection of xiaomimimo endpoints when `thinkingFormat` not explicitly set
+- **Debug logging**: Enable debug output with `VIBECODING_DEBUG` environment variable
+
+### Changed
+- `thinkingFormat` configuration is now passed from config to providers instead of relying solely on URL-based detection
+- Anthropic `budget_tokens` changed from required to optional (`*int` with `omitempty`)
+
 ## [0.0.9] - 2026-05-15
 
 ### Added

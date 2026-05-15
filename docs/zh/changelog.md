@@ -1,5 +1,24 @@
 # 更新日志
 
+## v0.1.0
+
+### ✨ 新功能
+
+- **小米 MiMo thinking 格式支持**
+  - 新增 `thinkingFormat` 配置选项，支持小米 MiMo API 格式
+  - OpenAI provider: 小米端点使用 `thinking: {type: "enabled"}` 格式
+  - Anthropic provider: 小米端点省略 `budget_tokens`
+  - URL 自动检测：未设置 `thinkingFormat` 时自动检测 `xiaomimimo` 端点
+  - 调试日志：通过 `VIBECODING_DEBUG` 环境变量启用
+
+### 🛠 改进
+
+- **配置灵活性**
+  - `thinkingFormat` 从配置传递到 provider，不再仅依赖 URL 检测
+  - Anthropic `budget_tokens` 从必需改为可选（指针类型 + `omitempty`）
+
+---
+
 ## v0.0.9
 
 ### ✨ 新功能
