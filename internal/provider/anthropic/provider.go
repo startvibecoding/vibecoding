@@ -22,6 +22,8 @@ type Provider struct {
 	apiKey  string
 	baseURL string
 	client  *http.Client
+
+	thinkingFormat string // "", "anthropic", "xiaomi"
 }
 
 // DefaultModels returns the default Anthropic model list.
@@ -71,6 +73,12 @@ func NewProviderWithModels(apiKey, baseURL string, models []*provider.Model) *Pr
 	}
 }
 
+// SetThinkingFormat sets the thinking parameter format.
+// "anthropic" = thinking with budget_tokens, "xiaomi" = thinking without budget_tokens
+func (p *Provider) SetThinkingFormat(format string) {
+	p.thinkingFormat = format
+}
+
 type anthropicRequest struct {
 	Model     string             `json:"model"`
 	Messages  []anthropicMessage `json:"messages"`
@@ -83,7 +91,7 @@ type anthropicRequest struct {
 
 type anthropicThinking struct {
 	Type         string `json:"type"`
-	BudgetTokens int    `json:"budget_tokens"`
+	BudgetTokens *int   `json:"budget_tokens,omitempty"`
 }
 
 type anthropicMessage struct {
@@ -189,13 +197,29 @@ func (p *Provider) Chat(ctx context.Context, params provider.ChatParams) <-chan 
 		}
 
 		if params.ThinkingLevel != provider.ThinkingOff {
-			reqBody.Thinking = &anthropicThinking{Type: "enabled", BudgetTokens: thinkingBudget(params.ThinkingLevel)}
+			// Determine thinking format: explicit config > URL auto-detect > default
+			format := p.thinkingFormat
+			if format == "" && strings.Contains(p.baseURL, "xiaomimimo") {
+				format = "xiaomi"
+			}
+			switch format {
+			case "xiaomi":
+				reqBody.Thinking = &anthropicThinking{Type: "enabled"}
+			default: // "anthropic" or ""
+				budget := thinkingBudget(params.ThinkingLevel)
+				reqBody.Thinking = &anthropicThinking{Type: "enabled", BudgetTokens: &budget}
+			}
 		}
 
 		body, err := json.Marshal(reqBody)
 		if err != nil {
 			ch <- provider.StreamEvent{Type: provider.StreamError, Error: fmt.Errorf("marshal: %w", err)}
 			return
+		}
+
+		// Debug: dump request body
+		if os.Getenv("VIBECODING_DEBUG") != "" {
+			fmt.Fprintf(os.Stderr, "[DEBUG] Request body: %s\n", string(body))
 		}
 
 		req, err := http.NewRequestWithContext(ctx, "POST", p.baseURL+"/v1/messages", bytes.NewReader(body))

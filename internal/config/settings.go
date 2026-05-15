@@ -32,10 +32,11 @@ type Settings struct {
 }
 
 type ProviderConfig struct {
-	APIKey  string        `json:"apiKey,omitempty"`
-	BaseURL string        `json:"baseUrl,omitempty"`
-	API     string        `json:"api,omitempty"`
-	Models  []ModelConfig `json:"models"`
+	APIKey         string        `json:"apiKey,omitempty"`
+	BaseURL        string        `json:"baseUrl,omitempty"`
+	API            string        `json:"api,omitempty"`
+	ThinkingFormat string        `json:"thinkingFormat,omitempty"` // "", "openai", "anthropic", "xiaomi"
+	Models         []ModelConfig `json:"models"`
 }
 
 type ModelConfig struct {

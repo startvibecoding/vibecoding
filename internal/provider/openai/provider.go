@@ -24,7 +24,8 @@ type Provider struct {
 	client  *http.Client
 
 	// Configuration options
-	disableReasoning bool // Disable reasoning_content support for incompatible APIs
+	disableReasoning bool   // Disable reasoning_content support for incompatible APIs
+	thinkingFormat   string // "", "openai", "xiaomi"
 }
 
 // DefaultModels returns the default OpenAI model list.
@@ -92,6 +93,12 @@ func (p *Provider) IsReasoningDisabled() bool {
 	return p.disableReasoning
 }
 
+// SetThinkingFormat sets the thinking parameter format.
+// "openai" = reasoning_effort, "xiaomi" = thinking: {type: enabled}
+func (p *Provider) SetThinkingFormat(format string) {
+	p.thinkingFormat = format
+}
+
 // openAIRequest represents the request body for OpenAI Chat Completions.
 type openAIRequest struct {
 	Model           string          `json:"model"`
@@ -101,6 +108,11 @@ type openAIRequest struct {
 	Stream          bool            `json:"stream"`
 	StreamOptions   *streamOptions  `json:"stream_options,omitempty"`
 	ReasoningEffort string          `json:"reasoning_effort,omitempty"`
+	Thinking        *thinkingConfig `json:"thinking,omitempty"`
+}
+
+type thinkingConfig struct {
+	Type string `json:"type"`
 }
 
 type streamOptions struct {
@@ -218,13 +230,23 @@ func (p *Provider) Chat(ctx context.Context, params provider.ChatParams) <-chan 
 
 		model := p.GetModel(modelID)
 		if !p.disableReasoning && params.ThinkingLevel != provider.ThinkingOff && model != nil && model.Reasoning {
-			switch params.ThinkingLevel {
-			case provider.ThinkingMinimal, provider.ThinkingLow:
-				reqBody.ReasoningEffort = "low"
-			case provider.ThinkingMedium:
-				reqBody.ReasoningEffort = "medium"
-			case provider.ThinkingHigh, provider.ThinkingXHigh:
-				reqBody.ReasoningEffort = "high"
+			// Determine thinking format: explicit config > URL auto-detect > default
+			format := p.thinkingFormat
+			if format == "" && strings.Contains(p.baseURL, "xiaomimimo") {
+				format = "xiaomi"
+			}
+			switch format {
+			case "xiaomi":
+				reqBody.Thinking = &thinkingConfig{Type: "enabled"}
+			default: // "openai" or ""
+				switch params.ThinkingLevel {
+				case provider.ThinkingMinimal, provider.ThinkingLow:
+					reqBody.ReasoningEffort = "low"
+				case provider.ThinkingMedium:
+					reqBody.ReasoningEffort = "medium"
+				case provider.ThinkingHigh, provider.ThinkingXHigh:
+					reqBody.ReasoningEffort = "high"
+				}
 			}
 		}
 
@@ -232,6 +254,11 @@ func (p *Provider) Chat(ctx context.Context, params provider.ChatParams) <-chan 
 		if err != nil {
 			ch <- provider.StreamEvent{Type: provider.StreamError, Error: fmt.Errorf("marshal request: %w", err)}
 			return
+		}
+
+		// Debug: dump request body
+		if os.Getenv("VIBECODING_DEBUG") != "" {
+			fmt.Fprintf(os.Stderr, "[DEBUG] Request body: %s\n", string(body))
 		}
 
 		req, err := http.NewRequestWithContext(ctx, "POST", p.baseURL+"/chat/completions", bytes.NewReader(body))

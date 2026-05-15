@@ -307,9 +307,17 @@ func createProvider(settings *config.Settings, providerName, modelID string) (pr
 		var p provider.Provider
 		switch api {
 		case "anthropic-messages":
-			p = anthropic.NewProviderWithModels(apiKey, pc.BaseURL, models)
+			ap := anthropic.NewProviderWithModels(apiKey, pc.BaseURL, models)
+			if pc.ThinkingFormat != "" {
+				ap.SetThinkingFormat(pc.ThinkingFormat)
+			}
+			p = ap
 		case "openai-chat", "openai":
-			p = openai.NewProviderWithModels(apiKey, pc.BaseURL, models)
+			op := openai.NewProviderWithModels(apiKey, pc.BaseURL, models)
+			if pc.ThinkingFormat != "" {
+				op.SetThinkingFormat(pc.ThinkingFormat)
+			}
+			p = op
 		default:
 			return nil, nil, fmt.Errorf("unsupported API type: %s (use 'openai-chat' or 'anthropic-messages')", api)
 		}
