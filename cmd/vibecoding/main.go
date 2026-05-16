@@ -406,7 +406,11 @@ func convertModelConfigs(providerName string, models []config.ModelConfig) []*pr
 // This is needed because some terminals send color query sequences on startup.
 func clearStdin() {
 	// Set a short read deadline so pending reads time out cleanly.
-	os.Stdin.SetReadDeadline(time.Now().Add(50 * time.Millisecond))
+	// Some stdin types (pipes, certain PTYs) don't support deadlines;
+	// if SetReadDeadline fails we skip clearing to avoid blocking forever.
+	if err := os.Stdin.SetReadDeadline(time.Now().Add(50 * time.Millisecond)); err != nil {
+		return
+	}
 	defer os.Stdin.SetReadDeadline(time.Time{}) // Clear deadline
 	buf := make([]byte, 128)
 	for {
