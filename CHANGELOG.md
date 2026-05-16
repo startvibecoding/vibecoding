@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] - 2026-05-16
+
+### Added
+- **Cache hit rate display**: Footer shows cumulative cache hit percentage (highlighted when ≥50%)
+- **Per-turn cache info**: Token usage line now includes cache read/write counts per turn
+- **Usage.CacheInfo()**: Extracted shared cache display logic to eliminate 3× duplication
+- **Proxy compatibility**: Handle proxies that send usage fields in `message_delta` instead of `message_start`
+- **OpenAI multi-chunk usage**: Handle OpenAI proxies that split usage across multiple SSE chunks (first-wins per field)
+- **Print mode fix**: Fixed missing space before `$` in print-mode token summary line
+- **Cache tests**: 37 unit tests for `CacheInfo()`, `formatCachePercent()`, and `renderFooter()` cache section
+- **Integration tests**: 12 httptest integration tests for Anthropic and OpenAI SSE cache token parsing
+
+### Changed
+- npm package versions now use `v`-prefixed format (e.g. `v0.1.1`)
+- Normalized JSON formatting across all npm package.json files
+
 ## [0.1.0] - 2026-05-15
 
 ### Added

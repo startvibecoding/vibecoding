@@ -1,5 +1,33 @@
 # 更新日志
 
+## v0.1.1
+
+### ✨ 新功能
+
+- **缓存命中率显示**
+  - 状态栏现在显示所有轮次的累计缓存命中百分比
+  - 缓存命中率 ≥ 50% 时高亮显示，便于快速识别
+  - 每轮 token 使用行新增缓存读写数量显示
+
+- **代理兼容性**
+  - 支持在 `message_delta` 而非 `message_start` 中发送 usage 字段的代理
+  - 支持将 usage 拆分到多个 SSE chunk 的 OpenAI 代理（每个字段取首次出现的值）
+  - 修复 print 模式 token 汇总行 `$` 前缺少空格的问题
+
+### 🛠 改进
+
+- **代码质量**
+  - 提取 `Usage.CacheInfo()` 消除 3 处重复的缓存显示逻辑
+  - npm 包版本号改为 `v` 前缀格式（如 `v0.1.1`）
+  - 统一所有 npm package.json 的 JSON 格式
+
+### 🧪 测试
+
+- 新增 37 个单元测试覆盖 `CacheInfo()`、`formatCachePercent()` 和 `renderFooter()` 缓存部分
+- 新增 12 个 httptest 集成测试覆盖 Anthropic 和 OpenAI SSE 缓存 token 解析
+
+---
+
 ## v0.1.0
 
 ### ✨ 新功能

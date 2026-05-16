@@ -21,6 +21,7 @@
 - **Session Management**: JSONL-based session files with tree structure, branching, compaction
 - **Context Management**: Automatic context window management and token estimation
 - **Rich TUI**: Terminal UI built with BubbleTea, with Markdown rendering and code highlighting
+- **Cache Hit Rate**: Real-time cache hit percentage display in footer, with per-turn cache statistics
 
 ## Quick Start
 

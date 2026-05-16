@@ -1,5 +1,33 @@
 # Changelog
 
+## v0.1.1
+
+### ✨ Features
+
+- **Cache Hit Rate Display**
+  - Footer now shows cumulative cache hit percentage across all turns
+  - Cache percentage is highlighted when hit rate ≥ 50% for quick visibility
+  - Per-turn cache read/write counts displayed in token usage line
+
+- **Proxy Compatibility**
+  - Handle proxies that send usage fields in `message_delta` instead of `message_start`
+  - Handle OpenAI proxies that split usage across multiple SSE chunks (first-wins per field)
+  - Fixed missing space before `$` in print-mode token summary line
+
+### 🛠 Improvements
+
+- **Code Quality**
+  - Extracted `Usage.CacheInfo()` to eliminate 3× duplicated cache display logic
+  - npm package versions now use `v`-prefixed format (e.g. `v0.1.1`)
+  - Normalized JSON formatting across all npm package.json files
+
+### 🧪 Testing
+
+- Added 37 unit tests for `CacheInfo()`, `formatCachePercent()`, and `renderFooter()` cache section
+- Added 12 httptest integration tests for Anthropic and OpenAI SSE cache token parsing
+
+---
+
 ## v0.0.9
 
 ### ✨ Features
