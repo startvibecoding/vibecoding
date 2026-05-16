@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -105,7 +106,9 @@ func (t *BashTool) Execute(ctx context.Context, params map[string]any) (ToolResu
 	// Get platform-specific shell
 	shell := platform.DefaultShell()
 	if s := os.Getenv("SHELL"); s != "" {
-		shell = s
+		if isValidShell(s) {
+			shell = s
+		}
 	}
 
 	workDir := t.registry.GetWorkDir()
@@ -208,6 +211,21 @@ func (t *BashTool) Execute(ctx context.Context, params map[string]any) (ToolResu
 // SetTool is an interface for tools that need sandbox updates.
 type SetTool interface {
 	SetSandbox(sb sandbox.Sandbox)
+}
+
+// validShellNames is the allowlist of known shell binaries.
+var validShellNames = map[string]bool{
+	"sh": true, "bash": true, "zsh": true, "fish": true, "dash": true, "ksh": true,
+}
+
+// isValidShell checks whether the given path is a known shell binary.
+func isValidShell(path string) bool {
+	name := filepath.Base(path)
+	if !validShellNames[name] {
+		return false
+	}
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
 }
 
 

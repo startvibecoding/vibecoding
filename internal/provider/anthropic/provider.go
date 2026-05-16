@@ -393,8 +393,15 @@ func (p *Provider) parseSSE(ctx context.Context, body io.Reader, ch chan<- provi
 		}
 	}
 
+	if err := scanner.Err(); err != nil {
+		ch <- provider.StreamEvent{Type: provider.StreamError, Error: fmt.Errorf("stream read error: %w", err), StopReason: "error"}
+		return
+	}
+
 	if usage != nil {
-		usage.TotalTokens = usage.Input + usage.Output + usage.CacheRead + usage.CacheWrite
+		// CacheRead and CacheWrite are already included in Input tokens by the API.
+		// Do not double-count them.
+		usage.TotalTokens = usage.Input + usage.Output
 		ch <- provider.StreamEvent{Type: provider.StreamUsage, Usage: usage}
 	}
 	ch <- provider.StreamEvent{Type: provider.StreamDone, StopReason: stopReason}
@@ -464,7 +471,7 @@ func (p *Provider) convertMessages(params provider.ChatParams) []anthropicMessag
 						input := make(map[string]interface{})
 						if len(c.ToolCall.Arguments) > 0 {
 							if err := json.Unmarshal(c.ToolCall.Arguments, &input); err != nil {
-								// If unmarshal fails, use empty input
+								fmt.Fprintf(os.Stderr, "Warning: failed to unmarshal tool call arguments for %s: %v\n", c.ToolCall.Name, err)
 								input = make(map[string]interface{})
 							}
 						}

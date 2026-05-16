@@ -13,6 +13,43 @@ import (
 	"github.com/startvibecoding/vibecoding/internal/sandbox"
 )
 
+// writeFileAtomic writes data to path atomically using a temporary file and rename.
+// It preserves the existing file's permissions if the file already exists.
+func writeFileAtomic(path string, data []byte) error {
+	// Determine target permissions: preserve existing or use default
+	perm := os.FileMode(0644)
+	if info, err := os.Stat(path); err == nil {
+		perm = info.Mode().Perm()
+	}
+
+	// Create temp file in the same directory for atomic rename
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+
+	tmp, err := os.CreateTemp(dir, ".tmp-*")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+
+	// Clean up temp file on any error
+	defer os.Remove(tmpPath)
+
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmpPath, perm); err != nil {
+		return err
+	}
+	return os.Rename(tmpPath, path)
+}
+
 // ToolResult represents the result of a tool execution.
 // It can contain plain text and optional rich content blocks (e.g. images).
 type ToolResult struct {

@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 )
 
 // WriteTool writes content to files.
@@ -62,14 +60,8 @@ func (t *WriteTool) Execute(ctx context.Context, params map[string]any) (ToolRes
 		return ToolResult{}, fmt.Errorf("invalid path: %w", err)
 	}
 
-	// Create parent directories
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return ToolResult{}, fmt.Errorf("create directory: %w", err)
-	}
-
-	// Write file
-	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+	// Write file atomically, preserving existing permissions
+	if err := writeFileAtomic(path, []byte(content)); err != nil {
 		return ToolResult{}, fmt.Errorf("write file: %w", err)
 	}
 

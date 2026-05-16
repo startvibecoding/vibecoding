@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 )
 
@@ -109,7 +110,13 @@ func (t *EditTool) Execute(ctx context.Context, params map[string]any) (ToolResu
 		edits = append(edits, edit{OldText: oldText, NewText: newText})
 	}
 
-	// Validate all edits before applying
+	// Validate all edits before applying and record their positions in the original content
+	type editPos struct {
+		edit  edit
+		start int
+		end   int
+	}
+	positions := make([]editPos, 0, len(edits))
 	for i, e := range edits {
 		count := strings.Count(content, e.OldText)
 		if count == 0 {
@@ -118,14 +125,34 @@ func (t *EditTool) Execute(ctx context.Context, params map[string]any) (ToolResu
 		if count > 1 {
 			return ToolResult{}, fmt.Errorf("edit %d: oldText matches %d times (must be unique). Make the match text more specific", i, count)
 		}
+		start := strings.Index(content, e.OldText)
+		positions = append(positions, editPos{edit: e, start: start, end: start + len(e.OldText)})
 	}
 
-	// Apply edits
-	for _, e := range edits {
-		content = strings.Replace(content, e.OldText, e.NewText, 1)
+	// Sort by position to ensure non-overlapping order
+	sort.Slice(positions, func(i, j int) bool {
+		return positions[i].start < positions[j].start
+	})
+
+	// Check for overlapping edits
+	for i := 1; i < len(positions); i++ {
+		if positions[i].start < positions[i-1].end {
+			return ToolResult{}, fmt.Errorf("edit %d and edit %d overlap", i-1, i)
+		}
 	}
 
-	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+	// Apply edits in sorted order based on original content positions
+	var sb strings.Builder
+	lastEnd := 0
+	for _, pos := range positions {
+		sb.WriteString(content[lastEnd:pos.start])
+		sb.WriteString(pos.edit.NewText)
+		lastEnd = pos.end
+	}
+	sb.WriteString(content[lastEnd:])
+	content = sb.String()
+
+	if err := writeFileAtomic(path, []byte(content)); err != nil {
 		return ToolResult{}, fmt.Errorf("write file: %w", err)
 	}
 

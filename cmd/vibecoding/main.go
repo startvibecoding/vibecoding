@@ -233,6 +233,12 @@ func run(args []string, opts runOptions) error {
 			return fmt.Errorf("open session: %w", err)
 		}
 		sessionInfo = fmt.Sprintf("📂 Opened session: %s", sess.GetFile())
+	} else if opts.resume != "" {
+		sess, err = session.Open(opts.resume)
+		if err != nil {
+			return fmt.Errorf("resume session: %w", err)
+		}
+		sessionInfo = fmt.Sprintf("📂 Resumed session: %s", sess.GetFile())
 	} else {
 		sess = session.New(cwd, settings.GetSessionDir())
 		if err := sess.Init(); err != nil {
@@ -398,25 +404,16 @@ func convertModelConfigs(providerName string, models []config.ModelConfig) []*pr
 // clearStdin reads and discards any pending input from stdin.
 // This is needed because some terminals send color query sequences on startup.
 func clearStdin() {
-	// Use a goroutine with timeout to read any pending input
-	done := make(chan struct{})
-	go func() {
-		buf := make([]byte, 128)
-		for {
-			select {
-			case <-done:
-				return
-			default:
-				n, _ := os.Stdin.Read(buf)
-				if n == 0 {
-					return
-				}
-			}
+	// Set a short read deadline so pending reads time out cleanly.
+	os.Stdin.SetReadDeadline(time.Now().Add(50 * time.Millisecond))
+	defer os.Stdin.SetReadDeadline(time.Time{}) // Clear deadline
+	buf := make([]byte, 128)
+	for {
+		n, err := os.Stdin.Read(buf)
+		if n == 0 || err != nil {
+			return
 		}
-	}()
-	// Wait a short time for any pending input to be read
-	time.Sleep(50 * time.Millisecond)
-	close(done)
+	}
 }
 
 func runPrint(args []string, p provider.Provider, model *provider.Model, mode string, thinkingLevel provider.ThinkingLevel, settings *config.Settings, registry *tools.Registry, sess *session.Manager, extraContext string) error {

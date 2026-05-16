@@ -495,15 +495,31 @@ func (a *App) flushInputQueue() tea.Cmd {
 	return nil
 }
 
-// scheduleRender schedules a render update with throttling
+// scheduleRender schedules a render update with throttling.
+// If called inside the throttle window, a delayed render is scheduled
+// so the pending update is not lost.
 func (a *App) scheduleRender() {
 	a.renderMu.Lock()
 	defer a.renderMu.Unlock()
 
 	now := time.Now()
 	if now.Sub(a.lastRender) < a.renderInterval {
-		// Too soon, mark as pending
-		a.renderPending = true
+		if !a.renderPending {
+			a.renderPending = true
+			remaining := a.renderInterval - now.Sub(a.lastRender)
+			time.AfterFunc(remaining, func() {
+				a.renderMu.Lock()
+				wasPending := a.renderPending
+				if wasPending {
+					a.lastRender = time.Now()
+					a.renderPending = false
+				}
+				a.renderMu.Unlock()
+				if wasPending {
+					a.updateViewportContent()
+				}
+			})
+		}
 		return
 	}
 
@@ -567,6 +583,7 @@ func (a *App) handlePaste(text string) {
 // expandPasteMarkers expands paste markers to their original content
 func (a *App) expandPasteMarkers(text string) string {
 	result := text
+	used := make(map[int]bool)
 	for pasteId, content := range a.pastes {
 		// Match markers like [paste #1 +15 lines] or [paste #2 1234 chars]
 		markerLine := fmt.Sprintf("+%d lines", strings.Count(content, "\n")+1)
@@ -576,6 +593,7 @@ func (a *App) expandPasteMarkers(text string) string {
 		marker1 := fmt.Sprintf("[paste #%d %s]", pasteId, markerLine)
 		if strings.Contains(result, marker1) {
 			result = strings.ReplaceAll(result, marker1, content)
+			used[pasteId] = true
 			continue
 		}
 
@@ -583,12 +601,14 @@ func (a *App) expandPasteMarkers(text string) string {
 		marker2 := fmt.Sprintf("[paste #%d %s]", pasteId, markerChar)
 		if strings.Contains(result, marker2) {
 			result = strings.ReplaceAll(result, marker2, content)
+			used[pasteId] = true
 		}
 	}
 
-	// Clean up used pastes
-	a.pastes = make(map[int]string)
-	a.pasteCounter = 0
+	// Clean up only used pastes
+	for id := range used {
+		delete(a.pastes, id)
+	}
 
 	return result
 }
@@ -922,7 +942,10 @@ func (a *App) processInput(input string) tea.Cmd {
 		a.agent = agent.New(agentCfg, a.registry)
 
 		// Load history messages from session if available and not yet loaded
-		if a.session != nil && !a.historyLoaded {
+		a.sessionMu.Lock()
+		historyLoaded := a.historyLoaded
+		a.sessionMu.Unlock()
+		if a.session != nil && !historyLoaded {
 			a.sessionMu.Lock()
 			historyMessages := a.session.GetMessages()
 			a.sessionMu.Unlock()

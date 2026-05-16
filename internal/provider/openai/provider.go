@@ -369,9 +369,17 @@ func (p *Provider) parseSSE(ctx context.Context, body io.Reader, ch chan<- provi
 			}
 			for _, tc := range choice.Delta.ToolCalls {
 				idx := tc.Index
+				if idx < 0 {
+					continue
+				}
 				if _, ok := toolCallBuffers[idx]; !ok {
 					toolCallBuffers[idx] = &strings.Builder{}
-					toolCalls = append(toolCalls, provider.ToolCallBlock{ID: tc.ID, Name: tc.Function.Name})
+					// Ensure slice is long enough
+					for len(toolCalls) <= idx {
+						toolCalls = append(toolCalls, provider.ToolCallBlock{})
+					}
+					toolCalls[idx].ID = tc.ID
+					toolCalls[idx].Name = tc.Function.Name
 				}
 				if tc.ID != "" {
 					toolCalls[idx].ID = tc.ID
@@ -387,6 +395,11 @@ func (p *Provider) parseSSE(ctx context.Context, body io.Reader, ch chan<- provi
 				stopReason = *choice.FinishReason
 			}
 		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		ch <- provider.StreamEvent{Type: provider.StreamError, Error: fmt.Errorf("stream read error: %w", err), StopReason: "error"}
+		return
 	}
 
 	for i, tc := range toolCalls {
