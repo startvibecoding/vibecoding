@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 )
 
 // BwrapSandbox implements sandbox using bubblewrap (bwrap).
@@ -15,6 +16,7 @@ type BwrapSandbox struct {
 	level      Level
 	projectDir string
 	bwrapPath  string
+	availMu    sync.Mutex
 	available  *bool // cached availability check
 }
 
@@ -53,6 +55,9 @@ func findBwrap() string {
 
 // IsAvailable checks if bwrap is available on this system.
 func (s *BwrapSandbox) IsAvailable() bool {
+	s.availMu.Lock()
+	defer s.availMu.Unlock()
+
 	if s.available != nil {
 		return *s.available
 	}
@@ -126,13 +131,13 @@ func (s *BwrapSandbox) buildBwrapArgs(opts ExecOpts, shell, cmd string) []string
 		"--tmpfs", "/tmp",
 	}
 
+	// Size limit on tmpfs (must immediately follow --tmpfs)
+	args = append(args, "--size", "100000000") // ~100MB default
+
 	// Network isolation (unless explicitly allowed)
 	if !opts.NetworkAccess {
 		args = append(args, "--unshare-net")
 	}
-
-	// Size limit on tmpfs
-	args = append(args, "--size", "100000000") // ~100MB default
 
 	// System libraries (read-only)
 	systemPaths := []string{"/usr", "/lib", "/lib64", "/bin", "/sbin"}
@@ -254,8 +259,16 @@ func (s *BwrapSandbox) buildEnv(opts ExecOpts) []string {
 		env = append(env, k+"="+v)
 	}
 
-	// Set HOME to tmp
-	env = append(env, "HOME=/tmp")
+	// Set HOME to the sandbox-isolated home directory (tmpfs mounted over real home).
+	// Only override if the caller did not explicitly set HOME via EnvVars.
+	if _, ok := opts.EnvVars["HOME"]; !ok {
+		homeDir, _ := os.UserHomeDir()
+		if homeDir != "" {
+			env = append(env, "HOME="+homeDir)
+		} else {
+			env = append(env, "HOME=/tmp")
+		}
+	}
 
 	return env
 }

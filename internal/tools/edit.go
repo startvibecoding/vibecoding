@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 )
 
@@ -75,8 +74,10 @@ func (t *EditTool) Execute(ctx context.Context, params map[string]any) (ToolResu
 		return ToolResult{}, fmt.Errorf("path is required")
 	}
 
-	path = t.resolvePath(path)
-	path = filepath.Clean(path)
+	path, err := t.registry.ResolvePath(path)
+	if err != nil {
+		return ToolResult{}, fmt.Errorf("invalid path: %w", err)
+	}
 
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -131,9 +132,3 @@ func (t *EditTool) Execute(ctx context.Context, params map[string]any) (ToolResu
 	return NewTextToolResult(fmt.Sprintf("Applied %d edit(s) to %s", len(edits), path)), nil
 }
 
-func (t *EditTool) resolvePath(path string) string {
-	if filepath.IsAbs(path) {
-		return path
-	}
-	return filepath.Join(t.registry.GetWorkDir(), path)
-}

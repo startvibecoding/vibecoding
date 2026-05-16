@@ -57,8 +57,10 @@ func (t *WriteTool) Execute(ctx context.Context, params map[string]any) (ToolRes
 		return ToolResult{}, fmt.Errorf("path is required")
 	}
 
-	path = t.resolvePath(path)
-	path = filepath.Clean(path)
+	path, err := t.registry.ResolvePath(path)
+	if err != nil {
+		return ToolResult{}, fmt.Errorf("invalid path: %w", err)
+	}
 
 	// Create parent directories
 	dir := filepath.Dir(path)
@@ -74,9 +76,3 @@ func (t *WriteTool) Execute(ctx context.Context, params map[string]any) (ToolRes
 	return NewTextToolResult(fmt.Sprintf("File written: %s (%d bytes)", path, len(content))), nil
 }
 
-func (t *WriteTool) resolvePath(path string) string {
-	if filepath.IsAbs(path) {
-		return path
-	}
-	return filepath.Join(t.registry.GetWorkDir(), path)
-}

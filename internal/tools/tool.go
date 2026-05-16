@@ -3,6 +3,11 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
 
 	"github.com/startvibecoding/vibecoding/internal/provider"
 	"github.com/startvibecoding/vibecoding/internal/sandbox"
@@ -64,6 +69,7 @@ func ToolDefinition(t Tool) provider.ToolDefinition {
 
 // Registry manages available tools.
 type Registry struct {
+	mu      sync.RWMutex
 	tools   map[string]Tool
 	order   []string
 	sandbox sandbox.Sandbox
@@ -81,19 +87,27 @@ func NewRegistry(workDir string, sb sandbox.Sandbox) *Registry {
 
 // Register adds a tool to the registry.
 func (r *Registry) Register(t Tool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	name := t.Name()
+	if _, exists := r.tools[name]; !exists {
+		r.order = append(r.order, name)
+	}
 	r.tools[name] = t
-	r.order = append(r.order, name)
 }
 
 // Get returns a tool by name.
 func (r *Registry) Get(name string) (Tool, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	t, ok := r.tools[name]
 	return t, ok
 }
 
 // All returns all registered tools in order.
 func (r *Registry) All() []Tool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	var result []Tool
 	for _, name := range r.order {
 		if t, ok := r.tools[name]; ok {
@@ -105,25 +119,73 @@ func (r *Registry) All() []Tool {
 
 // Definitions returns tool definitions for all registered tools.
 func (r *Registry) Definitions() []provider.ToolDefinition {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	var defs []provider.ToolDefinition
-	for _, t := range r.All() {
-		defs = append(defs, ToolDefinition(t))
+	for _, name := range r.order {
+		if t, ok := r.tools[name]; ok {
+			defs = append(defs, ToolDefinition(t))
+		}
 	}
 	return defs
 }
 
 // GetSandbox returns the registry's sandbox.
 func (r *Registry) GetSandbox() sandbox.Sandbox {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	return r.sandbox
 }
 
 // GetWorkDir returns the registry's working directory.
 func (r *Registry) GetWorkDir() string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	return r.workDir
+}
+
+// ResolvePath resolves a user-provided path to an absolute path constrained to the work directory.
+func (r *Registry) ResolvePath(path string) (string, error) {
+	r.mu.RLock()
+	workDir := r.workDir
+	r.mu.RUnlock()
+
+	// Expand ~ (only ~/ prefix, not arbitrary ~user)
+	if path == "~" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("resolve home directory: %w", err)
+		}
+		path = home
+	} else if strings.HasPrefix(path, "~/") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("resolve home directory: %w", err)
+		}
+		path = filepath.Join(home, path[2:])
+	}
+
+	// Convert relative paths to absolute within workDir
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(workDir, path)
+	}
+
+	// Clean to resolve .. segments
+	path = filepath.Clean(path)
+
+	// Validate: path must not escape workDir
+	workDir = filepath.Clean(workDir)
+	if !strings.HasPrefix(path, workDir) {
+		return "", fmt.Errorf("path %s escapes working directory %s", path, workDir)
+	}
+
+	return path, nil
 }
 
 // SetSandbox updates the sandbox used by tools.
 func (r *Registry) SetSandbox(sb sandbox.Sandbox) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.sandbox = sb
 }
 
@@ -162,6 +224,8 @@ func (r *Registry) ModeTools(mode string) []provider.ToolDefinition {
 
 // ToolSnippets returns prompt snippets for the given tool names.
 func (r *Registry) ToolSnippets(toolNames []string) map[string]string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	snippets := make(map[string]string)
 	for _, name := range toolNames {
 		if t, ok := r.tools[name]; ok {
@@ -175,6 +239,8 @@ func (r *Registry) ToolSnippets(toolNames []string) map[string]string {
 
 // ToolGuidelines returns prompt guidelines for the given tool names.
 func (r *Registry) ToolGuidelines(toolNames []string) []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	var guidelines []string
 	seen := make(map[string]bool)
 	for _, name := range toolNames {

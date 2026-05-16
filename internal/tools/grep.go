@@ -73,7 +73,11 @@ func (t *GrepTool) Execute(ctx context.Context, params map[string]any) (ToolResu
 
 	searchPath := t.registry.GetWorkDir()
 	if v, ok := params["path"].(string); ok && v != "" {
-		searchPath = t.resolvePath(v)
+		var err error
+		searchPath, err = t.registry.ResolvePath(v)
+		if err != nil {
+			return ToolResult{}, fmt.Errorf("invalid path: %w", err)
+		}
 	}
 
 	include, _ := params["include"].(string)
@@ -143,12 +147,6 @@ func (t *GrepTool) Execute(ctx context.Context, params map[string]any) (ToolResu
 	return NewTextToolResult(strings.Join(results, "\n")), nil
 }
 
-func (t *GrepTool) resolvePath(path string) string {
-	if filepath.IsAbs(path) {
-		return path
-	}
-	return filepath.Join(t.registry.GetWorkDir(), path)
-}
 
 func isBinary(path string) bool {
 	f, err := os.Open(path)

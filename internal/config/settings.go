@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -272,9 +273,19 @@ func resolveKeyValue(key string) string {
 	if strings.HasPrefix(key, "!") {
 		return resolveShellCommand(key[1:])
 	}
-	if v := os.Getenv(key); v != "" && !strings.Contains(key, " ") {
-		return v
+
+	// Handle ${VAR} syntax: look up the variable name inside ${}
+	envName := key
+	if strings.HasPrefix(key, "${") && strings.HasSuffix(key, "}") {
+		envName = key[2 : len(key)-1]
 	}
+
+	if !strings.Contains(envName, " ") {
+		if v := os.Getenv(envName); v != "" {
+			return v
+		}
+	}
+
 	return key
 }
 
@@ -299,7 +310,14 @@ func (s *Settings) GetModelConfig(providerName, modelID string) *ModelConfig {
 }
 
 func resolveShellCommand(cmd string) string {
-	return ""
+	if cmd == "" {
+		return ""
+	}
+	out, err := exec.Command("sh", "-c", cmd).Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
 }
 
 func (s *Settings) GetShell() string {

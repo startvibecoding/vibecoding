@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -211,22 +210,4 @@ type SetTool interface {
 	SetSandbox(sb sandbox.Sandbox)
 }
 
-// FileTool is a base for file-related tools.
-type FileTool struct {
-	registry *Registry
-}
 
-func (t *FileTool) resolvePath(path string) string {
-	// Expand home directory
-	path = platform.ExpandHome(path)
-
-	// Normalize path separators
-	path = platform.NormalizePath(path)
-
-	// Make relative paths absolute
-	if !filepath.IsAbs(path) {
-		path = filepath.Join(t.registry.GetWorkDir(), path)
-	}
-
-	return path
-}

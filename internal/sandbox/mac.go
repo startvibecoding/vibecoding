@@ -9,12 +9,14 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
 // macSandbox implements sandbox using macOS sandbox-exec (Seatbelt).
 type macSandbox struct {
 	level      Level
 	projectDir string
+	availMu    sync.Mutex
 	available  *bool
 }
 
@@ -30,6 +32,9 @@ func newMacSandbox(projectDir string, level Level) *macSandbox {
 
 // IsAvailable checks if sandbox-exec is available on this system.
 func (s *macSandbox) IsAvailable() bool {
+	s.availMu.Lock()
+	defer s.availMu.Unlock()
+
 	if s.available != nil {
 		return *s.available
 	}
@@ -62,9 +67,28 @@ func (s *macSandbox) WrapCommand(ctx context.Context, shell, cmd string, opts Ex
 	// Generate sandbox profile
 	profile := s.buildProfile(opts)
 
-	// Create a temporary profile file
-	profilePath := filepath.Join(os.TempDir(), "vibecoding-sandbox.sb")
-	os.WriteFile(profilePath, []byte(profile), 0644)
+	// Create a temporary profile file with a unique name to avoid races
+	f, err := os.CreateTemp(os.TempDir(), "vibecoding-sandbox-*.sb")
+	if err != nil {
+		// Fallback: if we can't create a temp file, return a command that will fail
+		return exec.CommandContext(ctx, "false")
+	}
+	if _, err := f.WriteString(profile); err != nil {
+		f.Close()
+		os.Remove(f.Name())
+		return exec.CommandContext(ctx, "false")
+	}
+	if err := f.Chmod(0600); err != nil {
+		f.Close()
+		os.Remove(f.Name())
+		return exec.CommandContext(ctx, "false")
+	}
+	if err := f.Close(); err != nil {
+		os.Remove(f.Name())
+		return exec.CommandContext(ctx, "false")
+	}
+
+	profilePath := f.Name()
 
 	// sandbox-exec -f profile.sb command
 	args := []string{"-f", profilePath, shell, "-c", cmd}

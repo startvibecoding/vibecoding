@@ -18,7 +18,7 @@ const CurrentVersion = 3
 
 // Manager manages a single session's state and persistence.
 type Manager struct {
-	mu         sync.Mutex
+	mu         sync.RWMutex
 	file       string
 	header     *Header
 	entries    []interface{} // all entry types
@@ -292,16 +292,22 @@ func (m *Manager) GetMessages() []provider.Message {
 
 // GetLeafID returns the current leaf entry ID.
 func (m *Manager) GetLeafID() *string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return m.leafID
 }
 
 // GetFile returns the session file path.
 func (m *Manager) GetFile() string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return m.file
 }
 
 // GetHeader returns the session header.
 func (m *Manager) GetHeader() *Header {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return m.header
 }
 

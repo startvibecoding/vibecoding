@@ -123,6 +123,7 @@ type AgentContext struct {
 type Agent struct {
 	config      AgentLoopConfig
 	registry    *tools.Registry
+	mu          sync.RWMutex
 	context     *AgentContext
 	abort       chan struct{}
 	abortOnce   sync.Once
@@ -305,6 +306,8 @@ func NewWithLoopConfig(cfg AgentLoopConfig, registry *tools.Registry) *Agent {
 
 // LoadHistoryMessages loads historical messages from session into agent context.
 func (a *Agent) LoadHistoryMessages(messages []provider.Message) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	a.messages = append(a.messages, messages...)
 	a.context.Messages = append(a.context.Messages, messages...)
 }
@@ -346,8 +349,10 @@ func (a *Agent) RunWithMessages(ctx context.Context, messages []provider.Message
 
 	go func() {
 		defer close(ch)
+		a.mu.Lock()
 		a.messages = messages
 		a.context.Messages = messages
+		a.mu.Unlock()
 		a.loop(ctx, ch)
 	}()
 
@@ -368,7 +373,7 @@ func (a *Agent) loop(ctx context.Context, ch chan<- Event) {
 		select {
 		case <-ctx.Done():
 			ch <- Event{Type: EventError, Error: ctx.Err(), StopReason: "aborted"}
-			ch <- Event{Type: EventAgentEnd, Messages: a.messages}
+			ch <- Event{Type: EventAgentEnd, Messages: func() []provider.Message { a.mu.RLock(); defer a.mu.RUnlock(); m := make([]provider.Message, len(a.messages)); copy(m, a.messages); return m }()}
 			return
 		default:
 		}
@@ -395,9 +400,11 @@ func (a *Agent) loop(ctx context.Context, ch chan<- Event) {
 
 		// Build message list: session context + history messages
 		// Session context is marked as system_injected, so cache markers skip it
+		a.mu.RLock()
 		allMessages := make([]provider.Message, 0, len(a.messages)+1)
 		allMessages = append(allMessages, sessionContextMsg)
 		allMessages = append(allMessages, a.messages...)
+		a.mu.RUnlock()
 
 		// Select cache markers (dual-marker rolling buffer, R3.1-R3.3)
 		markers := selectCacheMarkers(allMessages)
@@ -461,7 +468,7 @@ func (a *Agent) loop(ctx context.Context, ch chan<- Event) {
 
 		if streamErr != nil {
 			ch <- Event{Type: EventError, Error: streamErr, StopReason: stopReason}
-			ch <- Event{Type: EventAgentEnd, Messages: a.messages}
+			ch <- Event{Type: EventAgentEnd, Messages: func() []provider.Message { a.mu.RLock(); defer a.mu.RUnlock(); m := make([]provider.Message, len(a.messages)); copy(m, a.messages); return m }()}
 			return
 		}
 
@@ -492,8 +499,10 @@ func (a *Agent) loop(ctx context.Context, ch chan<- Event) {
 		if usage != nil {
 			assistantMsg.Usage = usage
 		}
+		a.mu.Lock()
 		a.messages = append(a.messages, assistantMsg)
 		a.context.Messages = append(a.context.Messages, assistantMsg)
+		a.mu.Unlock()
 
 		// Save to session
 		if a.config.Session != nil {
@@ -518,14 +527,16 @@ func (a *Agent) loop(ctx context.Context, ch chan<- Event) {
 					warningMsg := provider.NewUserMessage("[System] You have been making tool calls for " + fmt.Sprintf("%d", consecutiveNoText) + " consecutive turns without any text response. Please explain what you are doing and whether you are stuck. If you are making progress, briefly describe your current task and continue. If you are truly stuck, please stop and explain the issue.")
 					ch <- Event{Type: EventMessageStart, Message: warningMsg}
 					ch <- Event{Type: EventMessageEnd, Message: warningMsg}
+					a.mu.Lock()
 					a.messages = append(a.messages, warningMsg)
 					a.context.Messages = append(a.context.Messages, warningMsg)
+					a.mu.Unlock()
 					warningIssued = true
 					consecutiveNoText = 0 // Reset counter for post-warning phase
 				} else {
 					// Already warned, now truly stuck
 					ch <- Event{Type: EventError, Error: fmt.Errorf("agent appears stuck: %d consecutive turns without text output after warning", consecutiveNoText+maxConsecutiveNoText), StopReason: "stuck"}
-					ch <- Event{Type: EventAgentEnd, Messages: a.messages}
+					ch <- Event{Type: EventAgentEnd, Messages: func() []provider.Message { a.mu.RLock(); defer a.mu.RUnlock(); m := make([]provider.Message, len(a.messages)); copy(m, a.messages); return m }()}
 					return
 				}
 			}
@@ -539,7 +550,7 @@ func (a *Agent) loop(ctx context.Context, ch chan<- Event) {
 			contextUsage := a.GetContextUsage()
 			ch <- Event{Type: EventTurnEnd, TurnMessage: assistantMsg, ContextUsage: contextUsage}
 			ch <- Event{Type: EventDone, StopReason: stopReason, Usage: usage, ContextUsage: contextUsage}
-			ch <- Event{Type: EventAgentEnd, Messages: a.messages}
+			ch <- Event{Type: EventAgentEnd, Messages: func() []provider.Message { a.mu.RLock(); defer a.mu.RUnlock(); m := make([]provider.Message, len(a.messages)); copy(m, a.messages); return m }()}
 			return
 		}
 
@@ -552,9 +563,16 @@ func (a *Agent) loop(ctx context.Context, ch chan<- Event) {
 		}
 
 		// Add tool results to context
+		a.mu.Lock()
 		for _, result := range toolResults {
 			a.messages = append(a.messages, result)
 			a.context.Messages = append(a.context.Messages, result)
+		}
+		a.mu.Unlock()
+		for _, result := range toolResults {
+			if a.config.Session != nil {
+				a.config.Session.AppendMessage(result)
+			}
 		}
 
 		ch <- Event{Type: EventTurnEnd, TurnMessage: assistantMsg, TurnToolResults: toolResults, ContextUsage: a.GetContextUsage()}
@@ -569,22 +587,22 @@ func (a *Agent) loop(ctx context.Context, ch chan<- Event) {
 
 		// Check if we should stop after this turn
 		if a.config.ShouldStopAfterTurn != nil {
-			ctx := ShouldStopAfterTurnContext{
+			stopCtx := ShouldStopAfterTurnContext{
 				Message:     assistantMsg,
 				ToolResults: toolResults,
 				Context:     a.context,
 				NewMessages: a.messages,
 			}
-			if a.config.ShouldStopAfterTurn(ctx) {
+			if a.config.ShouldStopAfterTurn(stopCtx) {
 				ch <- Event{Type: EventDone, StopReason: "should_stop"}
-				ch <- Event{Type: EventAgentEnd, Messages: a.messages}
+				ch <- Event{Type: EventAgentEnd, Messages: func() []provider.Message { a.mu.RLock(); defer a.mu.RUnlock(); m := make([]provider.Message, len(a.messages)); copy(m, a.messages); return m }()}
 				return
 			}
 		}
 
 		// Prepare next turn
 		if a.config.PrepareNextTurn != nil {
-			ctx := PrepareNextTurnContext{
+			prepCtx := PrepareNextTurnContext{
 				ShouldStopAfterTurnContext: ShouldStopAfterTurnContext{
 					Message:     assistantMsg,
 					ToolResults: toolResults,
@@ -592,7 +610,7 @@ func (a *Agent) loop(ctx context.Context, ch chan<- Event) {
 					NewMessages: a.messages,
 				},
 			}
-			update := a.config.PrepareNextTurn(ctx)
+			update := a.config.PrepareNextTurn(prepCtx)
 			if update != nil {
 				if update.Context != nil {
 					a.context = update.Context
@@ -613,8 +631,10 @@ func (a *Agent) loop(ctx context.Context, ch chan<- Event) {
 				for _, msg := range steeringMessages {
 					ch <- Event{Type: EventMessageStart, Message: msg}
 					ch <- Event{Type: EventMessageEnd, Message: msg}
+						a.mu.Lock()
 					a.messages = append(a.messages, msg)
 					a.context.Messages = append(a.context.Messages, msg)
+					a.mu.Unlock()
 				}
 			}
 		}
@@ -625,7 +645,7 @@ func (a *Agent) loop(ctx context.Context, ch chan<- Event) {
 	}
 
 	ch <- Event{Type: EventError, Error: fmt.Errorf("max iterations (%d) exceeded", a.config.MaxIterations), StopReason: "max_iterations"}
-	ch <- Event{Type: EventAgentEnd, Messages: a.messages}
+	ch <- Event{Type: EventAgentEnd, Messages: func() []provider.Message { a.mu.RLock(); defer a.mu.RUnlock(); m := make([]provider.Message, len(a.messages)); copy(m, a.messages); return m }()}
 }
 
 // executeToolCallsSequential executes tool calls one by one.
@@ -802,29 +822,49 @@ func (a *Agent) executeSingleToolCall(ctx context.Context, tc provider.ToolCallB
 	return provider.NewToolResultMessageWithContents(tc.ID, tc.Name, resultContent, resultContents, isError)
 }
 
-// GetMessages returns the current message history.
+// GetMessages returns a copy of the current message history.
 func (a *Agent) GetMessages() []provider.Message {
-	return a.messages
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	result := make([]provider.Message, len(a.messages))
+	copy(result, a.messages)
+	return result
 }
 
 // SetMessages replaces the message history.
 func (a *Agent) SetMessages(msgs []provider.Message) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	a.messages = msgs
 	a.context.Messages = msgs
 }
 
-// GetContext returns the current agent context.
+// GetContext returns a copy of the current agent context.
 func (a *Agent) GetContext() *AgentContext {
-	return a.context
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	if a.context == nil {
+		return nil
+	}
+	ctx := *a.context
+	ctx.Messages = make([]provider.Message, len(a.context.Messages))
+	copy(ctx.Messages, a.context.Messages)
+	ctx.Tools = make([]provider.ToolDefinition, len(a.context.Tools))
+	copy(ctx.Tools, a.context.Tools)
+	return &ctx
 }
 
 // SetContext replaces the agent context.
 func (a *Agent) SetContext(ctx *AgentContext) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	a.context = ctx
 }
 
 // GetContextUsage calculates and returns the current context usage.
 func (a *Agent) GetContextUsage() *ctxpkg.ContextUsage {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
 	if a.config.Model == nil {
 		return nil
 	}
@@ -845,6 +885,8 @@ func (a *Agent) GetContextUsage() *ctxpkg.ContextUsage {
 
 // ShouldCompact checks if compaction should trigger.
 func (a *Agent) ShouldCompact() bool {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
 	if !a.config.CompactionSettings.Enabled {
 		return false
 	}
@@ -868,17 +910,23 @@ func (a *Agent) Compact(ctx context.Context, ch chan<- Event) error {
 
 	ch <- Event{Type: EventCompactionStart}
 
+	// Snapshot messages under lock
+	a.mu.RLock()
+	msgs := make([]provider.Message, len(a.messages))
+	copy(msgs, a.messages)
+	a.mu.RUnlock()
+
 	// Get previous summary if exists
 	previousSummary := ""
-	for i := len(a.messages) - 1; i >= 0; i-- {
-		if a.messages[i].Role == "user" && strings.HasPrefix(a.messages[i].Content, "## Goal") {
-			previousSummary = a.messages[i].Content
+	for i := len(msgs) - 1; i >= 0; i-- {
+		if msgs[i].Role == "user" && strings.HasPrefix(msgs[i].Content, "## Goal") {
+			previousSummary = msgs[i].Content
 			break
 		}
 	}
 
 	// Use Insert-then-Compress with the SAME system prompt and tools (R4.1)
-	result, err := ctxpkg.Compact(ctx, a.messages, a.config.Provider, a.config.Model,
+	result, err := ctxpkg.Compact(ctx, msgs, a.config.Provider, a.config.Model,
 		a.frozenSystemPrompt, a.frozenToolDefs,
 		a.config.CompactionSettings, previousSummary)
 	if err != nil {
@@ -888,9 +936,11 @@ func (a *Agent) Compact(ctx context.Context, ch chan<- Event) error {
 
 	// Replace messages with summary + kept messages
 	// Mark summary as system_injected so cache markers skip it
+	a.mu.Lock()
 	summaryMsg := provider.NewSystemInjectedUserMessage(result.Summary)
 	a.messages = append([]provider.Message{summaryMsg}, a.messages[result.FirstKeptIndex:]...)
 	a.context.Messages = a.messages
+	a.mu.Unlock()
 
 	// Save compaction to session
 	if a.config.Session != nil {
@@ -899,7 +949,13 @@ func (a *Agent) Compact(ctx context.Context, ch chan<- Event) error {
 
 	ch <- Event{
 		Type:         EventCompactionEnd,
-		StatusMessage: fmt.Sprintf("Context compacted: %d tokens -> %d tokens", result.TokensBefore, a.GetContextUsage().Tokens),
+		StatusMessage: func() string {
+			usage := a.GetContextUsage()
+			if usage != nil {
+				return fmt.Sprintf("Context compacted: %d tokens -> %d tokens", result.TokensBefore, usage.Tokens)
+			}
+			return fmt.Sprintf("Context compacted: %d tokens", result.TokensBefore)
+		}(),
 	}
 
 	return nil

@@ -68,6 +68,7 @@ type InputEvent struct {
 
 // toolResult stores tool result information
 type toolResult struct {
+	toolCallID  string         // Unique tool call ID for precise matching
 	toolName    string
 	toolArgs    map[string]any // Tool call arguments
 	summary     string         // Short summary for collapsed view
@@ -1166,9 +1167,10 @@ func (a *App) handleAgentEvent(event agent.Event) tea.Cmd {
 			// Store tool args for later display
 			msgIdx := len(a.messages) // Will be the index after append
 			a.toolResults = append(a.toolResults, toolResult{
-				toolName: event.ToolCall.Name,
-				toolArgs: event.ToolArgs,
-				msgIndex: msgIdx,
+				toolCallID: event.ToolCall.ID,
+				toolName:   event.ToolCall.Name,
+				toolArgs:   event.ToolArgs,
+				msgIndex:   msgIdx,
 			})
 			a.addMessage(toolStyle.Render(fmt.Sprintf("🔧 [%s] ...", event.ToolCall.Name)))
 		}
@@ -1176,8 +1178,10 @@ func (a *App) handleAgentEvent(event agent.Event) tea.Cmd {
 
 	case agent.EventToolResult:
 		// Find the matching tool result entry and update it
+		foundIdx := -1
 		for j := len(a.toolResults) - 1; j >= 0; j-- {
-			if a.toolResults[j].toolName == event.ToolName && a.toolResults[j].fullContent == "" {
+			if a.toolResults[j].toolCallID == event.ToolCallID {
+				foundIdx = j
 				a.toolResults[j].fullContent = event.ToolResult
 
 				// Create summary based on tool type
@@ -1199,17 +1203,14 @@ func (a *App) handleAgentEvent(event agent.Event) tea.Cmd {
 		}
 
 		// Update the message at the stored index
-		for j := len(a.toolResults) - 1; j >= 0; j-- {
-			if a.toolResults[j].toolName == event.ToolName && a.toolResults[j].fullContent == "" {
-				idx := a.toolResults[j].msgIndex
-				if idx >= 0 && idx < len(a.messages) {
-					if event.ToolName == "bash" || a.toolOutputExpanded {
-						a.messages[idx] = toolStyle.Render(fmt.Sprintf("🔧 [%s]\n%s", event.ToolName, event.ToolResult))
-					} else {
-						a.messages[idx] = toolStyle.Render(fmt.Sprintf("🔧 [%s] %s", event.ToolName, a.toolResults[j].summary))
-					}
+		if foundIdx >= 0 {
+			idx := a.toolResults[foundIdx].msgIndex
+			if idx >= 0 && idx < len(a.messages) {
+				if event.ToolName == "bash" || a.toolOutputExpanded {
+					a.messages[idx] = toolStyle.Render(fmt.Sprintf("🔧 [%s]\n%s", event.ToolName, event.ToolResult))
+				} else {
+					a.messages[idx] = toolStyle.Render(fmt.Sprintf("🔧 [%s] %s", event.ToolName, a.toolResults[foundIdx].summary))
 				}
-				break
 			}
 		}
 		a.scheduleRender()
@@ -1292,7 +1293,7 @@ func (a *App) handleAgentEvent(event agent.Event) tea.Cmd {
 }
 
 func isAssistantMsg(s string) bool {
-	return strings.Contains(s, "Assistant: ")
+	return strings.HasPrefix(s, "Assistant: ")
 }
 
 func truncate(s string, maxLen int) string {

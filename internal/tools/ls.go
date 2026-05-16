@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 )
@@ -49,7 +48,10 @@ func (t *LsTool) Parameters() json.RawMessage {
 func (t *LsTool) Execute(ctx context.Context, params map[string]any) (ToolResult, error) {
 	dirPath := t.registry.GetWorkDir()
 	if v, ok := params["path"].(string); ok && v != "" {
-		dirPath = t.resolvePath(v)
+		var err error
+		if dirPath, err = t.registry.ResolvePath(v); err != nil {
+			return ToolResult{}, fmt.Errorf("invalid path: %w", err)
+		}
 	}
 
 	entries, err := os.ReadDir(dirPath)
@@ -91,12 +93,6 @@ func (t *LsTool) Execute(ctx context.Context, params map[string]any) (ToolResult
 	return NewTextToolResult(result), nil
 }
 
-func (t *LsTool) resolvePath(path string) string {
-	if filepath.IsAbs(path) {
-		return path
-	}
-	return filepath.Join(t.registry.GetWorkDir(), path)
-}
 
 func formatSize(bytes int64) string {
 	const (

@@ -70,8 +70,10 @@ func (t *ReadTool) Execute(ctx context.Context, params map[string]any) (ToolResu
 		return ToolResult{}, fmt.Errorf("path is required")
 	}
 
-	path = t.resolvePath(path)
-	path = filepath.Clean(path)
+	path, err := t.registry.ResolvePath(path)
+	if err != nil {
+		return ToolResult{}, fmt.Errorf("invalid path: %w", err)
+	}
 
 	// Check for image files
 	ext := strings.ToLower(filepath.Ext(path))
@@ -133,13 +135,3 @@ func (t *ReadTool) Execute(ctx context.Context, params map[string]any) (ToolResu
 	return NewTextToolResult(result), nil
 }
 
-func (t *ReadTool) resolvePath(path string) string {
-	if strings.HasPrefix(path, "~") {
-		home, _ := os.UserHomeDir()
-		return strings.Replace(path, "~", home, 1)
-	}
-	if !filepath.IsAbs(path) {
-		return filepath.Join(t.registry.GetWorkDir(), path)
-	}
-	return path
-}

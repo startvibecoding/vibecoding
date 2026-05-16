@@ -1,7 +1,5 @@
 # Prompt Cache 优化实现文档
 
-本文档描述了 vibecoding 项目中实现的 Prompt Cache 优化，遵循 [LLM_Agent_Cache.md](/home/free/src/agents/LLM_Agent_Cache.md) 守则。
-
 ## 实现概览
 
 ### 已实现的准则

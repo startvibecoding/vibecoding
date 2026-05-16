@@ -229,6 +229,14 @@ func (m *Manager) LoadReference(skillName, refPath string) (string, bool) {
 
 	// Try loading directly from the skill directory
 	fullPath := filepath.Join(skill.Dir, refPath)
+	fullPath = filepath.Clean(fullPath)
+
+	// Validate: path must not escape the skill directory
+	skillDir := filepath.Clean(skill.Dir)
+	if !strings.HasPrefix(fullPath, skillDir) {
+		return "", false
+	}
+
 	data, err := os.ReadFile(fullPath)
 	if err != nil {
 		return "", false

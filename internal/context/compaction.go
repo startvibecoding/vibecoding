@@ -355,9 +355,16 @@ func Compact(
 		return nil, fmt.Errorf("generate summary: %w", err)
 	}
 
+	// When IsSplitTurn is true, messagesToSummarize was truncated to TurnStartIndex,
+	// so FirstKeptIndex must reflect TurnStartIndex to avoid silently dropping messages.
+	firstKept := cutPoint.FirstKeptIndex
+	if cutPoint.IsSplitTurn && cutPoint.TurnStartIndex >= 0 {
+		firstKept = cutPoint.TurnStartIndex
+	}
+
 	return &CompactionResult{
 		Summary:        summary,
-		FirstKeptIndex: cutPoint.FirstKeptIndex,
+		FirstKeptIndex: firstKept,
 		TokensBefore:   tokensBefore,
 	}, nil
 }
