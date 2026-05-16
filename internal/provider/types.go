@@ -6,13 +6,19 @@ import (
 	"time"
 )
 
+// CacheControl represents cache control hints for prompt caching.
+type CacheControl struct {
+	Type string `json:"type"` // "ephemeral" for breakpoint markers
+}
+
 // ContentBlock represents a block of content in a message.
 type ContentBlock struct {
-	Type     string         `json:"type"` // "text", "image", "thinking", "toolCall"
-	Text     string         `json:"text,omitempty"`
-	Thinking string         `json:"thinking,omitempty"`
-	Image    *ImageContent  `json:"image,omitempty"`
-	ToolCall *ToolCallBlock `json:"toolCall,omitempty"`
+	Type         string         `json:"type"` // "text", "image", "thinking", "toolCall"
+	Text         string         `json:"text,omitempty"`
+	Thinking     string         `json:"thinking,omitempty"`
+	Image        *ImageContent  `json:"image,omitempty"`
+	ToolCall     *ToolCallBlock `json:"toolCall,omitempty"`
+	CacheControl *CacheControl  `json:"cache_control,omitempty"` // cache breakpoint marker
 }
 
 // ImageContent represents an image in a message.
@@ -30,14 +36,15 @@ type ToolCallBlock struct {
 
 // Message represents a conversation message.
 type Message struct {
-	Role       string         `json:"role"`                 // "user", "assistant", "toolResult"
-	Content    string         `json:"content,omitempty"`    // simple text content
-	Contents   []ContentBlock `json:"contents,omitempty"`   // rich content blocks
-	ToolCallID string         `json:"toolCallId,omitempty"` // for toolResult
-	ToolName   string         `json:"toolName,omitempty"`   // for toolResult
-	IsError    bool           `json:"isError,omitempty"`    // for toolResult
-	Timestamp  time.Time      `json:"timestamp"`
-	Usage      *Usage         `json:"usage,omitempty"`      // token usage from API response
+	Role           string         `json:"role"`                       // "user", "assistant", "toolResult"
+	Content        string         `json:"content,omitempty"`          // simple text content
+	Contents       []ContentBlock `json:"contents,omitempty"`         // rich content blocks
+	ToolCallID     string         `json:"toolCallId,omitempty"`       // for toolResult
+	ToolName       string         `json:"toolName,omitempty"`         // for toolResult
+	IsError        bool           `json:"isError,omitempty"`          // for toolResult
+	Timestamp      time.Time      `json:"timestamp"`
+	Usage          *Usage         `json:"usage,omitempty"`            // token usage from API response
+	SystemInjected bool           `json:"systemInjected,omitempty"`   // true for injected messages (session context, compression instructions) - skipped by cache markers
 }
 
 // NewUserMessage creates a simple user text message.
@@ -46,6 +53,16 @@ func NewUserMessage(text string) Message {
 		Role:      "user",
 		Content:   text,
 		Timestamp: time.Now(),
+	}
+}
+
+// NewSystemInjectedUserMessage creates a system-injected user message (skipped by cache markers).
+func NewSystemInjectedUserMessage(text string) Message {
+	return Message{
+		Role:           "user",
+		Content:        text,
+		Timestamp:      time.Now(),
+		SystemInjected: true,
 	}
 }
 

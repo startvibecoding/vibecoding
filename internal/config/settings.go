@@ -36,6 +36,7 @@ type ProviderConfig struct {
 	BaseURL        string        `json:"baseUrl,omitempty"`
 	API            string        `json:"api,omitempty"`
 	ThinkingFormat string        `json:"thinkingFormat,omitempty"` // "", "openai", "anthropic", "xiaomi"
+	CacheControl   *bool         `json:"cacheControl,omitempty"`   // enable cache_control markers (nil=auto, true=force on, false=force off)
 	Models         []ModelConfig `json:"models"`
 }
 
@@ -65,6 +66,11 @@ type CompactionSettings struct {
 	Enabled          bool `json:"enabled"`
 	ReserveTokens    int  `json:"reserveTokens"`
 	KeepRecentTokens int  `json:"keepRecentTokens"`
+
+	// Idle compression settings (R5.1-R5.5)
+	IdleCompressionEnabled   bool `json:"idleCompressionEnabled,omitempty"`   // R5.1: off by default
+	IdleTimeoutSeconds       int  `json:"idleTimeoutSeconds,omitempty"`       // seconds of inactivity (default: 90)
+	IdleMinTokensForCompress int  `json:"idleMinTokensForCompress,omitempty"` // minimum tokens to trigger (default: 150000)
 }
 
 type SandboxSettings struct {

@@ -311,6 +311,9 @@ func createProvider(settings *config.Settings, providerName, modelID string) (pr
 			if pc.ThinkingFormat != "" {
 				ap.SetThinkingFormat(pc.ThinkingFormat)
 			}
+			if pc.CacheControl != nil {
+				ap.SetCacheControlEnabled(pc.CacheControl)
+			}
 			p = ap
 		case "openai-chat", "openai":
 			op := openai.NewProviderWithModels(apiKey, pc.BaseURL, models)

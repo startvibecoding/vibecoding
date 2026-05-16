@@ -129,10 +129,133 @@ type Agent struct {
 	messages    []provider.Message
 	isStreaming bool
 
+	// Frozen system prompt and tools (built once, never change during session)
+	// This is critical for prompt cache optimization - see LLM_Agent_Cache.md
+	frozenSystemPrompt string
+	frozenToolDefs     []provider.ToolDefinition
+	frozenToolNames    []string
+
 	// Approval mechanism for agent mode
 	pendingApprovals map[string]chan bool // approvalID -> response channel
 	approvalMu       sync.Mutex
 	approvalCounter  int64
+}
+
+// buildFrozenPrompt builds the system prompt and tools once at construction time.
+// These values are frozen for the entire session lifetime to maximize prompt cache hits.
+// This implements Rule R2.1 from LLM_Agent_Cache.md: System prompt must be built once and never modified.
+func (a *Agent) buildFrozenPrompt() {
+	toolNames := make([]string, 0)
+	for _, t := range a.registry.ModeTools(a.config.Mode) {
+		toolNames = append(toolNames, t.Name)
+	}
+	toolSnippets := a.registry.ToolSnippets(toolNames)
+	toolGuidelines := a.registry.ToolGuidelines(toolNames)
+	a.frozenSystemPrompt = BuildSystemPrompt(
+		a.config.Mode,
+		toolNames,
+		a.registry.GetWorkDir(),
+		a.config.ExtraContext,
+		toolSnippets,
+		toolGuidelines,
+	)
+	a.frozenToolDefs = a.registry.ModeTools(a.config.Mode)
+	a.frozenToolNames = toolNames
+}
+
+// buildSessionContextMessage builds the [session context] message with dynamic information.
+// This implements Rule R2.3 from LLM_Agent_Cache.md: dynamic info goes into a separate message.
+// The message is marked as SystemInjected so cache markers skip it.
+func (a *Agent) buildSessionContextMessage() provider.Message {
+	modelID := "unknown"
+	modelName := "unknown"
+	if a.config.Model != nil {
+		modelID = a.config.Model.ID
+		modelName = a.config.Model.Name
+	}
+
+	context := fmt.Sprintf(`[session context]
+- Current date: %s
+- Model: %s (%s)
+- Working directory: %s
+- Mode: %s
+`,
+		time.Now().Format("2006-01-02"),
+		modelName,
+		modelID,
+		a.registry.GetWorkDir(),
+		a.config.Mode,
+	)
+
+	return provider.NewSystemInjectedUserMessage(context)
+}
+
+// selectCacheMarkers selects the last 2 non-injected messages for cache control markers.
+// This implements Rule R3.2 from LLM_Agent_Cache.md: dual-marker selection algorithm.
+// Returns the indices of the two messages to mark.
+func selectCacheMarkers(messages []provider.Message) [2]int {
+	var markers [2]int
+	markers[0] = -1
+	markers[1] = -1
+
+	count := 0
+	for i := len(messages) - 1; i >= 0; i-- {
+		if messages[i].SystemInjected {
+			continue
+		}
+		if count == 0 {
+			markers[1] = i // newest marker
+		} else if count == 1 {
+			markers[0] = i // second newest marker
+			break
+		}
+		count++
+	}
+	return markers
+}
+
+// applyCacheMarkers applies cache_control markers to messages for prompt caching.
+// This implements the dual-marker rolling buffer from Rule R3.1-R3.3.
+// Returns a new slice with markers applied (does not modify original).
+func applyCacheMarkers(messages []provider.Message, markers [2]int) []provider.Message {
+	if markers[0] == -1 && markers[1] == -1 {
+		return messages
+	}
+
+	// Create a deep copy to avoid modifying the original messages
+	result := make([]provider.Message, len(messages))
+	for i, msg := range messages {
+		result[i] = msg
+		// Deep copy Contents slice to avoid sharing
+		if len(msg.Contents) > 0 {
+			result[i].Contents = make([]provider.ContentBlock, len(msg.Contents))
+			copy(result[i].Contents, msg.Contents)
+		}
+	}
+
+	for _, idx := range markers {
+		if idx < 0 || idx >= len(result) {
+			continue
+		}
+		msg := &result[idx]
+		if len(msg.Contents) > 0 {
+			// Add cache_control to the last content block
+			lastIdx := len(msg.Contents) - 1
+			msg.Contents[lastIdx].CacheControl = &provider.CacheControl{Type: "ephemeral"}
+		} else if msg.Content != "" {
+			// Convert simple text to content blocks with cache_control
+			msg.Contents = []provider.ContentBlock{
+				{
+					Type:         "text",
+					Text:         msg.Content,
+					CacheControl: &provider.CacheControl{Type: "ephemeral"},
+				},
+			}
+			msg.Content = ""
+		}
+	}
+
+	return result
 }
 
 // New creates a new agent.
@@ -143,7 +266,7 @@ func New(cfg Config, registry *tools.Registry) *Agent {
 		MaxIterations:     200,
 	}
 
-	return &Agent{
+	agent := &Agent{
 		config:           loopConfig,
 		registry:         registry,
 		abort:            make(chan struct{}),
@@ -152,6 +275,9 @@ func New(cfg Config, registry *tools.Registry) *Agent {
 			Messages: make([]provider.Message, 0),
 		},
 	}
+	// Build frozen system prompt once at construction time (R2.1)
+	agent.buildFrozenPrompt()
+	return agent
 }
 
 // NewWithLoopConfig creates a new agent with custom loop configuration.
@@ -163,7 +289,7 @@ func NewWithLoopConfig(cfg AgentLoopConfig, registry *tools.Registry) *Agent {
 		cfg.ToolExecutionMode = "parallel"
 	}
 
-	return &Agent{
+	agent := &Agent{
 		config:           cfg,
 		registry:         registry,
 		abort:            make(chan struct{}),
@@ -172,6 +298,9 @@ func NewWithLoopConfig(cfg AgentLoopConfig, registry *tools.Registry) *Agent {
 			Messages: make([]provider.Message, 0),
 		},
 	}
+	// Build frozen system prompt once at construction time (R2.1)
+	agent.buildFrozenPrompt()
+	return agent
 }
 
 // LoadHistoryMessages loads historical messages from session into agent context.
@@ -257,25 +386,28 @@ func (a *Agent) loop(ctx context.Context, ch chan<- Event) {
 			}
 		}
 
-		// Build system prompt
-		toolNames := make([]string, 0)
-		for _, t := range a.registry.ModeTools(a.config.Mode) {
-			toolNames = append(toolNames, t.Name)
-		}
-		toolSnippets := a.registry.ToolSnippets(toolNames)
-		toolGuidelines := a.registry.ToolGuidelines(toolNames)
-		systemPrompt := BuildSystemPrompt(a.config.Mode, toolNames, a.registry.GetWorkDir(), a.config.ExtraContext, toolSnippets, toolGuidelines)
-		a.context.SystemPrompt = systemPrompt
+		// Use frozen system prompt and tools (R2.1: built once, never change during session)
+		a.context.SystemPrompt = a.frozenSystemPrompt
+		a.context.Tools = a.frozenToolDefs
 
-		// Get tool definitions for current mode
-		toolDefs := a.registry.ModeTools(a.config.Mode)
-		a.context.Tools = toolDefs
+		// Build session context message with dynamic info (R2.3)
+		sessionContextMsg := a.buildSessionContextMessage()
 
-		// Chat request
+		// Build message list: session context + history messages
+		// Session context is marked as system_injected, so cache markers skip it
+		allMessages := make([]provider.Message, 0, len(a.messages)+1)
+		allMessages = append(allMessages, sessionContextMsg)
+		allMessages = append(allMessages, a.messages...)
+
+		// Select cache markers (dual-marker rolling buffer, R3.1-R3.3)
+		markers := selectCacheMarkers(allMessages)
+		messagesWithMarkers := applyCacheMarkers(allMessages, markers)
+
+		// Chat request with frozen system prompt and cache markers
 		params := provider.ChatParams{
-			Messages:      a.context.Messages,
-			Tools:         toolDefs,
-			SystemPrompt:  systemPrompt,
+			Messages:      messagesWithMarkers,
+			Tools:         a.frozenToolDefs,
+			SystemPrompt:  a.frozenSystemPrompt,
 			ThinkingLevel: a.config.ThinkingLevel,
 			MaxTokens:     a.config.MaxTokens,
 			Abort:         a.abort,
@@ -727,7 +859,8 @@ func (a *Agent) ShouldCompact() bool {
 	return ctxpkg.ShouldCompact(tokens, contextWindow, a.config.CompactionSettings.ReserveTokens)
 }
 
-// Compact performs context compaction.
+// Compact performs context compaction using Insert-then-Compress pattern (R4.1-R4.4).
+// Uses the SAME system prompt and tools as the main conversation.
 func (a *Agent) Compact(ctx context.Context, ch chan<- Event) error {
 	if a.config.Model == nil {
 		return fmt.Errorf("no model set for compaction")
@@ -744,14 +877,18 @@ func (a *Agent) Compact(ctx context.Context, ch chan<- Event) error {
 		}
 	}
 
-	result, err := ctxpkg.Compact(ctx, a.messages, a.config.Provider, a.config.Model, a.config.CompactionSettings, previousSummary)
+	// Use Insert-then-Compress with the SAME system prompt and tools (R4.1)
+	result, err := ctxpkg.Compact(ctx, a.messages, a.config.Provider, a.config.Model,
+		a.frozenSystemPrompt, a.frozenToolDefs,
+		a.config.CompactionSettings, previousSummary)
 	if err != nil {
 		ch <- Event{Type: EventCompactionEnd, Error: err}
 		return fmt.Errorf("compaction failed: %w", err)
 	}
 
 	// Replace messages with summary + kept messages
-	summaryMsg := provider.NewUserMessage(result.Summary)
+	// Mark summary as system_injected so cache markers skip it
+	summaryMsg := provider.NewSystemInjectedUserMessage(result.Summary)
 	a.messages = append([]provider.Message{summaryMsg}, a.messages[result.FirstKeptIndex:]...)
 	a.context.Messages = a.messages
 

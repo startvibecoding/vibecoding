@@ -23,7 +23,8 @@ type Provider struct {
 	baseURL string
 	client  *http.Client
 
-	thinkingFormat string // "", "anthropic", "xiaomi"
+	thinkingFormat      string // "", "anthropic", "xiaomi"
+	cacheControlEnabled *bool  // nil=auto (on for official API, off for proxies), true=force on, false=force off
 }
 
 // DefaultModels returns the default Anthropic model list.
@@ -79,10 +80,28 @@ func (p *Provider) SetThinkingFormat(format string) {
 	p.thinkingFormat = format
 }
 
+// SetCacheControlEnabled sets whether to use cache_control markers.
+// nil = auto (on for official API, off for proxies)
+// true = force on
+// false = force off
+func (p *Provider) SetCacheControlEnabled(enabled *bool) {
+	p.cacheControlEnabled = enabled
+}
+
+// IsCacheControlEnabled returns whether cache_control markers should be used.
+// Auto mode: enabled for official Anthropic API, disabled for proxies.
+func (p *Provider) IsCacheControlEnabled() bool {
+	if p.cacheControlEnabled != nil {
+		return *p.cacheControlEnabled
+	}
+	// Auto mode: only enable for official Anthropic API
+	return p.baseURL == "https://api.anthropic.com"
+}
+
 type anthropicRequest struct {
 	Model     string             `json:"model"`
 	Messages  []anthropicMessage `json:"messages"`
-	System    string             `json:"system,omitempty"`
+	System    interface{}        `json:"system,omitempty"` // string or []anthropicContentBlock for cache_control
 	Tools     []anthropicTool    `json:"tools,omitempty"`
 	MaxTokens int                `json:"max_tokens"`
 	Stream    bool               `json:"stream"`
@@ -99,17 +118,22 @@ type anthropicMessage struct {
 	Content interface{} `json:"content"`
 }
 
+type anthropicCacheControl struct {
+	Type string `json:"type"` // "ephemeral"
+}
+
 type anthropicContentBlock struct {
-	Type      string                 `json:"type"`
-	Text      string                 `json:"text,omitempty"`
-	Thinking  string                 `json:"thinking,omitempty"`
-	Source    *anthropicImage        `json:"source,omitempty"`
-	ID        string                 `json:"id,omitempty"`
-	Name      string                 `json:"name,omitempty"`
-	Input     map[string]interface{} `json:"input,omitempty"`
-	ToolUseID string                 `json:"tool_use_id,omitempty"`
-	Content   interface{}            `json:"content,omitempty"`
-	IsError   bool                   `json:"is_error,omitempty"`
+	Type          string                  `json:"type"`
+	Text          string                  `json:"text,omitempty"`
+	Thinking      string                  `json:"thinking,omitempty"`
+	Source        *anthropicImage         `json:"source,omitempty"`
+	ID            string                  `json:"id,omitempty"`
+	Name          string                  `json:"name,omitempty"`
+	Input         map[string]interface{}   `json:"input,omitempty"`
+	ToolUseID     string                  `json:"tool_use_id,omitempty"`
+	Content       interface{}             `json:"content,omitempty"`
+	IsError       bool                    `json:"is_error,omitempty"`
+	CacheControl  *anthropicCacheControl  `json:"cache_control,omitempty"`
 }
 
 type anthropicImage struct {
@@ -193,7 +217,18 @@ func (p *Provider) Chat(ctx context.Context, params provider.ChatParams) <-chan 
 			Stream:    true,
 		}
 		if params.SystemPrompt != "" {
-			reqBody.System = params.SystemPrompt
+			if p.IsCacheControlEnabled() {
+				// Send system prompt as content block array with cache_control for prompt caching
+				sysBlock := anthropicContentBlock{
+					Type: "text",
+					Text: params.SystemPrompt,
+					CacheControl: &anthropicCacheControl{Type: "ephemeral"},
+				}
+				reqBody.System = []anthropicContentBlock{sysBlock}
+			} else {
+				// Send system prompt as simple string (for proxies that don't support array format)
+				reqBody.System = params.SystemPrompt
+			}
 		}
 
 		if params.ThinkingLevel != provider.ThinkingOff {
@@ -366,6 +401,7 @@ func (p *Provider) parseSSE(ctx context.Context, body io.Reader, ch chan<- provi
 }
 
 func (p *Provider) convertMessages(params provider.ChatParams) []anthropicMessage {
+	cacheEnabled := p.IsCacheControlEnabled()
 	var messages []anthropicMessage
 	for _, msg := range params.Messages {
 		am := anthropicMessage{Role: msg.Role}
@@ -376,10 +412,14 @@ func (p *Provider) convertMessages(params provider.ChatParams) []anthropicMessag
 				// Many API routing layers only detect images in user messages, not inside tool_result.
 				var imageBlocks []anthropicContentBlock
 				var textContent string
+				var hasCacheControl bool
 				for _, c := range msg.Contents {
 					switch c.Type {
 					case "text":
 						textContent = c.Text
+						if c.CacheControl != nil {
+							hasCacheControl = true
+						}
 					case "image":
 						if c.Image != nil {
 							imageBlocks = append(imageBlocks, anthropicContentBlock{Type: "image", Source: &anthropicImage{Type: "base64", MediaType: c.Image.MimeType, Data: c.Image.Data}})
@@ -388,7 +428,11 @@ func (p *Provider) convertMessages(params provider.ChatParams) []anthropicMessag
 				}
 				// Send tool_result with text only
 				if textContent != "" {
-					am.Content = []anthropicContentBlock{{Type: "tool_result", ToolUseID: msg.ToolCallID, Content: textContent, IsError: msg.IsError}}
+					resultBlock := anthropicContentBlock{Type: "tool_result", ToolUseID: msg.ToolCallID, Content: textContent, IsError: msg.IsError}
+					if hasCacheControl && cacheEnabled {
+						resultBlock.CacheControl = &anthropicCacheControl{Type: "ephemeral"}
+					}
+					am.Content = []anthropicContentBlock{resultBlock}
 					messages = append(messages, am)
 				} else {
 					am.Content = []anthropicContentBlock{{Type: "tool_result", ToolUseID: msg.ToolCallID, Content: msg.Content, IsError: msg.IsError}}
@@ -405,15 +449,16 @@ func (p *Provider) convertMessages(params provider.ChatParams) []anthropicMessag
 		} else if len(msg.Contents) > 0 {
 			var blocks []anthropicContentBlock
 			for _, c := range msg.Contents {
+				block := anthropicContentBlock{}
 				switch c.Type {
 				case "text":
-					blocks = append(blocks, anthropicContentBlock{Type: "text", Text: c.Text})
+					block = anthropicContentBlock{Type: "text", Text: c.Text}
 				case "image":
 					if c.Image != nil {
-						blocks = append(blocks, anthropicContentBlock{Type: "image", Source: &anthropicImage{Type: "base64", MediaType: c.Image.MimeType, Data: c.Image.Data}})
+						block = anthropicContentBlock{Type: "image", Source: &anthropicImage{Type: "base64", MediaType: c.Image.MimeType, Data: c.Image.Data}}
 					}
 				case "thinking":
-					blocks = append(blocks, anthropicContentBlock{Type: "thinking", Thinking: c.Thinking})
+					block = anthropicContentBlock{Type: "thinking", Thinking: c.Thinking}
 				case "toolCall":
 					if c.ToolCall != nil {
 						input := make(map[string]interface{})
@@ -423,9 +468,14 @@ func (p *Provider) convertMessages(params provider.ChatParams) []anthropicMessag
 								input = make(map[string]interface{})
 							}
 						}
-						blocks = append(blocks, anthropicContentBlock{Type: "tool_use", ID: c.ToolCall.ID, Name: c.ToolCall.Name, Input: input})
+						block = anthropicContentBlock{Type: "tool_use", ID: c.ToolCall.ID, Name: c.ToolCall.Name, Input: input}
 					}
 				}
+				// Pass through cache_control from provider content blocks (only if enabled)
+				if c.CacheControl != nil && cacheEnabled {
+					block.CacheControl = &anthropicCacheControl{Type: c.CacheControl.Type}
+				}
+				blocks = append(blocks, block)
 			}
 			if len(blocks) == 1 && blocks[0].Type == "text" {
 				am.Content = blocks[0].Text
