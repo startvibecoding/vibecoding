@@ -1,5 +1,5 @@
 .PHONY: help build build-all install test lint fmt clean run
-.PHONY: build-linux build-darwin build-windows
+.PHONY: build-linux build-linux-musl build-darwin build-windows
 .PHONY: dist dist-linux dist-darwin dist-windows dist-deb dist-tarball dist-zip
 .PHONY: clean-all checksums
 .PHONY: npm-version npm-publish npm-publish-all npm-pack npm-pack-all
@@ -22,6 +22,7 @@ help:
 	@echo "Build targets:"
 	@echo "  build          Build for current platform"
 	@echo "  build-linux    Build for Linux (amd64, arm64)"
+	@echo "  build-linux-musl  Build for Linux musl (amd64, arm64)"
 	@echo "  build-darwin   Build for macOS (amd64, arm64)"
 	@echo "  build-windows  Build for Windows (amd64, arm64)"
 	@echo "  build-all      Build for all platforms and architectures"
@@ -63,6 +64,12 @@ build-linux:
 	GOOS=linux GOARCH=amd64 go build $(LDFLAGS) -o bin/$(BINARY_NAME)-linux-amd64 ./cmd/vibecoding
 	GOOS=linux GOARCH=arm64 go build $(LDFLAGS) -o bin/$(BINARY_NAME)-linux-arm64 ./cmd/vibecoding
 
+build-linux-musl:
+	@echo "Building for Linux musl..."
+	@mkdir -p bin
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build $(LDFLAGS) -o bin/$(BINARY_NAME)-linux-musl-amd64 ./cmd/vibecoding
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build $(LDFLAGS) -o bin/$(BINARY_NAME)-linux-musl-arm64 ./cmd/vibecoding
+
 build-darwin:
 	@echo "Building for macOS..."
 	@mkdir -p bin
@@ -76,7 +83,7 @@ build-windows:
 	GOOS=windows GOARCH=arm64 go build $(LDFLAGS) -o bin/$(BINARY_NAME)-windows-arm64.exe ./cmd/vibecoding
 
 # Build all platforms
-build-all: build-linux build-darwin build-windows
+build-all: build-linux build-linux-musl build-darwin build-windows
 	@echo ""
 	@echo "Build complete! Binaries in bin/"
 	@ls -lh bin/
@@ -111,7 +118,7 @@ run: build
 	./bin/$(BINARY_NAME)
 
 # Distribution: tar.gz for Linux and macOS
-dist-tarball: build-linux build-darwin
+dist-tarball: build-linux build-linux-musl build-darwin
 	@echo ""
 	@echo "Creating tarball packages..."
 	@for os in linux darwin; do \
@@ -120,14 +127,22 @@ dist-tarball: build-linux build-darwin
 			./scripts/build-tarball.sh $${os} $${arch} $(VERSION); \
 		done; \
 	done
+	@for arch in amd64 arm64; do \
+		echo "  Packaging $(BINARY_NAME)-linux-musl-$${arch}.tar.gz..."; \
+		./scripts/build-tarball.sh linux-musl $${arch} $(VERSION); \
+	done
 
 # Distribution: deb for Linux
-dist-deb: build-linux
+dist-deb: build-linux build-linux-musl
 	@echo ""
 	@echo "Creating Debian packages..."
 	@for arch in amd64 arm64; do \
 		echo "  Packaging $(BINARY_NAME)_$(VERSION)_$${arch}.deb..."; \
 		./scripts/build-deb.sh $${arch} $(VERSION); \
+	done
+	@for arch in amd64 arm64; do \
+		echo "  Packaging $(BINARY_NAME)_$(VERSION)_$${arch}-musl.deb..."; \
+		./scripts/build-deb.sh $${arch}-musl $(VERSION); \
 	done
 
 # Distribution: zip for Windows

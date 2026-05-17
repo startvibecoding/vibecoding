@@ -21,13 +21,31 @@ VERSION="${VERSION#v}"
 BUILD_DIR="dist/deb"
 PACKAGE_DIR="${BUILD_DIR}/${PACKAGE_NAME}_${VERSION}_${ARCH}"
 
-echo "Building ${PACKAGE_NAME} ${VERSION} for ${ARCH}..."
+# Determine if this is a musl build
+IS_MUSL=false
+if echo "${ARCH}" | grep -q "musl"; then
+    IS_MUSL=true
+    # Extract base arch: "amd64-musl" -> "amd64", "musl-amd64" -> "amd64"
+    BASE_ARCH=$(echo "${ARCH}" | sed 's/-musl//;s/musl-//')
+    BINARY_FILE="bin/${BINARY_NAME}-linux-musl-${BASE_ARCH}"
+    # Normalize arch for package name: use x86_64-musl / aarch64-musl
+    if [ "${BASE_ARCH}" = "amd64" ]; then
+        DEB_ARCH="x86_64-musl"
+    else
+        DEB_ARCH="aarch64-musl"
+    fi
+    PACKAGE_DIR="${BUILD_DIR}/${PACKAGE_NAME}_${VERSION}_${DEB_ARCH}"
+else
+    BINARY_FILE="bin/${BINARY_NAME}-linux-${ARCH}"
+    DEB_ARCH="${ARCH}"
+fi
+
+echo "Building ${PACKAGE_NAME} ${VERSION} for ${DEB_ARCH}..."
 
 # Check if binary exists
-BINARY_FILE="bin/${BINARY_NAME}-linux-${ARCH}"
 if [ ! -f "${BINARY_FILE}" ]; then
     echo "Error: Binary not found: ${BINARY_FILE}"
-    echo "Run 'make build-linux' first or 'make build-all'"
+    echo "Run 'make build-linux' or 'make build-linux-musl' first"
     exit 1
 fi
 
@@ -43,12 +61,28 @@ cp "${BINARY_FILE}" "${PACKAGE_DIR}/usr/bin/${BINARY_NAME}"
 chmod +x "${PACKAGE_DIR}/usr/bin/${BINARY_NAME}"
 
 # Create control file
-cat > "${PACKAGE_DIR}/DEBIAN/control" << EOF
+if [ "${IS_MUSL}" = true ]; then
+    cat > "${PACKAGE_DIR}/DEBIAN/control" << EOF
+Package: ${PACKAGE_NAME}-musl
+Version: ${VERSION}
+Section: devel
+Priority: optional
+Architecture: ${DEB_ARCH}
+Maintainer: ${MAINTAINER}
+Homepage: ${HOMEPAGE}
+Description: ${DESCRIPTION} (musl static build)
+ VibeCoding is a terminal-based AI coding assistant that supports
+ multiple LLM providers, sandboxed execution, and a rich TUI.
+ This is a statically linked musl build for musl-based distributions
+ (e.g., Alpine Linux, Void Linux musl).
+EOF
+else
+    cat > "${PACKAGE_DIR}/DEBIAN/control" << EOF
 Package: ${PACKAGE_NAME}
 Version: ${VERSION}
 Section: devel
 Priority: optional
-Architecture: ${ARCH}
+Architecture: ${DEB_ARCH}
 Depends: libc6
 Maintainer: ${MAINTAINER}
 Homepage: ${HOMEPAGE}
@@ -57,6 +91,7 @@ Description: ${DESCRIPTION}
  multiple LLM providers, sandboxed execution, and a rich TUI.
  It helps developers write, edit, and understand code using AI.
 EOF
+fi
 
 # Create copyright file
 cat > "${PACKAGE_DIR}/usr/share/licenses/${PACKAGE_NAME}/copyright" << EOF
@@ -125,11 +160,15 @@ dpkg-deb --root-owner-group --build "${PACKAGE_DIR}"
 
 # Generate checksums
 cd "${BUILD_DIR}"
-DEB_FILE="${PACKAGE_NAME}_${VERSION}_${ARCH}.deb"
+DEB_FILE="${PACKAGE_NAME}_${VERSION}_${DEB_ARCH}.deb"
+# For musl, the package name is different
+if [ "${IS_MUSL}" = true ]; then
+    DEB_FILE="${PACKAGE_NAME}-musl_${VERSION}_${DEB_ARCH}.deb"
+fi
 sha256sum "${DEB_FILE}" > "${DEB_FILE}.sha256"
 cd - > /dev/null
 
 # Cleanup temp directory
 rm -rf "${PACKAGE_DIR}"
 
-echo "  Created: ${BUILD_DIR}/${PACKAGE_NAME}_${VERSION}_${ARCH}.deb"
+echo "  Created: ${BUILD_DIR}/${DEB_FILE}"

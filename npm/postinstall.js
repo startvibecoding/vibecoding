@@ -6,18 +6,45 @@
 const { platform, arch } = require('os');
 const fs = require('fs');
 const path = require('path');
+const { execSync } = require('child_process');
+
+function isMusl() {
+  try {
+    const output = execSync('ldd --version 2>&1', { encoding: 'utf8', timeout: 3000 });
+    return output.includes('musl');
+  } catch {
+    // ldd not found or error, check for musl library
+    try {
+      fs.readdirSync('/lib').some(f => f.startsWith('ld-musl'));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}
+
+function getPlatformKey() {
+  const p = platform();
+  const a = arch();
+  if (p === 'linux' && isMusl()) {
+    return `linux-musl-${a}`;
+  }
+  return `${p}-${a}`;
+}
 
 const PLATFORM_PACKAGES = {
-  'linux-x64':    'vibecoding-installer-linux-x64',
-  'linux-arm64':  'vibecoding-installer-linux-arm64',
-  'darwin-x64':   'vibecoding-installer-darwin-x64',
-  'darwin-arm64': 'vibecoding-installer-darwin-arm64',
-  'win32-x64':    'vibecoding-installer-win32-x64',
-  'win32-arm64':  'vibecoding-installer-win32-arm64',
+  'linux-x64':        'vibecoding-installer-linux-x64',
+  'linux-arm64':      'vibecoding-installer-linux-arm64',
+  'linux-musl-x64':   'vibecoding-installer-linux-musl-x64',
+  'linux-musl-arm64': 'vibecoding-installer-linux-musl-arm64',
+  'darwin-x64':       'vibecoding-installer-darwin-x64',
+  'darwin-arm64':     'vibecoding-installer-darwin-arm64',
+  'win32-x64':        'vibecoding-installer-win32-x64',
+  'win32-arm64':      'vibecoding-installer-win32-arm64',
 };
 
 function main() {
-  const key = `${platform()}-${arch()}`;
+  const key = getPlatformKey();
   const pkgName = PLATFORM_PACKAGES[key];
 
   if (!pkgName) {

@@ -28,6 +28,8 @@ VERSION=$(node -e "console.log(require('$NPM_DIR/package.json').version)")
 declare -A PLATFORMS=(
   ["linux-x64"]="vibecoding-linux-amd64"
   ["linux-arm64"]="vibecoding-linux-arm64"
+  ["linux-musl-x64"]="vibecoding-linux-musl-amd64"
+  ["linux-musl-arm64"]="vibecoding-linux-musl-arm64"
   ["darwin-x64"]="vibecoding-darwin-amd64"
   ["darwin-arm64"]="vibecoding-darwin-arm64"
   ["win32-x64"]="vibecoding-windows-amd64.exe"
@@ -37,6 +39,8 @@ declare -A PLATFORMS=(
 declare -A OS_MAP=(
   ["linux-x64"]="linux"
   ["linux-arm64"]="linux"
+  ["linux-musl-x64"]="linux"
+  ["linux-musl-arm64"]="linux"
   ["darwin-x64"]="darwin"
   ["darwin-arm64"]="darwin"
   ["win32-x64"]="win32"
@@ -46,6 +50,8 @@ declare -A OS_MAP=(
 declare -A CPU_MAP=(
   ["linux-x64"]="x64"
   ["linux-arm64"]="arm64"
+  ["linux-musl-x64"]="x64"
+  ["linux-musl-arm64"]="arm64"
   ["darwin-x64"]="x64"
   ["darwin-arm64"]="arm64"
   ["win32-x64"]="x64"
@@ -81,7 +87,46 @@ for PLATFORM_KEY in "${!PLATFORMS[@]}"; do
   chmod +x "$PKG_DIR/bin/$INNER_BINARY" 2>/dev/null || true
 
   # Create package.json
-  cat > "$PKG_DIR/package.json" <<EOF
+  # For musl packages, set libc="musl" so npm can distinguish from glibc
+  # npm >=9.4 supports libc field in package.json for optional dependency resolution
+  if echo "$PLATFORM_KEY" | grep -q "musl"; then
+    cat > "$PKG_DIR/package.json" <<EOF
+{
+  "name": "$PKG_NAME",
+  "version": "$VERSION",
+  "description": "VibeCoding native binary for ${OS}-${CPU} (musl static)",
+  "os": ["$OS"],
+  "cpu": ["$CPU"],
+  "libc": ["musl"],
+  "files": ["bin/"],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/startvibecoding/vibecoding.git",
+    "directory": "npm"
+  }
+}
+EOF
+  elif echo "$PLATFORM_KEY" | grep -q "^linux-"; then
+    cat > "$PKG_DIR/package.json" <<EOF
+{
+  "name": "$PKG_NAME",
+  "version": "$VERSION",
+  "description": "VibeCoding native binary for ${OS}-${CPU}",
+  "os": ["$OS"],
+  "cpu": ["$CPU"],
+  "libc": ["glibc"],
+  "files": ["bin/"],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/startvibecoding/vibecoding.git",
+    "directory": "npm"
+  }
+}
+EOF
+  else
+    cat > "$PKG_DIR/package.json" <<EOF
 {
   "name": "$PKG_NAME",
   "version": "$VERSION",
@@ -97,6 +142,7 @@ for PLATFORM_KEY in "${!PLATFORMS[@]}"; do
   }
 }
 EOF
+  fi
 
   # Calculate size
   SIZE=$(du -sh "$PKG_DIR/bin/$INNER_BINARY" | cut -f1)
