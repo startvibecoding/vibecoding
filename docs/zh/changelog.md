@@ -1,5 +1,39 @@
 # 更新日志
 
+## v0.1.5
+
+### ✨ 新功能
+
+- **DeepSeek V4 默认模型**
+  - 更新默认模型规格为 DeepSeek V4（Flash 和 Pro）
+  - 100 万上下文窗口，最高 38.4 万最大输出 token
+- **安装脚本改进**
+  - 安装完成后显示配置目录路径
+
+### 🐛 问题修复
+
+- **Windows IME 支持**
+  - 修复 Windows 终端的 IME（中日韩输入法）支持
+  - 修复 Windows 上的 shell 命令解析
+  - 新增配置加载诊断信息，便于排查问题
+- **Musl Deb 包**
+  - 修复 musl deb 包使用无效 dpkg 架构名的问题
+
+### 🛠 改进
+
+- **配置简化**
+  - 移除 `auth.json` 支持 — 所有凭据统一使用 `settings.json`
+  - 更简洁的配置路径，单一数据源
+
+### 📖 文档
+
+- 明确说明 OpenAI/Anthropic 兼容 API 服务也受支持
+- 从文档和安装脚本中移除所有 `auth.json` 引用
+- 新增 Windows `%APPDATA%` 路径的详细示例
+- 清晰区分 Windows 与 Linux/macOS 的配置路径
+
+---
+
 ## v0.1.4
 
 ### ✨ 新功能
