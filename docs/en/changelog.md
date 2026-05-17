@@ -1,5 +1,38 @@
 # Changelog
 
+## v0.1.2
+
+### ✨ Features
+
+- **Prompt Cache Optimization**
+  - Implemented prompt cache optimization following LLM_Agent_Cache.md strategy
+  - Cache system prompts and static context across multiple turns
+  - Reduces API costs by reusing cached tokens for repeated prefixes
+
+- **TUI Markdown Syntax Highlighting**
+  - Assistant messages in TUI now have markdown syntax highlighting
+  - Code blocks, headers, and formatting are visually distinguished
+  - Improves readability of LLM responses
+
+### 🐛 Bug Fixes
+
+- **Security & Correctness**
+  - Resolved critical security, race condition, and correctness issues
+  - Addressed high and medium severity correctness issues across codebase
+  - Removed dead code and improved overall code correctness
+
+- **TUI Stability**
+  - Fixed TUI startup hang caused by `clearStdin` blocking on unsupported stdin
+  - Fixed TUI assistant message rendering broken by ANSI escape codes in prefix check
+
+### 🛠 Improvements
+
+- **Code Quality**
+  - Addressed remaining medium severity issues across codebase
+  - npm package versions updated
+
+---
+
 ## v0.1.1
 
 ### ✨ Features
