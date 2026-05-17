@@ -1,5 +1,39 @@
 # Changelog
 
+## v0.1.5
+
+### ✨ Features
+
+- **DeepSeek V4 Default Models**
+  - Updated default model specs to DeepSeek V4 (Flash and Pro)
+  - 1M context window, up to 384K max output tokens
+- **Install Script Improvements**
+  - Install scripts now show config directory path on completion
+
+### 🐛 Bug Fixes
+
+- **Windows IME Support**
+  - Fixed Windows IME (CJK input) support in terminal
+  - Fixed shell command resolution on Windows
+  - Added config loading diagnostics for troubleshooting
+- **Musl Deb Packages**
+  - Fixed invalid dpkg architecture names for musl deb packages
+
+### 🛠 Improvements
+
+- **Configuration Simplification**
+  - Removed `auth.json` support — all credentials now in `settings.json` only
+  - Cleaner config path with single source of truth
+
+### 📖 Documentation
+
+- Clarified that OpenAI/Anthropic API-compatible services are also supported
+- Removed all `auth.json` references from docs and install scripts
+- Added expanded Windows `%APPDATA%` path examples
+- Clearly distinguished Windows vs Linux/macOS config paths
+
+---
+
 ## v0.1.4
 
 ### ✨ Features
