@@ -14,7 +14,7 @@ vibecoding [flags] [message...]
 
 | 参数 | 简写 | 默认值 | 描述 |
 |------|------|--------|------|
-| `--provider` | `-p` | 配置文件中的默认值 | LLM 提供商 (openai, anthropic 或自定义名称) |
+| `--provider` | `-p` | 配置文件中的默认值 | LLM 提供商 (deepseek-openai, deepseek-anthropic 或自定义名称) |
 | `--model` | `-m` | 配置文件中的默认值 | 模型 ID |
 | `--mode` | `-M` | `agent` | 运行模式 (plan, agent, yolo) |
 | `--thinking` | `-t` | `off` | 思考级别 (off, minimal, low, medium, high, xhigh) |
@@ -67,11 +67,11 @@ vibecoding -p "写一个 Hello World"
 ### 指定提供商和模型
 
 ```bash
-# 使用 OpenAI
-vibecoding --provider openai --model gpt-4o
+# 使用 DeepSeek (OpenAI API)
+vibecoding --provider deepseek-openai --model deepseek-v4-flash
 
-# 使用 Anthropic
-vibecoding -p anthropic -m claude-sonnet-4-20250514
+# 使用 DeepSeek (Anthropic API)
+vibecoding -p deepseek-anthropic -m deepseek-v4-flash
 
 # 使用自定义提供商
 vibecoding --provider my-custom-provider
@@ -167,8 +167,7 @@ cat main.go | vibecoding -p "解释这个文件"
 
 | 变量 | 描述 |
 |------|------|
-| `ANTHROPIC_API_KEY` | Anthropic API 密钥 |
-| `OPENAI_API_KEY` | OpenAI API 密钥 |
+| `DEEPSEEK_API_KEY` | DeepSeek API 密钥 |
 | `VIBECODING_DIR` | 覆盖配置目录 |
 | `VIBECODING_PROVIDER` | 覆盖默认提供商 |
 | `VIBECODING_MODEL` | 覆盖默认模型 |

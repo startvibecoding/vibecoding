@@ -105,31 +105,27 @@ type ApprovalSettings struct {
 func DefaultSettings() *Settings {
 	return &Settings{
 		Providers: map[string]*ProviderConfig{
-			"anthropic": &ProviderConfig{
-				BaseURL: "https://api.anthropic.com",
-				APIKey:  "${ANTHROPIC_API_KEY}",
+			"deepseek-anthropic": &ProviderConfig{
+				BaseURL: "https://api.deepseek.com/anthropic",
+				APIKey:  "${DEEPSEEK_API_KEY}",
 				API:     "anthropic-messages",
 				Models: []ModelConfig{
-					{ID: "claude-sonnet-4-20250514", Name: "Claude 4 Sonnet", Reasoning: true, ContextWindow: 200000, MaxTokens: 16384, Cost: &CostConfig{Input: 3, Output: 15, CacheRead: 0.3, CacheWrite: 3.75}, Input: []string{"text", "image"}},
-					{ID: "claude-3-5-sonnet-20241022", Name: "Claude 3.5 Sonnet", ContextWindow: 200000, MaxTokens: 8192, Cost: &CostConfig{Input: 3, Output: 15, CacheRead: 0.3, CacheWrite: 3.75}, Input: []string{"text", "image"}},
-					{ID: "claude-3-5-haiku-20241022", Name: "Claude 3.5 Haiku", ContextWindow: 200000, MaxTokens: 8192, Cost: &CostConfig{Input: 0.8, Output: 4, CacheRead: 0.08, CacheWrite: 1}, Input: []string{"text", "image"}},
-					{ID: "claude-3-opus-20240229", Name: "Claude 3 Opus", ContextWindow: 200000, MaxTokens: 4096, Cost: &CostConfig{Input: 15, Output: 75, CacheRead: 1.5, CacheWrite: 18.75}, Input: []string{"text", "image"}},
+					{ID: "deepseek-v4-flash", Name: "DeepSeek-V4-Flash", ContextWindow: 1000000, MaxTokens: 384000, Cost: &CostConfig{Input: 0.5, Output: 2}, Input: []string{"text"}},
+					{ID: "deepseek-v4-pro", Name: "DeepSeek-V4-Pro", Reasoning: true, ContextWindow: 1000000, MaxTokens: 384000, Cost: &CostConfig{Input: 1, Output: 4}, Input: []string{"text"}},
 				},
 			},
-			"openai": &ProviderConfig{
-				BaseURL: "https://api.openai.com/v1",
-				APIKey:  "${OPENAI_API_KEY}",
+			"deepseek-openai": &ProviderConfig{
+				BaseURL: "https://api.deepseek.com",
+				APIKey:  "${DEEPSEEK_API_KEY}",
 				API:     "openai-chat",
 				Models: []ModelConfig{
-					{ID: "gpt-4o", Name: "GPT-4o", ContextWindow: 128000, MaxTokens: 16384, Cost: &CostConfig{Input: 2.5, Output: 10, CacheRead: 1.25, CacheWrite: 2.5}, Input: []string{"text", "image"}},
-					{ID: "gpt-4o-mini", Name: "GPT-4o Mini", ContextWindow: 128000, MaxTokens: 16384, Cost: &CostConfig{Input: 0.15, Output: 0.6, CacheRead: 0.075, CacheWrite: 0.15}, Input: []string{"text", "image"}},
-					{ID: "o1", Name: "o1", Reasoning: true, ContextWindow: 200000, MaxTokens: 100000, Cost: &CostConfig{Input: 15, Output: 60, CacheRead: 7.5, CacheWrite: 15}, Input: []string{"text", "image"}},
-					{ID: "o3-mini", Name: "o3-mini", Reasoning: true, ContextWindow: 200000, MaxTokens: 100000, Cost: &CostConfig{Input: 1.1, Output: 4.4, CacheRead: 0.55, CacheWrite: 1.1}, Input: []string{"text", "image"}},
+					{ID: "deepseek-v4-flash", Name: "DeepSeek-V4-Flash", ContextWindow: 1000000, MaxTokens: 384000, Cost: &CostConfig{Input: 0.5, Output: 2}, Input: []string{"text"}},
+					{ID: "deepseek-v4-pro", Name: "DeepSeek-V4-Pro", Reasoning: true, ContextWindow: 1000000, MaxTokens: 384000, Cost: &CostConfig{Input: 1, Output: 4}, Input: []string{"text"}},
 				},
 			},
 		},
-		DefaultProvider:      "anthropic",
-		DefaultModel:         "claude-sonnet-4-20250514",
+		DefaultProvider:      "deepseek-openai",
+		DefaultModel:         "deepseek-v4-flash",
 		DefaultThinkingLevel: "medium",
 		DefaultMode:          "agent",
 		ContextFiles:         ContextFilesSettings{Enabled: true},
@@ -320,17 +316,22 @@ func ensureConfigExists(defaults *Settings) error {
 }
 
 func (s *Settings) ResolveKey(providerName string) string {
+	// 1. Use apiKey from provider config (supports ${VAR} env references)
 	if pc, ok := s.Providers[providerName]; ok && pc != nil && pc.APIKey != "" {
 		return resolveKeyValue(pc.APIKey)
 	}
-	envMap := map[string]string{
-		"anthropic": "ANTHROPIC_API_KEY",
-		"openai":    "OPENAI_API_KEY",
-	}
-	if envVar, ok := envMap[providerName]; ok {
-		return os.Getenv(envVar)
+	// 2. Fallback: derive env var from provider name, e.g. "deepseek-openai" → "DEEPSEEK_OPENAI_API_KEY"
+	envVar := providerToEnvVar(providerName)
+	if v := os.Getenv(envVar); v != "" {
+		return v
 	}
 	return ""
+}
+
+// providerToEnvVar converts a provider name to a conventional environment variable name.
+// e.g. "deepseek-openai" → "DEEPSEEK_OPENAI_API_KEY", "my-provider" → "MY_PROVIDER_API_KEY".
+func providerToEnvVar(name string) string {
+	return strings.ToUpper(strings.ReplaceAll(name, "-", "_")) + "_API_KEY"
 }
 
 func resolveKeyValue(key string) string {

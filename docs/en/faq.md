@@ -4,13 +4,12 @@
 
 ### Q: What is VibeCoding?
 
-A: VibeCoding is a terminal AI coding assistant that supports OpenAI and Anthropic APIs, providing code writing, debugging, refactoring, and other features.
+A: VibeCoding is a terminal AI coding assistant that supports DeepSeek and custom APIs, providing code writing, debugging, refactoring, and other features.
 
 ### Q: Which LLMs are supported?
 
-A: 
-- OpenAI: GPT-4o, o1, o3-mini, etc.
-- Anthropic: Claude Sonnet 4, Claude 3.5 Sonnet, Haiku, Opus
+A:
+- DeepSeek: deepseek-v4-flash, deepseek-v4-pro
 - Custom: Any OpenAI or Anthropic compatible API
 
 ### Q: How to install?
@@ -38,7 +37,7 @@ A:
 ### Q: How to set API keys?
 
 A: Two ways:
-1. Environment variables: `export ANTHROPIC_API_KEY=sk-ant-...`
+1. Environment variables: `export DEEPSEEK_API_KEY=sk-...`
 2. Configuration file: `providers.<name>.apiKey` in `settings.json`
 
 ### Q: How to use custom API?
@@ -48,13 +47,13 @@ A: Configure in `settings.json`:
 ```json
 {
   "providers": {
-    "my-api": {
-      "baseUrl": "https://my-api.example.com/v1",
+    "deepseek-openai": {
+      "baseUrl": "https://api.deepseek.com",
       "api": "openai-chat",
-      "apiKey": "my-key"
+      "apiKey": "sk-..."
     }
   },
-  "defaultProvider": "my-api"
+  "defaultProvider": "deepseek-openai"
 }
 ```
 

@@ -4,13 +4,12 @@
 
 ### Q: VibeCoding 是什么?
 
-A: VibeCoding 是一个终端 AI 编码助手，支持 OpenAI 和 Anthropic API，提供代码编写、调试、重构等功能。
+A: VibeCoding 是一个终端 AI 编码助手，支持 DeepSeek 和自定义 API，提供代码编写、调试、重构等功能。
 
 ### Q: 支持哪些 LLM?
 
-A: 
-- OpenAI: GPT-4o, o1, o3-mini 等
-- Anthropic: Claude Sonnet 4, Claude 3.5 Sonnet, Haiku, Opus
+A:
+- DeepSeek: deepseek-v4-flash, deepseek-v4-pro
 - 自定义: 任何 OpenAI 或 Anthropic 兼容 API
 
 ### Q: 如何安装?
@@ -38,7 +37,7 @@ A:
 ### Q: 如何设置 API 密钥?
 
 A: 两种方式:
-1. 环境变量: `export ANTHROPIC_API_KEY=sk-ant-...`
+1. 环境变量: `export DEEPSEEK_API_KEY=sk-...`
 2. 配置文件: `settings.json` 中的 `providers.<name>.apiKey`
 
 ### Q: 如何使用自定义 API?
@@ -48,13 +47,13 @@ A: 在 `settings.json` 中配置:
 ```json
 {
   "providers": {
-    "my-api": {
-      "baseUrl": "https://my-api.example.com/v1",
+    "deepseek-openai": {
+      "baseUrl": "https://api.deepseek.com",
       "api": "openai-chat",
-      "apiKey": "my-key"
+      "apiKey": "sk-..."
     }
   },
-  "defaultProvider": "my-api"
+  "defaultProvider": "deepseek-openai"
 }
 ```
 

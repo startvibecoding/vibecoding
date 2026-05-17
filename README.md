@@ -10,9 +10,9 @@
 
 ## Features
 
-- **Multi-Provider Support**: OpenAI (GPT-4o, o1, o3-mini), Anthropic (Claude 4 Sonnet, 3.5 Sonnet, Haiku, Opus), and custom providers
+- **Multi-Provider Support**: DeepSeek (deepseek-v4-flash, deepseek-v4-pro), and custom providers
 - **SSE Streaming**: Real-time token streaming for fast response delivery
-- **Think Mode**: Extended thinking/reasoning support (Anthropic extended thinking, OpenAI reasoning effort)
+- **Think Mode**: Extended thinking/reasoning support (DeepSeek reasoning)
 - **Three Modes**:
   - 🗒️ **Plan** — Read-only analysis and planning. Sandboxed, no file writes
   - 🔧 **Agent** (default) — Controlled read/write access to the project. Bash requires approval (configurable whitelist). Sandboxed, no network
@@ -82,11 +82,8 @@ make build-all    # Build for linux/amd64, darwin/amd64, darwin/arm64, windows/a
 Set your API key:
 
 ```bash
-# Anthropic
-export ANTHROPIC_API_KEY=sk-ant-...
-
-# OpenAI
-export OPENAI_API_KEY=sk-...
+# DeepSeek
+export DEEPSEEK_API_KEY=sk-...
 ```
 
 Or configure directly in `settings.json`:
@@ -94,8 +91,7 @@ Or configure directly in `settings.json`:
 ```json
 {
   "providers": {
-    "anthropic": { "apiKey": "sk-ant-..." },
-    "openai": { "apiKey": "sk-..." }
+    "deepseek-openai": { "apiKey": "sk-..." }
   }
 }
 ```
@@ -113,7 +109,7 @@ vibecoding "Explain this codebase"
 vibecoding -p "Write a hello world in Go"
 
 # Specify provider and model
-vibecoding --provider openai --model gpt-4o
+vibecoding --provider deepseek-openai --model deepseek-v4-flash
 
 # Change mode
 vibecoding --mode plan    # Read-only planning
@@ -143,12 +139,12 @@ vibecoding --no-sandbox
 
 ```json
 {
-  "defaultProvider": "anthropic",
-  "defaultModel": "claude-sonnet-4-20250514",
+  "defaultProvider": "deepseek-openai",
+  "defaultModel": "deepseek-v4-flash",
   "defaultThinkingLevel": "medium",
   "defaultMode": "agent",
-  "maxContextTokens": 200000,
-  "maxOutputTokens": 16384,
+  "maxContextTokens": 1000000,
+  "maxOutputTokens": 384000,
   "compaction": {
     "enabled": true,
     "reserveTokens": 16384,
@@ -178,8 +174,7 @@ vibecoding --no-sandbox
 
 | Variable | Description |
 |----------|-------------|
-| `ANTHROPIC_API_KEY` | Anthropic API key |
-| `OPENAI_API_KEY` | OpenAI API key |
+| `DEEPSEEK_API_KEY` | DeepSeek API key |
 | `VIBECODING_DIR` | Override config directory |
 | `VIBECODING_PROVIDER` | Override default provider |
 | `VIBECODING_MODEL` | Override default model |
@@ -217,7 +212,7 @@ vibecoding [flags] [message...]
 Aliases: vc
 
 Flags:
-  -p, --provider string    Provider (openai, anthropic, or custom provider name)
+  -p, --provider string    Provider (deepseek-openai, deepseek-anthropic, or custom provider name)
   -m, --model string       Model ID
   -M, --mode string        Mode (plan, agent, yolo)
   -t, --thinking string    Thinking level (off, minimal, low, medium, high, xhigh)

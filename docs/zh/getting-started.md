@@ -77,11 +77,8 @@ make install
 ### 方式一: 环境变量
 
 ```bash
-# Anthropic
-export ANTHROPIC_API_KEY=sk-ant-...
-
-# OpenAI
-export OPENAI_API_KEY=sk-...
+# DeepSeek
+export DEEPSEEK_API_KEY=sk-...
 ```
 
 ### 方式二: 配置文件
@@ -91,8 +88,7 @@ export OPENAI_API_KEY=sk-...
 ```json
 {
   "providers": {
-    "anthropic": { "apiKey": "sk-ant-..." },
-    "openai": { "apiKey": "sk-..." }
+    "deepseek-openai": { "apiKey": "sk-..." }
   }
 }
 ```
@@ -124,11 +120,11 @@ echo "写一个 Hello World" | vibecoding -P
 ### 指定模型
 
 ```bash
-# 使用 Claude
-vibecoding --provider anthropic --model claude-sonnet-4-20250514
+# 使用 DeepSeek-V4-Flash
+vibecoding --provider deepseek-openai --model deepseek-v4-flash
 
-# 使用 GPT-4o
-vibecoding --provider openai --model gpt-4o
+# 使用 DeepSeek-V4-Pro
+vibecoding --provider deepseek-openai --model deepseek-v4-pro
 ```
 
 ## 选择模式

@@ -21,30 +21,43 @@ VibeCoding 使用两个配置文件:
 ```json
 {
   "providers": {
-    "anthropic": {
-      "baseUrl": "https://api.anthropic.com",
-      "apiKey": "sk-ant-...",
+    "deepseek-anthropic": {
+      "baseUrl": "https://api.deepseek.com/anthropic",
+      "apiKey": "${DEEPSEEK_API_KEY}",
       "api": "anthropic-messages",
       "models": [
         {
-          "id": "claude-sonnet-4-20250514",
-          "name": "Claude Sonnet 4",
-          "contextWindow": 200000,
-          "maxTokens": 8192,
-          "reasoning": true
+          "id": "deepseek-v4-flash",
+          "name": "DeepSeek-V4-Flash",
+          "contextWindow": 1000000,
+          "maxTokens": 384000
+        },
+        {
+          "id": "deepseek-v4-pro",
+          "name": "DeepSeek-V4-Pro",
+          "reasoning": true,
+          "contextWindow": 1000000,
+          "maxTokens": 384000
         }
       ]
     },
-    "openai": {
-      "baseUrl": "https://api.openai.com/v1",
-      "apiKey": "sk-...",
+    "deepseek-openai": {
+      "baseUrl": "https://api.deepseek.com",
+      "apiKey": "${DEEPSEEK_API_KEY}",
       "api": "openai-chat",
       "models": [
         {
-          "id": "gpt-4o",
-          "name": "GPT-4o",
-          "contextWindow": 128000,
-          "maxTokens": 16384
+          "id": "deepseek-v4-flash",
+          "name": "DeepSeek-V4-Flash",
+          "contextWindow": 1000000,
+          "maxTokens": 384000
+        },
+        {
+          "id": "deepseek-v4-pro",
+          "name": "DeepSeek-V4-Pro",
+          "reasoning": true,
+          "contextWindow": 1000000,
+          "maxTokens": 384000
         }
       ]
     },
@@ -54,12 +67,12 @@ VibeCoding 使用两个配置文件:
       "models": []
     }
   },
-  "defaultProvider": "anthropic",
-  "defaultModel": "claude-sonnet-4-20250514",
+  "defaultProvider": "deepseek-openai",
+  "defaultModel": "deepseek-v4-flash",
   "defaultMode": "agent",
   "defaultThinkingLevel": "medium",
-  "maxOutputTokens": 8192,
-  "maxContextTokens": 200000,
+  "maxOutputTokens": 384000,
+  "maxContextTokens": 1000000,
   "compaction": {
     "enabled": true,
     "reserveTokens": 16384,
@@ -137,17 +150,15 @@ VibeCoding 使用两个配置文件:
 
 ```json
 {
-  "id": "claude-sonnet-4-20250514",
-  "name": "Claude Sonnet 4",
-  "contextWindow": 200000,
-  "maxTokens": 8192,
-  "reasoning": true,
-  "input": ["text", "image"],
+  "id": "deepseek-v4-flash",
+  "name": "DeepSeek-V4-Flash",
+  "contextWindow": 1000000,
+  "maxTokens": 384000,
+  "reasoning": false,
+  "input": ["text"],
   "cost": {
-    "input": 3.0,
-    "output": 15.0,
-    "cacheRead": 0.3,
-    "cacheWrite": 3.75
+    "input": 0.5,
+    "output": 2.0
   }
 }
 ```
@@ -168,7 +179,7 @@ VibeCoding 使用两个配置文件:
 
 ```json
 {
-  "defaultProvider": "anthropic"
+  "defaultProvider": "deepseek-openai"
 }
 ```
 
@@ -178,7 +189,7 @@ VibeCoding 使用两个配置文件:
 
 ```json
 {
-  "defaultModel": "claude-sonnet-4-20250514"
+  "defaultModel": "deepseek-v4-flash"
 }
 ```
 
@@ -221,7 +232,7 @@ VibeCoding 使用两个配置文件:
 
 ```json
 {
-  "maxOutputTokens": 8192
+  "maxOutputTokens": 384000
 }
 ```
 
@@ -475,8 +486,7 @@ Agent 模式审批配置，控制 bash 命令的审批行为。
 ### 方式一: 环境变量
 
 ```bash
-export ANTHROPIC_API_KEY=sk-ant-...
-export OPENAI_API_KEY=sk-...
+export DEEPSEEK_API_KEY=sk-...
 ```
 
 ### 方式二: 配置文件内嵌
@@ -486,8 +496,8 @@ export OPENAI_API_KEY=sk-...
 ```json
 {
   "providers": {
-    "anthropic": {
-      "apiKey": "sk-ant-..."
+    "deepseek-openai": {
+      "apiKey": "sk-..."
     }
   }
 }
@@ -495,7 +505,7 @@ export OPENAI_API_KEY=sk-...
 
 ### 密钥解析顺序
 
-1. 环境变量 (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`)
+1. 环境变量 (`DEEPSEEK_API_KEY`)
 2. 配置文件内嵌 (`settings.json` providers.<name>.apiKey)
 
 ## 环境变量覆盖
@@ -516,8 +526,8 @@ export OPENAI_API_KEY=sk-...
 
 ```json
 {
-  "defaultProvider": "anthropic",
-  "defaultModel": "claude-sonnet-4-20250514"
+  "defaultProvider": "deepseek-openai",
+  "defaultModel": "deepseek-v4-flash"
 }
 ```
 
@@ -526,17 +536,17 @@ export OPENAI_API_KEY=sk-...
 ```json
 {
   "providers": {
-    "anthropic": {
-      "baseUrl": "https://api.anthropic.com",
+    "deepseek-anthropic": {
+      "baseUrl": "https://api.deepseek.com/anthropic",
       "api": "anthropic-messages"
     },
-    "openai": {
-      "baseUrl": "https://api.openai.com/v1",
+    "deepseek-openai": {
+      "baseUrl": "https://api.deepseek.com",
       "api": "openai-chat"
     }
   },
-  "defaultProvider": "anthropic",
-  "defaultModel": "claude-sonnet-4-20250514"
+  "defaultProvider": "deepseek-openai",
+  "defaultModel": "deepseek-v4-flash"
 }
 ```
 
@@ -551,8 +561,8 @@ export OPENAI_API_KEY=sk-...
       "apiKey": "my-key",
       "models": [
         {
-          "id": "gpt-4o",
-          "name": "GPT-4o (via proxy)"
+          "id": "deepseek-v4-flash",
+          "name": "DeepSeek-V4-Flash (via proxy)"
         }
       ]
     }

@@ -14,7 +14,7 @@ Alias: `vc`
 
 | Parameter | Short | Default | Description |
 |-----------|-------|---------|-------------|
-| `--provider` | `-p` | Default from config file | LLM provider (openai, anthropic or custom name) |
+| `--provider` | `-p` | Default from config file | LLM provider (deepseek-openai, deepseek-anthropic or custom name) |
 | `--model` | `-m` | Default from config file | Model ID |
 | `--mode` | `-M` | `agent` | Run mode (plan, agent, yolo) |
 | `--thinking` | `-t` | `off` | Thinking level (off, minimal, low, medium, high, xhigh) |
@@ -67,11 +67,11 @@ vibecoding -p "Write a Hello World"
 ### Specify Provider and Model
 
 ```bash
-# Use OpenAI
-vibecoding --provider openai --model gpt-4o
+# Use DeepSeek (OpenAI API)
+vibecoding --provider deepseek-openai --model deepseek-v4-flash
 
-# Use Anthropic
-vibecoding -p anthropic -m claude-sonnet-4-20250514
+# Use DeepSeek (Anthropic API)
+vibecoding -p deepseek-anthropic -m deepseek-v4-flash
 
 # Use custom provider
 vibecoding --provider my-custom-provider
@@ -166,8 +166,7 @@ Default settings can be overridden via environment variables:
 
 | Variable | Description |
 |----------|-------------|
-| `ANTHROPIC_API_KEY` | Anthropic API key |
-| `OPENAI_API_KEY` | OpenAI API key |
+| `DEEPSEEK_API_KEY` | DeepSeek API key |
 | `VIBECODING_DIR` | Override config directory |
 | `VIBECODING_PROVIDER` | Override default provider |
 | `VIBECODING_MODEL` | Override default model |

@@ -21,7 +21,7 @@ vibecoding "Explain this codebase"
 vibecoding -p "Write a hello world in Go"
 
 # Specify provider and model
-vibecoding --provider openai --model gpt-4o
+vibecoding --provider deepseek-openai --model deepseek-v4-flash
 
 # Change mode
 vibecoding --mode plan    # Read-only planning
@@ -34,11 +34,8 @@ vibecoding --mode yolo    # Full access
 Set your API key:
 
 ```bash
-# Anthropic
-export ANTHROPIC_API_KEY=sk-ant-...
-
-# OpenAI
-export OPENAI_API_KEY=sk-...
+# DeepSeek
+export DEEPSEEK_API_KEY=sk-...
 ```
 
 ## More Information

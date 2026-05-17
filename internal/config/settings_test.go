@@ -10,12 +10,12 @@ import (
 func TestDefaultSettings(t *testing.T) {
 	s := DefaultSettings()
 
-	if s.DefaultProvider != "anthropic" {
-		t.Errorf("expected default provider 'anthropic', got '%s'", s.DefaultProvider)
+	if s.DefaultProvider != "deepseek-openai" {
+		t.Errorf("expected default provider 'deepseek-openai', got '%s'", s.DefaultProvider)
 	}
 
-	if s.DefaultModel != "claude-sonnet-4-20250514" {
-		t.Errorf("expected default model 'claude-sonnet-4-20250514', got '%s'", s.DefaultModel)
+	if s.DefaultModel != "deepseek-v4-flash" {
+		t.Errorf("expected default model 'deepseek-v4-flash', got '%s'", s.DefaultModel)
 	}
 
 	if s.DefaultMode != "agent" {
@@ -34,14 +34,14 @@ func TestDefaultSettings(t *testing.T) {
 func TestGetProviderConfig(t *testing.T) {
 	s := DefaultSettings()
 
-	// Test existing provider
-	pc := s.GetProviderConfig("anthropic")
+	// Test existing provider (openai format)
+	pc := s.GetProviderConfig("deepseek-openai")
 	if pc == nil {
 		t.Fatal("expected provider config, got nil")
 	}
 
-	if pc.API != "anthropic-messages" {
-		t.Errorf("expected API 'anthropic-messages', got '%s'", pc.API)
+	if pc.API != "openai-chat" {
+		t.Errorf("expected API 'openai-chat', got '%s'", pc.API)
 	}
 
 	// Test non-existing provider
@@ -55,17 +55,17 @@ func TestGetModelConfig(t *testing.T) {
 	s := DefaultSettings()
 
 	// Test existing model
-	mc := s.GetModelConfig("anthropic", "claude-sonnet-4-20250514")
+	mc := s.GetModelConfig("deepseek-openai", "deepseek-v4-flash")
 	if mc == nil {
 		t.Fatal("expected model config, got nil")
 	}
 
-	if mc.Name != "Claude 4 Sonnet" {
-		t.Errorf("expected name 'Claude 4 Sonnet', got '%s'", mc.Name)
+	if mc.Name != "DeepSeek-V4-Flash" {
+		t.Errorf("expected name 'DeepSeek-V4-Flash', got '%s'", mc.Name)
 	}
 
 	// Test non-existing model
-	mc = s.GetModelConfig("anthropic", "nonexistent")
+	mc = s.GetModelConfig("deepseek-openai", "nonexistent")
 	if mc != nil {
 		t.Errorf("expected nil, got model config")
 	}

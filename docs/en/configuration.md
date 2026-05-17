@@ -21,30 +21,43 @@ Project-level configuration overrides global configuration.
 ```json
 {
   "providers": {
-    "anthropic": {
-      "baseUrl": "https://api.anthropic.com",
-      "apiKey": "sk-ant-...",
+    "deepseek-anthropic": {
+      "baseUrl": "https://api.deepseek.com/anthropic",
+      "apiKey": "${DEEPSEEK_API_KEY}",
       "api": "anthropic-messages",
       "models": [
         {
-          "id": "claude-sonnet-4-20250514",
-          "name": "Claude Sonnet 4",
-          "contextWindow": 200000,
-          "maxTokens": 8192,
-          "reasoning": true
+          "id": "deepseek-v4-flash",
+          "name": "DeepSeek-V4-Flash",
+          "contextWindow": 1000000,
+          "maxTokens": 384000
+        },
+        {
+          "id": "deepseek-v4-pro",
+          "name": "DeepSeek-V4-Pro",
+          "reasoning": true,
+          "contextWindow": 1000000,
+          "maxTokens": 384000
         }
       ]
     },
-    "openai": {
-      "baseUrl": "https://api.openai.com/v1",
-      "apiKey": "sk-...",
+    "deepseek-openai": {
+      "baseUrl": "https://api.deepseek.com",
+      "apiKey": "${DEEPSEEK_API_KEY}",
       "api": "openai-chat",
       "models": [
         {
-          "id": "gpt-4o",
-          "name": "GPT-4o",
-          "contextWindow": 128000,
-          "maxTokens": 16384
+          "id": "deepseek-v4-flash",
+          "name": "DeepSeek-V4-Flash",
+          "contextWindow": 1000000,
+          "maxTokens": 384000
+        },
+        {
+          "id": "deepseek-v4-pro",
+          "name": "DeepSeek-V4-Pro",
+          "reasoning": true,
+          "contextWindow": 1000000,
+          "maxTokens": 384000
         }
       ]
     },
@@ -54,12 +67,12 @@ Project-level configuration overrides global configuration.
       "models": []
     }
   },
-  "defaultProvider": "anthropic",
-  "defaultModel": "claude-sonnet-4-20250514",
+  "defaultProvider": "deepseek-openai",
+  "defaultModel": "deepseek-v4-flash",
   "defaultMode": "agent",
   "defaultThinkingLevel": "medium",
-  "maxOutputTokens": 8192,
-  "maxContextTokens": 200000,
+  "maxOutputTokens": 384000,
+  "maxContextTokens": 1000000,
   "compaction": {
     "enabled": true,
     "reserveTokens": 16384,
@@ -137,17 +150,15 @@ When not set, automatically detects `xiaomi` format if URL contains `xiaomimimo`
 
 ```json
 {
-  "id": "claude-sonnet-4-20250514",
-  "name": "Claude Sonnet 4",
-  "contextWindow": 200000,
-  "maxTokens": 8192,
-  "reasoning": true,
-  "input": ["text", "image"],
+  "id": "deepseek-v4-flash",
+  "name": "DeepSeek-V4-Flash",
+  "contextWindow": 1000000,
+  "maxTokens": 384000,
+  "reasoning": false,
+  "input": ["text"],
   "cost": {
-    "input": 3.0,
-    "output": 15.0,
-    "cacheRead": 0.3,
-    "cacheWrite": 3.75
+    "input": 0.5,
+    "output": 2.0
   }
 }
 ```
@@ -168,7 +179,7 @@ Default provider name. Corresponds to a key in `providers`.
 
 ```json
 {
-  "defaultProvider": "anthropic"
+  "defaultProvider": "deepseek-openai"
 }
 ```
 
@@ -178,7 +189,7 @@ Default model ID.
 
 ```json
 {
-  "defaultModel": "claude-sonnet-4-20250514"
+  "defaultModel": "deepseek-v4-flash"
 }
 ```
 
@@ -221,7 +232,7 @@ Maximum output token count.
 
 ```json
 {
-  "maxOutputTokens": 8192
+  "maxOutputTokens": 384000
 }
 ```
 
@@ -333,8 +344,7 @@ The `"~/.vibecoding/skills"` path uses `~` expansion which works on Linux/macOS.
 ### Option 1: Environment Variables
 
 ```bash
-export ANTHROPIC_API_KEY=sk-ant-...
-export OPENAI_API_KEY=sk-...
+export DEEPSEEK_API_KEY=sk-...
 ```
 
 ### Option 2: Inline in Configuration File
@@ -344,8 +354,8 @@ Configure directly in `settings.json` providers:
 ```json
 {
   "providers": {
-    "anthropic": {
-      "apiKey": "sk-ant-..."
+    "deepseek-openai": {
+      "apiKey": "sk-..."
     }
   }
 }
@@ -353,7 +363,7 @@ Configure directly in `settings.json` providers:
 
 ### Key Resolution Order
 
-1. Environment variables (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`)
+1. Environment variable (`DEEPSEEK_API_KEY`)
 2. Inline in configuration file (`settings.json` providers.<name>.apiKey)
 
 ## Environment Variable Overrides
@@ -374,8 +384,8 @@ Any setting can be overridden via environment variables:
 
 ```json
 {
-  "defaultProvider": "anthropic",
-  "defaultModel": "claude-sonnet-4-20250514"
+  "defaultProvider": "deepseek-openai",
+  "defaultModel": "deepseek-v4-flash"
 }
 ```
 
@@ -384,17 +394,17 @@ Any setting can be overridden via environment variables:
 ```json
 {
   "providers": {
-    "anthropic": {
-      "baseUrl": "https://api.anthropic.com",
+    "deepseek-anthropic": {
+      "baseUrl": "https://api.deepseek.com/anthropic",
       "api": "anthropic-messages"
     },
-    "openai": {
-      "baseUrl": "https://api.openai.com/v1",
+    "deepseek-openai": {
+      "baseUrl": "https://api.deepseek.com",
       "api": "openai-chat"
     }
   },
-  "defaultProvider": "anthropic",
-  "defaultModel": "claude-sonnet-4-20250514"
+  "defaultProvider": "deepseek-openai",
+  "defaultModel": "deepseek-v4-flash"
 }
 ```
 
@@ -409,8 +419,8 @@ Any setting can be overridden via environment variables:
       "apiKey": "my-key",
       "models": [
         {
-          "id": "gpt-4o",
-          "name": "GPT-4o (via proxy)"
+          "id": "deepseek-v4-flash",
+          "name": "DeepSeek-V4-Flash (via proxy)"
         }
       ]
     }

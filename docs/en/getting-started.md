@@ -77,11 +77,8 @@ make install
 ### Option 1: Environment Variables
 
 ```bash
-# Anthropic
-export ANTHROPIC_API_KEY=sk-ant-...
-
-# OpenAI
-export OPENAI_API_KEY=sk-...
+# DeepSeek
+export DEEPSEEK_API_KEY=sk-...
 ```
 
 ### Option 2: Settings File
@@ -91,8 +88,7 @@ Or add keys directly to your settings.json:
 ```json
 {
   "providers": {
-    "anthropic": { "apiKey": "sk-ant-..." },
-    "openai": { "apiKey": "sk-..." }
+    "deepseek-openai": { "apiKey": "sk-..." }
   }
 }
 ```
@@ -124,11 +120,11 @@ echo "Write a Hello World" | vibecoding -P
 ### Specify Model
 
 ```bash
-# Use Claude
-vibecoding --provider anthropic --model claude-sonnet-4-20250514
+# Use DeepSeek-V4-Flash
+vibecoding --provider deepseek-openai --model deepseek-v4-flash
 
-# Use GPT-4o
-vibecoding --provider openai --model gpt-4o
+# Use DeepSeek-V4-Pro
+vibecoding --provider deepseek-openai --model deepseek-v4-pro
 ```
 
 ## Choose Mode
