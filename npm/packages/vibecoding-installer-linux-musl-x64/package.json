@@ -1,9 +1,10 @@
 {
-  "name": "vibecoding-installer-win32-x64",
+  "name": "vibecoding-installer-linux-musl-x64",
   "version": "v0.1.4-2-ga27e08a-dirty",
-  "description": "VibeCoding native binary for win32-x64",
-  "os": ["win32"],
+  "description": "VibeCoding native binary for linux-x64 (musl static)",
+  "os": ["linux"],
   "cpu": ["x64"],
+  "libc": ["musl"],
   "files": ["bin/"],
   "license": "MIT",
   "repository": {

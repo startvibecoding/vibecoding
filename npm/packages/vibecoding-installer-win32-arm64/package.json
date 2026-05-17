@@ -1,16 +1,10 @@
 {
   "name": "vibecoding-installer-win32-arm64",
-  "version": "v0.1.2",
+  "version": "v0.1.4-2-ga27e08a-dirty",
   "description": "VibeCoding native binary for win32-arm64",
-  "os": [
-    "win32"
-  ],
-  "cpu": [
-    "arm64"
-  ],
-  "files": [
-    "bin/"
-  ],
+  "os": ["win32"],
+  "cpu": ["arm64"],
+  "files": ["bin/"],
   "license": "MIT",
   "repository": {
     "type": "git",

@@ -1,16 +1,10 @@
 {
   "name": "vibecoding-installer-darwin-arm64",
-  "version": "v0.1.2",
+  "version": "v0.1.4-2-ga27e08a-dirty",
   "description": "VibeCoding native binary for darwin-arm64",
-  "os": [
-    "darwin"
-  ],
-  "cpu": [
-    "arm64"
-  ],
-  "files": [
-    "bin/"
-  ],
+  "os": ["darwin"],
+  "cpu": ["arm64"],
+  "files": ["bin/"],
   "license": "MIT",
   "repository": {
     "type": "git",
