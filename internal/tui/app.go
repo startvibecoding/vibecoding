@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/cellbuf"
 
@@ -156,6 +157,12 @@ type App struct {
 	// Current streaming message indices (-1 = none)
 	currentAssistantIdx int
 	currentThinkIdx     int
+
+	// Markdown rendering for assistant messages
+	mdRenderer        *glamour.TermRenderer
+	assistantRaw      map[int]string // message index -> raw markdown content
+	assistantRendered map[int]string // message index -> glamour-rendered content
+	assistantDirty    map[int]bool   // message index -> needs re-render
 }
 
 // pendingApproval holds a queued approval request.
@@ -183,7 +190,7 @@ func NewApp(p provider.Provider, model *provider.Model, settings *config.Setting
 		mode = "agent"
 	}
 
-	return &App{
+	app := &App{
 		provider:       p,
 		model:          model,
 		settings:       settings,
@@ -205,7 +212,17 @@ func NewApp(p provider.Provider, model *provider.Model, settings *config.Setting
 		renderInterval:      16 * time.Millisecond, // ~60fps
 		currentAssistantIdx: -1,
 		currentThinkIdx:     -1,
+		assistantRaw:        make(map[int]string),
+		assistantRendered:   make(map[int]string),
+		assistantDirty:      make(map[int]bool),
 	}
+
+	// Initialize markdown renderer (best-effort; may fail in test/headless env)
+	if r, err := glamour.NewTermRenderer(glamour.WithAutoStyle()); err == nil {
+		app.mdRenderer = r
+	}
+
+	return app
 }
 
 // SetInitialMessage sets an initial message to display when the TUI starts.
@@ -651,6 +668,21 @@ func (a *App) updateViewportContent() {
 			} else {
 				// Show summary
 				displayMessages = append(displayMessages, toolStyle.Render(fmt.Sprintf("🔧 [%s] %s", result.toolName, result.summary)))
+			}
+		} else if raw, ok := a.assistantRaw[idx]; ok {
+			// Assistant message: render markdown if renderer is available
+			if a.assistantDirty[idx] && a.mdRenderer != nil {
+				rendered, err := a.mdRenderer.Render(raw)
+				if err == nil {
+					a.assistantRendered[idx] = rendered
+				}
+				a.assistantDirty[idx] = false
+			}
+			prefix := assistantStyle.Render("Assistant: ")
+			if rendered, ok := a.assistantRendered[idx]; ok && rendered != "" {
+				displayMessages = append(displayMessages, prefix+rendered)
+			} else {
+				displayMessages = append(displayMessages, prefix+raw)
 			}
 		} else {
 			displayMessages = append(displayMessages, msg)
@@ -1173,11 +1205,14 @@ func (a *App) handleAgentEvent(event agent.Event) tea.Cmd {
 	switch event.Type {
 	case agent.EventTextDelta:
 		if a.currentAssistantIdx >= 0 && a.currentAssistantIdx < len(a.messages) {
-			a.messages[a.currentAssistantIdx] += event.TextDelta
+			a.assistantRaw[a.currentAssistantIdx] += event.TextDelta
 		} else {
 			a.currentAssistantIdx = len(a.messages)
-			a.messages = append(a.messages, assistantStyle.Render("Assistant: ")+event.TextDelta)
+			a.assistantRaw[a.currentAssistantIdx] = event.TextDelta
+			// placeholder; actual display is built in updateViewportContent
+			a.messages = append(a.messages, "")
 		}
+		a.assistantDirty[a.currentAssistantIdx] = true
 		a.scheduleRender()
 		return listenEvents(a.eventCh)
 
