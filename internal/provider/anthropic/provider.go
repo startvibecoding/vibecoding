@@ -404,9 +404,7 @@ func (p *Provider) parseSSE(ctx context.Context, body io.Reader, ch chan<- provi
 	}
 
 	if usage != nil {
-		// CacheRead and CacheWrite are already included in Input tokens by the API.
-		// Do not double-count them.
-		usage.TotalTokens = usage.Input + usage.Output
+		usage.TotalTokens = usage.Input + usage.CacheRead + usage.CacheWrite + usage.Output
 		ch <- provider.StreamEvent{Type: provider.StreamUsage, Usage: usage}
 	}
 	ch <- provider.StreamEvent{Type: provider.StreamDone, StopReason: stopReason}

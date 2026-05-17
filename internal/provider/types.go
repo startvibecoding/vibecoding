@@ -117,19 +117,50 @@ type Usage struct {
 	Cost        Cost `json:"cost"`
 }
 
+// PromptTokens returns the total prompt tokens sent for the turn, including
+// cached tokens when the provider reports them separately.
+func (u *Usage) PromptTokens() int {
+	if u == nil {
+		return 0
+	}
+	if u.TotalTokens > 0 {
+		prompt := u.TotalTokens - u.Output
+		if prompt > 0 {
+			return prompt
+		}
+	}
+	return u.Input
+}
+
+// TotalInputTokens returns the full input footprint for the turn, including
+// cached reads and writes when the provider reports them separately.
+func (u *Usage) TotalInputTokens() int {
+	if u == nil {
+		return 0
+	}
+	if u.TotalTokens > 0 {
+		totalInput := u.TotalTokens - u.Output
+		if totalInput > 0 {
+			return totalInput
+		}
+	}
+	return u.Input + u.CacheRead + u.CacheWrite
+}
+
 // CacheInfo returns a short display string for cache activity (e.g. "Cache: 75%"),
 // or an empty string when there is no cache data to show.
 func (u *Usage) CacheInfo() string {
+	totalInputTokens := u.TotalInputTokens()
 	switch {
-	case u.Input > 0 && u.CacheRead > 0:
-		pct := float64(u.CacheRead) / float64(u.Input) * 100
+	case totalInputTokens > 0 && u.CacheRead > 0:
+		pct := float64(u.CacheRead) / float64(totalInputTokens) * 100
 		if pct > 100 {
 			pct = 100
 		}
 		return fmt.Sprintf("Cache: %.0f%%", pct)
 	case u.CacheWrite > 0 && u.CacheRead == 0:
 		return fmt.Sprintf("CacheWrite: %d", u.CacheWrite)
-	case u.Input > 0 && u.CacheRead == 0 && u.CacheWrite == 0:
+	case totalInputTokens > 0 && u.CacheRead == 0 && u.CacheWrite == 0:
 		return "Cache: 0%"
 	default:
 		return ""

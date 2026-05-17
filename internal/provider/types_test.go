@@ -8,6 +8,7 @@ func TestUsageCacheInfo(t *testing.T) {
 		input      int
 		cacheRead  int
 		cacheWrite int
+		total      int
 		want       string
 	}{
 		// ── No data ──────────────────────────────────────────────────────────
@@ -49,6 +50,14 @@ func TestUsageCacheInfo(t *testing.T) {
 			input:     1000,
 			cacheRead: 1000,
 			want:      "Cache: 100%",
+		},
+		{
+			name:      "prompt_tokens_use_total_tokens_when_present",
+			input:     400,
+			cacheRead: 200,
+			cacheWrite: 100,
+			total:     700,
+			want:      "Cache: 29%",
 		},
 		// ── Rounding ─────────────────────────────────────────────────────────
 		// 333/1000 = 33.3… → rounds to 33%
@@ -117,10 +126,97 @@ func TestUsageCacheInfo(t *testing.T) {
 				Input:      tt.input,
 				CacheRead:  tt.cacheRead,
 				CacheWrite: tt.cacheWrite,
+				TotalTokens: tt.total,
 			}
 			got := u.CacheInfo()
 			if got != tt.want {
 				t.Errorf("CacheInfo() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestUsagePromptTokens(t *testing.T) {
+	tests := []struct {
+		name       string
+		usage      *Usage
+		wantPrompt int
+	}{
+		{
+			name:       "nil usage",
+			usage:      nil,
+			wantPrompt: 0,
+		},
+		{
+			name: "uses total tokens when present",
+			usage: &Usage{
+				Input:       400,
+				Output:      50,
+				CacheRead:   200,
+				CacheWrite:  100,
+				TotalTokens: 750,
+			},
+			wantPrompt: 700,
+		},
+		{
+			name: "falls back to input when total missing",
+			usage: &Usage{
+				Input:      400,
+				Output:     50,
+				CacheRead:  200,
+				CacheWrite: 100,
+			},
+			wantPrompt: 400,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.usage.PromptTokens(); got != tt.wantPrompt {
+				t.Errorf("PromptTokens() = %d, want %d", got, tt.wantPrompt)
+			}
+		})
+	}
+}
+
+func TestUsageTotalInputTokens(t *testing.T) {
+	tests := []struct {
+		name       string
+		usage      *Usage
+		wantInput  int
+	}{
+		{
+			name:      "nil usage",
+			usage:     nil,
+			wantInput: 0,
+		},
+		{
+			name: "uses total tokens when present",
+			usage: &Usage{
+				Input:       400,
+				Output:      50,
+				CacheRead:   200,
+				CacheWrite:  100,
+				TotalTokens: 750,
+			},
+			wantInput: 700,
+		},
+		{
+			name: "falls back to components when total missing",
+			usage: &Usage{
+				Input:      400,
+				Output:     50,
+				CacheRead:  200,
+				CacheWrite: 100,
+			},
+			wantInput: 700,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.usage.TotalInputTokens(); got != tt.wantInput {
+				t.Errorf("TotalInputTokens() = %d, want %d", got, tt.wantInput)
 			}
 		})
 	}

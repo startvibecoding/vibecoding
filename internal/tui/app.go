@@ -776,9 +776,8 @@ func formatToolArgs(toolName string, args map[string]any) string {
 }
 
 // formatCachePercent calculates and returns the cache hit rate string, or empty string if no data.
-// For OpenAI: Input (prompt_tokens) already includes CacheRead (cached_tokens), so total = Input.
-// For Anthropic: Input (input_tokens) also includes cache tokens, so total = Input works for both.
-// Falls back to showing cache counts when Input is 0 but cache data exists.
+// The denominator uses the full input footprint so OpenAI and Anthropic can share the same
+// cache ratio display after their provider-specific usage fields are normalized.
 func (a *App) formatCachePercent() string {
 	switch {
 	case a.totalInputTokens > 0:
@@ -1633,7 +1632,7 @@ func (a *App) handleAgentEvent(event agent.Event) tea.Cmd {
 		}
 		if event.Usage != nil {
 			// Accumulate cache stats
-			a.totalInputTokens += event.Usage.Input
+			a.totalInputTokens += event.Usage.TotalInputTokens()
 			a.totalCacheRead += event.Usage.CacheRead
 			a.totalCacheWrite += event.Usage.CacheWrite
 
@@ -1643,7 +1642,7 @@ func (a *App) handleAgentEvent(event agent.Event) tea.Cmd {
 				cacheInfo = " | " + info
 			}
 			costStr := fmt.Sprintf("Tokens: %d↓/%d↑ $%.4f%s",
-				event.Usage.Input, event.Usage.Output, event.Usage.Cost.Total, cacheInfo)
+				event.Usage.TotalInputTokens(), event.Usage.Output, event.Usage.Cost.Total, cacheInfo)
 			a.addMessage(statusStyle.Render(costStr))
 		}
 		a.scheduleRender()

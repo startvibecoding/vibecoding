@@ -74,6 +74,9 @@ func TestAnthropicCache_FirstTurn(t *testing.T) {
 	if u.CacheWrite != 5000 {
 		t.Errorf("CacheWrite = %d, want 5000", u.CacheWrite)
 	}
+	if u.TotalTokens != 6010 {
+		t.Errorf("TotalTokens = %d, want 6010", u.TotalTokens)
+	}
 	if got, want := u.CacheInfo(), "CacheWrite: 5000"; got != want {
 		t.Errorf("CacheInfo() = %q, want %q", got, want)
 	}
@@ -104,7 +107,10 @@ func TestAnthropicCache_CachedTurn(t *testing.T) {
 	if u.CacheWrite != 0 {
 		t.Errorf("CacheWrite = %d, want 0", u.CacheWrite)
 	}
-	if got, want := u.CacheInfo(), "Cache: 75%"; got != want {
+	if u.TotalTokens != 1765 {
+		t.Errorf("TotalTokens = %d, want 1765", u.TotalTokens)
+	}
+	if got, want := u.CacheInfo(), "Cache: 43%"; got != want {
 		t.Errorf("CacheInfo() = %q, want %q", got, want)
 	}
 }
@@ -129,6 +135,9 @@ func TestAnthropicCache_NoCache(t *testing.T) {
 	}
 	if u.CacheWrite != 0 {
 		t.Errorf("CacheWrite = %d, want 0", u.CacheWrite)
+	}
+	if u.TotalTokens != 205 {
+		t.Errorf("TotalTokens = %d, want 205", u.TotalTokens)
 	}
 	if got, want := u.CacheInfo(), "Cache: 0%"; got != want {
 		t.Errorf("CacheInfo() = %q, want %q", got, want)
@@ -158,7 +167,10 @@ func TestAnthropicCache_ProxyAllUsageInMessageDelta(t *testing.T) {
 	if u.CacheRead != 600 {
 		t.Errorf("CacheRead = %d, want 600", u.CacheRead)
 	}
-	if got, want := u.CacheInfo(), "Cache: 75%"; got != want {
+	if u.TotalTokens != 1420 {
+		t.Errorf("TotalTokens = %d, want 1420", u.TotalTokens)
+	}
+	if got, want := u.CacheInfo(), "Cache: 43%"; got != want {
 		t.Errorf("CacheInfo() = %q, want %q", got, want)
 	}
 }
@@ -182,6 +194,9 @@ func TestAnthropicCache_ProxySplitUsage(t *testing.T) {
 	}
 	if u.CacheRead != 500 {
 		t.Errorf("CacheRead = %d, want 500", u.CacheRead)
+	}
+	if u.TotalTokens != 1008 {
+		t.Errorf("TotalTokens = %d, want 1008", u.TotalTokens)
 	}
 	// 500/500 = 100%
 	if got, want := u.CacheInfo(), "Cache: 100%"; got != want {

@@ -97,13 +97,13 @@ func TestCalculateContextTokens(t *testing.T) {
 			expected: 180,
 		},
 		{
-			name: "without totalTokens",
+			name: "with cache aware totalTokens",
 			usage: &provider.Usage{
 				Input:       100,
 				Output:      50,
 				CacheRead:   20,
 				CacheWrite:  10,
-				TotalTokens: 0,
+				TotalTokens: 180,
 			},
 			expected: 180,
 		},
