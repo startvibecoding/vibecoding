@@ -134,16 +134,26 @@ func ListForDir(cwd, sessionDir string) ([]SessionInfo, error) {
 	return sessions, nil
 }
 
-// Init initializes a new session. Must be called before appending entries.
+// Init initializes a new session with an auto-generated session ID.
+// Must be called before appending entries.
 func (m *Manager) Init() error {
+	return m.InitWithID("")
+}
+
+// InitWithID initializes a new session using the provided session ID.
+// If id is empty, a new random ID is generated.
+func (m *Manager) InitWithID(id string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	now := time.Now()
+	if id == "" {
+		id = GenerateID()
+	}
 	m.header = &Header{
 		Type:      EntrySession,
 		Version:   CurrentVersion,
-		ID:        GenerateID(),
+		ID:        id,
 		Timestamp: now,
 		Cwd:       m.cwd,
 	}
@@ -161,6 +171,24 @@ func (m *Manager) Init() error {
 
 	// Write header
 	return m.writeEntry(m.header)
+}
+
+// OpenByID opens the most recent session file for cwd whose session header ID matches sessionID.
+func OpenByID(cwd, sessionDir, sessionID string) (*Manager, error) {
+	sessions, err := ListForDir(cwd, sessionDir)
+	if err != nil {
+		return nil, err
+	}
+	for _, s := range sessions {
+		mgr, err := Open(s.Path)
+		if err != nil {
+			continue
+		}
+		if hdr := mgr.GetHeader(); hdr != nil && hdr.ID == sessionID {
+			return mgr, nil
+		}
+	}
+	return nil, fmt.Errorf("session %s not found for cwd %s", sessionID, cwd)
 }
 
 // AppendMessage adds a message entry.

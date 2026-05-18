@@ -28,6 +28,7 @@ type Config struct {
 	Session            *session.Manager
 	ExtraContext       string // extra context from files and skills
 	CompactionSettings ctxpkg.CompactionSettings
+	ApprovalHandler    func(toolName string, args map[string]any) bool
 }
 
 // AgentLoopConfig extends Config with loop-specific settings.
@@ -806,7 +807,12 @@ func (a *Agent) executeSingleToolCall(ctx context.Context, tc provider.ToolCallB
 
 	// Check if tool needs user approval based on mode
 	if a.NeedsApproval(tc.Name, params) {
-		approved := a.RequestApproval(ch, tc.Name, params)
+		approved := false
+		if a.config.ApprovalHandler != nil {
+			approved = a.config.ApprovalHandler(tc.Name, params)
+		} else {
+			approved = a.RequestApproval(ch, tc.Name, params)
+		}
 		if !approved {
 			reason := "Tool execution denied by user"
 			ch <- Event{

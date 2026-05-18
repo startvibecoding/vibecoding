@@ -16,6 +16,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/startvibecoding/vibecoding/internal/agent"
+	"github.com/startvibecoding/vibecoding/internal/acp"
 	"github.com/startvibecoding/vibecoding/internal/config"
 	ctxpkg "github.com/startvibecoding/vibecoding/internal/context"
 	"github.com/startvibecoding/vibecoding/internal/contextfiles"
@@ -77,6 +78,23 @@ func main() {
 		},
 	}
 
+	acpCmd := &cobra.Command{
+		Use:   "acp",
+		Short: "Run the Agent Client Protocol server",
+		Long:  "Run vibecoding as an ACP-compliant stdio agent.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return acp.Run(acp.RunOptions{
+				Provider: flagProvider,
+				Model:    flagModel,
+				Mode:     flagMode,
+				Thinking: flagThinking,
+				Sandbox:  flagSandbox,
+				Verbose:  flagVerbose,
+				Debug:    flagDebug,
+			})
+		},
+	}
+
 	flags := rootCmd.Flags()
 	flags.StringVarP(&flagProvider, "provider", "p", "", "Provider (openai, anthropic, or custom provider name)")
 	flags.StringVarP(&flagModel, "model", "m", "", "Model ID")
@@ -90,6 +108,16 @@ func main() {
 	flags.BoolVar(&flagVerbose, "verbose", false, "Verbose output")
 	flags.BoolVar(&flagDebug, "debug", false, "Enable debug logging")
 
+	acpFlags := acpCmd.Flags()
+	acpFlags.StringVarP(&flagProvider, "provider", "p", "", "Provider (openai, anthropic, or custom provider name)")
+	acpFlags.StringVarP(&flagModel, "model", "m", "", "Model ID")
+	acpFlags.StringVarP(&flagMode, "mode", "M", "", "Mode (plan, agent, yolo)")
+	acpFlags.StringVarP(&flagThinking, "thinking", "t", "", "Thinking level (off, minimal, low, medium, high, xhigh)")
+	acpFlags.BoolVar(&flagSandbox, "sandbox", false, "Enable sandbox (bwrap) for secure execution")
+	acpFlags.BoolVar(&flagVerbose, "verbose", false, "Verbose output")
+	acpFlags.BoolVar(&flagDebug, "debug", false, "Enable debug logging")
+
+	rootCmd.AddCommand(acpCmd)
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
 	}
