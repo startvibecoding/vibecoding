@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -37,7 +38,7 @@ type RunOptions struct {
 }
 
 type server struct {
-	mu sync.Mutex
+	mu  sync.Mutex
 	wmu sync.Mutex
 
 	settings *config.Settings
@@ -47,9 +48,8 @@ type server struct {
 	m *provider.Model
 
 	mode          string
-	thinkingLevel  provider.ThinkingLevel
+	thinkingLevel provider.ThinkingLevel
 	sbMgr         *sandbox.Manager
-	registry      *tools.Registry
 	skillsMgr     *skills.Manager
 	extraContext  string
 	contextFiles  string
@@ -63,10 +63,14 @@ type server struct {
 }
 
 type sessionRuntime struct {
-	id     string
-	mgr    *session.Manager
-	agent  *agent.Agent
-	cancel context.CancelFunc
+	id       string
+	mgr      *session.Manager
+	agent    *agent.Agent
+	registry *tools.Registry
+	cancel   context.CancelFunc
+	promptID string
+	cancelMu sync.Mutex
+	mcp      []*mcpClient
 }
 
 type rpcRequest struct {
@@ -98,23 +102,23 @@ type clientInfo struct {
 }
 
 type initializeRequest struct {
-	ProtocolVersion   int                    `json:"protocolVersion"`
-	ClientCapabilities map[string]any        `json:"clientCapabilities,omitempty"`
-	ClientInfo        clientInfo             `json:"clientInfo,omitempty"`
+	ProtocolVersion    int            `json:"protocolVersion"`
+	ClientCapabilities map[string]any `json:"clientCapabilities,omitempty"`
+	ClientInfo         clientInfo     `json:"clientInfo,omitempty"`
 }
 
 type initializeResult struct {
-	ProtocolVersion  int            `json:"protocolVersion"`
-	AgentCapabilities agentCaps      `json:"agentCapabilities"`
-	AgentInfo        clientInfo     `json:"agentInfo"`
-	AuthMethods      []string       `json:"authMethods"`
+	ProtocolVersion   int        `json:"protocolVersion"`
+	AgentCapabilities agentCaps  `json:"agentCapabilities"`
+	AgentInfo         clientInfo `json:"agentInfo"`
+	AuthMethods       []string   `json:"authMethods"`
 }
 
 type agentCaps struct {
-	LoadSession      bool                   `json:"loadSession"`
-	PromptCapabilities promptCaps           `json:"promptCapabilities"`
-	SessionCapabilities sessionCaps         `json:"sessionCapabilities"`
-	McPCapabilities   map[string]bool       `json:"mcpCapabilities,omitempty"`
+	LoadSession         bool            `json:"loadSession"`
+	PromptCapabilities  promptCaps      `json:"promptCapabilities"`
+	SessionCapabilities sessionCaps     `json:"sessionCapabilities"`
+	McPCapabilities     map[string]bool `json:"mcpCapabilities,omitempty"`
 }
 
 type promptCaps struct {
@@ -130,8 +134,8 @@ type sessionCaps struct {
 }
 
 type newSessionRequest struct {
-	Cwd       string `json:"cwd"`
-	McpServers []any  `json:"mcpServers,omitempty"`
+	Cwd        string            `json:"cwd"`
+	McpServers []mcpServerConfig `json:"mcpServers,omitempty"`
 }
 
 type newSessionResult struct {
@@ -139,19 +143,19 @@ type newSessionResult struct {
 }
 
 type loadSessionRequest struct {
-	SessionID string `json:"sessionId"`
-	Cwd       string `json:"cwd"`
-	McpServers []any  `json:"mcpServers,omitempty"`
+	SessionID  string            `json:"sessionId"`
+	Cwd        string            `json:"cwd"`
+	McpServers []mcpServerConfig `json:"mcpServers,omitempty"`
 }
 
 type promptRequest struct {
-	SessionID string            `json:"sessionId"`
-	MessageID string            `json:"messageId,omitempty"`
-	Prompt    []contentBlock     `json:"prompt"`
+	SessionID string         `json:"sessionId"`
+	MessageID string         `json:"messageId,omitempty"`
+	Prompt    []contentBlock `json:"prompt"`
 }
 
 type promptResult struct {
-	StopReason  string `json:"stopReason"`
+	StopReason    string `json:"stopReason"`
 	UserMessageID string `json:"userMessageId,omitempty"`
 }
 
@@ -160,9 +164,9 @@ type cancelRequest struct {
 }
 
 type requestPermissionRequest struct {
-	SessionID string         `json:"sessionId"`
-	ToolCall   toolCallUpdate `json:"toolCall"`
-	Options    []permissionOption `json:"options"`
+	SessionID string             `json:"sessionId"`
+	ToolCall  permissionToolCall `json:"toolCall"`
+	Options   []permissionOption `json:"options"`
 }
 
 type permissionOption struct {
@@ -190,8 +194,21 @@ type sessionUpdate struct {
 	RawOutput     map[string]any `json:"rawOutput,omitempty"`
 }
 
-type toolCallUpdate struct {
-	ToolCallID string `json:"toolCallId"`
+type permissionToolCall struct {
+	ToolCallID string         `json:"toolCallId"`
+	Title      string         `json:"title,omitempty"`
+	Kind       string         `json:"kind,omitempty"`
+	Status     string         `json:"status,omitempty"`
+	RawInput   map[string]any `json:"rawInput,omitempty"`
+}
+
+type permissionResult struct {
+	Outcome *permissionOutcome `json:"outcome,omitempty"`
+}
+
+type permissionOutcome struct {
+	Outcome  string `json:"outcome"`
+	OptionID string `json:"optionId,omitempty"`
 }
 
 // Run starts the ACP stdio server.
@@ -263,13 +280,6 @@ func Run(opts RunOptions) error {
 	_ = skillsMgr.Load()
 	srv.skillsMgr = skillsMgr
 
-	registry := tools.NewRegistry(cwd, sbMgr.GetActive())
-	registry.RegisterDefaults()
-	if skillsMgr != nil {
-		registry.Register(tools.NewSkillRefTool(skillsMgr))
-	}
-	srv.registry = registry
-
 	cfResult := contextfiles.LoadContextFiles(cwd, config.ConfigDir(), settings.ContextFiles.ExtraFiles)
 	if ctx := contextfiles.BuildContextString(cfResult); ctx != "" {
 		srv.extraContext = ctx + skillsMgr.BuildAllSkillsContext()
@@ -281,7 +291,11 @@ func Run(opts RunOptions) error {
 			if err == io.EOF {
 				return nil
 			}
-			return err
+			srv.writeMessage(map[string]any{
+				"jsonrpc": "2.0",
+				"error":   &rpcError{Code: -32700, Message: err.Error()},
+			})
+			continue
 		}
 
 		if len(req.Method) == 0 && len(req.ID) > 0 {
@@ -408,6 +422,15 @@ func convertModelConfigs(providerName string, models []config.ModelConfig) []*pr
 	return result
 }
 
+func (s *server) newToolRegistry() *tools.Registry {
+	registry := tools.NewRegistry(s.cwd, s.sbMgr.GetActive())
+	registry.RegisterDefaults()
+	if s.skillsMgr != nil {
+		registry.Register(tools.NewSkillRefTool(s.skillsMgr))
+	}
+	return registry
+}
+
 func (s *server) handleInitialize(req rpcRequest) {
 	var in initializeRequest
 	_ = json.Unmarshal(req.Params, &in)
@@ -416,14 +439,14 @@ func (s *server) handleInitialize(req rpcRequest) {
 		AgentCapabilities: agentCaps{
 			LoadSession: true,
 			PromptCapabilities: promptCaps{
-				Image:           true,
+				Image:           false,
 				Audio:           false,
-				EmbeddedContext: true,
+				EmbeddedContext: false,
 			},
 			SessionCapabilities: sessionCaps{
 				Cancel: true,
 			},
-			McPCapabilities: map[string]bool{"http": false, "sse": false},
+			McPCapabilities: map[string]bool{"stdio": true, "http": false, "sse": false},
 		},
 		AgentInfo: clientInfo{
 			Name:    "vibecoding",
@@ -437,39 +460,82 @@ func (s *server) handleInitialize(req rpcRequest) {
 
 func (s *server) handleNewSession(req rpcRequest) {
 	var in newSessionRequest
-	_ = json.Unmarshal(req.Params, &in)
+	if err := json.Unmarshal(req.Params, &in); err != nil {
+		s.writeResponse(req.ID, nil, &rpcError{Code: -32602, Message: "invalid params"})
+		return
+	}
+	if strings.TrimSpace(in.Cwd) == "" {
+		in.Cwd = s.cwd
+	}
+	if !filepath.IsAbs(in.Cwd) {
+		s.writeResponse(req.ID, nil, &rpcError{Code: -32602, Message: "cwd must be an absolute path"})
+		return
+	}
+	registry := s.newToolRegistry()
+	mcpClients, err := connectMCPServers(context.Background(), in.McpServers, registry)
+	if err != nil {
+		s.writeResponse(req.ID, nil, &rpcError{Code: -32000, Message: err.Error()})
+		return
+	}
 	mgr := session.New(in.Cwd, s.settings.GetSessionDir())
 	if err := mgr.InitWithID(""); err != nil {
+		closeMCPClients(mcpClients)
 		s.writeResponse(req.ID, nil, &rpcError{Code: -32000, Message: err.Error()})
 		return
 	}
 	id := mgr.GetHeader().ID
 	s.mu.Lock()
-	s.sessions[id] = &sessionRuntime{id: id, mgr: mgr}
+	if old := s.sessions[id]; old != nil {
+		closeMCPClients(old.mcp)
+	}
+	s.sessions[id] = &sessionRuntime{id: id, mgr: mgr, registry: registry, mcp: mcpClients}
 	s.mu.Unlock()
 	s.writeResponse(req.ID, newSessionResult{SessionID: id}, nil)
 }
 
 func (s *server) handleLoadSession(req rpcRequest) {
 	var in loadSessionRequest
-	_ = json.Unmarshal(req.Params, &in)
-	mgr, err := session.OpenByID(in.Cwd, s.settings.GetSessionDir(), in.SessionID)
+	if err := json.Unmarshal(req.Params, &in); err != nil {
+		s.writeResponse(req.ID, nil, &rpcError{Code: -32602, Message: "invalid params"})
+		return
+	}
+	if strings.TrimSpace(in.Cwd) == "" {
+		in.Cwd = s.cwd
+	}
+	if !filepath.IsAbs(in.Cwd) {
+		s.writeResponse(req.ID, nil, &rpcError{Code: -32602, Message: "cwd must be an absolute path"})
+		return
+	}
+	registry := s.newToolRegistry()
+	mcpClients, err := connectMCPServers(context.Background(), in.McpServers, registry)
 	if err != nil {
 		s.writeResponse(req.ID, nil, &rpcError{Code: -32000, Message: err.Error()})
 		return
 	}
+	mgr, err := session.OpenByID(in.Cwd, s.settings.GetSessionDir(), in.SessionID)
+	if err != nil {
+		closeMCPClients(mcpClients)
+		s.writeResponse(req.ID, nil, &rpcError{Code: -32000, Message: err.Error()})
+		return
+	}
 	s.mu.Lock()
-	s.sessions[in.SessionID] = &sessionRuntime{id: in.SessionID, mgr: mgr}
+	if old := s.sessions[in.SessionID]; old != nil {
+		closeMCPClients(old.mcp)
+	}
+	s.sessions[in.SessionID] = &sessionRuntime{id: in.SessionID, mgr: mgr, registry: registry, mcp: mcpClients}
 	s.mu.Unlock()
 	for _, msg := range mgr.GetMessages() {
 		s.emitMessage(in.SessionID, msg)
 	}
-	s.writeResponse(req.ID, map[string]any{}, nil)
+	s.writeResponse(req.ID, nil, nil)
 }
 
 func (s *server) handlePrompt(req rpcRequest) {
 	var in promptRequest
-	_ = json.Unmarshal(req.Params, &in)
+	if err := json.Unmarshal(req.Params, &in); err != nil {
+		s.writeResponse(req.ID, nil, &rpcError{Code: -32602, Message: "invalid params"})
+		return
+	}
 	rt := s.sessionForPrompt(in.SessionID)
 	if rt == nil {
 		s.writeResponse(req.ID, nil, &rpcError{Code: -32000, Message: "unknown session"})
@@ -481,7 +547,17 @@ func (s *server) handlePrompt(req rpcRequest) {
 		return
 	}
 	ctx, cancel := context.WithCancel(context.Background())
+	promptKey := rawIDKey(req.ID)
+	rt.cancelMu.Lock()
+	if rt.cancel != nil {
+		rt.cancelMu.Unlock()
+		cancel()
+		s.writeResponse(req.ID, nil, &rpcError{Code: -32000, Message: "session already has an active prompt"})
+		return
+	}
 	rt.cancel = cancel
+	rt.promptID = promptKey
+	rt.cancelMu.Unlock()
 	rt.agent = agent.New(agent.Config{
 		Provider:      s.p,
 		Model:         s.m,
@@ -497,17 +573,41 @@ func (s *server) handlePrompt(req rpcRequest) {
 			ReserveTokens:    s.settings.Compaction.ReserveTokens,
 			KeepRecentTokens: s.settings.Compaction.KeepRecentTokens,
 		},
-		ApprovalHandler: func(toolName string, args map[string]any) bool {
-			return s.requestPermission(rt.id, toolName, args)
+		ApprovalHandler: func(toolCallID, toolName string, args map[string]any) bool {
+			return s.requestPermission(rt.id, toolCallID, toolName, args)
 		},
-	}, s.registry)
+	}, rt.registry)
 	go func() {
+		defer func() {
+			rt.cancelMu.Lock()
+			if rt.promptID == promptKey {
+				rt.cancel = nil
+				rt.promptID = ""
+			}
+			rt.cancelMu.Unlock()
+			cancel()
+		}()
+		stopReason := "end_turn"
+		var runErr error
 		events := rt.agent.Run(ctx, userText)
 		for ev := range events {
 			s.handleAgentEvent(rt.id, ev)
+			switch ev.Type {
+			case agent.EventDone:
+				stopReason = normalizeStopReason(ev.StopReason)
+			case agent.EventError:
+				if ev.Error != nil {
+					runErr = ev.Error
+				}
+				stopReason = normalizeStopReason(ev.StopReason)
+			}
 		}
+		if runErr != nil && stopReason != "cancelled" {
+			s.writeResponse(req.ID, nil, &rpcError{Code: -32000, Message: runErr.Error()})
+			return
+		}
+		s.writeResponse(req.ID, promptResult{StopReason: stopReason, UserMessageID: in.MessageID}, nil)
 	}()
-	s.writeResponse(req.ID, promptResult{StopReason: "started", UserMessageID: in.MessageID}, nil)
 }
 
 func (s *server) handleCancel(req rpcRequest) {
@@ -516,10 +616,16 @@ func (s *server) handleCancel(req rpcRequest) {
 	s.mu.Lock()
 	rt := s.sessions[in.SessionID]
 	s.mu.Unlock()
-	if rt != nil && rt.cancel != nil {
-		rt.cancel()
+	if rt != nil {
+		rt.cancelMu.Lock()
+		if rt.cancel != nil {
+			rt.cancel()
+		}
+		rt.cancelMu.Unlock()
 	}
-	s.writeResponse(req.ID, map[string]any{}, nil)
+	if len(req.ID) > 0 {
+		s.writeResponse(req.ID, map[string]any{}, nil)
+	}
 }
 
 func (s *server) sessionForPrompt(sessionID string) *sessionRuntime {
@@ -532,7 +638,7 @@ func (s *server) sessionForPrompt(sessionID string) *sessionRuntime {
 	if err := mgr.InitWithID(sessionID); err != nil {
 		return nil
 	}
-	rt := &sessionRuntime{id: sessionID, mgr: mgr}
+	rt := &sessionRuntime{id: sessionID, mgr: mgr, registry: s.newToolRegistry()}
 	s.sessions[sessionID] = rt
 	return rt
 }
@@ -542,12 +648,12 @@ func (s *server) handleAgentEvent(sessionID string, ev agent.Event) {
 	case agent.EventTextDelta:
 		s.notify(sessionID, sessionUpdate{
 			SessionUpdate: "agent_message_chunk",
-			Content: &contentBlock{Type: "text", Text: ev.TextDelta},
+			Content:       &contentBlock{Type: "text", Text: ev.TextDelta},
 		})
 	case agent.EventThinkDelta:
 		s.notify(sessionID, sessionUpdate{
 			SessionUpdate: "agent_thought_chunk",
-			Content: &contentBlock{Type: "text", Text: ev.ThinkDelta},
+			Content:       &contentBlock{Type: "text", Text: ev.ThinkDelta},
 		})
 	case agent.EventToolCall:
 		if ev.ToolCall != nil {
@@ -564,29 +670,28 @@ func (s *server) handleAgentEvent(sessionID string, ev agent.Event) {
 			SessionUpdate: "tool_call_update",
 			ToolCallID:    ev.ToolCallID,
 			Title:         ev.ToolName,
-			Status:        "running",
+			Status:        "in_progress",
 			RawInput:      map[string]any{"args": ev.ToolArgs},
 		})
-	case agent.EventToolResult:
+	case agent.EventToolExecutionEnd:
+		status := "completed"
+		if ev.ToolError != nil {
+			status = "failed"
+		}
 		s.notify(sessionID, sessionUpdate{
 			SessionUpdate: "tool_call_update",
 			ToolCallID:    ev.ToolCallID,
 			Title:         ev.ToolName,
-			Status:        "completed",
+			Status:        status,
 			RawOutput:     map[string]any{"content": ev.ToolResult},
 		})
+	case agent.EventToolResult:
 	case agent.EventUsage:
-		s.notify(sessionID, sessionUpdate{
-			SessionUpdate: "tool_call_update",
-		})
 	case agent.EventDone:
-		s.notify(sessionID, sessionUpdate{
-			SessionUpdate: "agent_message_chunk",
-		})
 	}
 }
 
-func (s *server) requestPermission(sessionID, toolName string, args map[string]any) bool {
+func (s *server) requestPermission(sessionID, toolCallID, toolName string, args map[string]any) bool {
 	id := s.nextRequestID()
 	ch := make(chan json.RawMessage, 1)
 	s.mu.Lock()
@@ -594,7 +699,13 @@ func (s *server) requestPermission(sessionID, toolName string, args map[string]a
 	s.mu.Unlock()
 	s.notifyRequest(id, "session/request_permission", requestPermissionRequest{
 		SessionID: sessionID,
-		ToolCall:  toolCallUpdate{ToolCallID: id},
+		ToolCall: permissionToolCall{
+			ToolCallID: toolCallID,
+			Title:      toolName,
+			Kind:       "execute",
+			Status:     "pending",
+			RawInput:   map[string]any{"args": args},
+		},
 		Options: []permissionOption{
 			{OptionID: "allow-once", Name: "Allow once", Kind: "allow_once"},
 			{OptionID: "reject-once", Name: "Reject", Kind: "reject_once"},
@@ -604,12 +715,9 @@ func (s *server) requestPermission(sessionID, toolName string, args map[string]a
 	case <-time.After(30 * time.Second):
 		return false
 	case resp := <-ch:
-		var out struct {
-			OptionID string `json:"optionId"`
-			Approved bool   `json:"approved"`
-		}
+		var out permissionResult
 		_ = json.Unmarshal(resp, &out)
-		return out.Approved || out.OptionID == "allow-once"
+		return out.Outcome != nil && out.Outcome.Outcome == "selected" && out.Outcome.OptionID == "allow-once"
 	}
 }
 
@@ -674,6 +782,19 @@ func promptToText(blocks []contentBlock) string {
 	return strings.Join(parts, "\n")
 }
 
+func normalizeStopReason(reason string) string {
+	switch reason {
+	case "", "stop", "end_turn", "tool_use":
+		return "end_turn"
+	case "max_tokens", "length":
+		return "max_tokens"
+	case "cancelled", "aborted":
+		return "cancelled"
+	default:
+		return "refusal"
+	}
+}
+
 func (s *server) nextRequestID() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -683,37 +804,30 @@ func (s *server) nextRequestID() string {
 
 func (s *server) readRequest() (rpcRequest, error) {
 	var req rpcRequest
-	headers := make(map[string]string)
-	for {
-		line, err := s.r.ReadString('\n')
-		if err != nil {
-			return req, err
-		}
-		line = strings.TrimRight(line, "\r\n")
-		if line == "" {
-			break
-		}
-		if idx := strings.Index(line, ":"); idx >= 0 {
-			headers[strings.ToLower(strings.TrimSpace(line[:idx]))] = strings.TrimSpace(line[idx+1:])
-		}
-	}
-	length := 0
-	fmt.Sscanf(headers["content-length"], "%d", &length)
-	if length <= 0 {
-		return req, fmt.Errorf("missing content-length")
-	}
-	payload := make([]byte, length)
-	if _, err := io.ReadFull(s.r, payload); err != nil {
+	line, err := s.r.ReadBytes('\n')
+	if err != nil {
 		return req, err
 	}
-	if err := json.Unmarshal(payload, &req); err != nil {
+	payload := strings.TrimRight(string(line), "\r\n")
+	if strings.TrimSpace(payload) == "" {
+		return req, fmt.Errorf("empty message")
+	}
+	if err := json.Unmarshal([]byte(payload), &req); err != nil {
 		return req, err
 	}
 	return req, nil
 }
 
 func (s *server) writeResponse(id json.RawMessage, result any, errResp *rpcError) {
-	resp := rpcResponse{JSONRPC: "2.0", ID: id, Result: result, Error: errResp}
+	resp := map[string]any{
+		"jsonrpc": "2.0",
+		"id":      id,
+	}
+	if errResp != nil {
+		resp["error"] = errResp
+	} else {
+		resp["result"] = result
+	}
 	s.writeMessage(resp)
 }
 
@@ -741,8 +855,8 @@ func (s *server) writeMessage(v any) {
 	data, _ := json.Marshal(v)
 	s.wmu.Lock()
 	defer s.wmu.Unlock()
-	fmt.Fprintf(s.w, "Content-Length: %d\r\n\r\n", len(data))
 	_, _ = s.w.Write(data)
+	_, _ = s.w.Write([]byte("\n"))
 	if f, ok := s.w.(interface{ Flush() error }); ok {
 		_ = f.Flush()
 	}
