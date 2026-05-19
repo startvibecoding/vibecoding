@@ -745,27 +745,6 @@ func (a *Agent) executeToolCallsParallel(ctx context.Context, toolCalls []provid
 
 // executeSingleToolCall executes a single tool call.
 func (a *Agent) executeSingleToolCall(ctx context.Context, tc provider.ToolCallBlock, ch chan<- Event) provider.Message {
-	ch <- Event{
-		Type:       EventToolExecutionStart,
-		ToolCallID: tc.ID,
-		ToolName:   tc.Name,
-		ToolArgs:   map[string]any{},
-	}
-
-	// Find tool
-	tool, ok := a.registry.Get(tc.Name)
-	if !ok {
-		errMsg := fmt.Sprintf("unknown tool: %s", tc.Name)
-		ch <- Event{
-			Type:       EventToolExecutionEnd,
-			ToolCallID: tc.ID,
-			ToolName:   tc.Name,
-			ToolResult: errMsg,
-			ToolError:  fmt.Errorf("%s", errMsg),
-		}
-		return provider.NewToolResultMessage(tc.ID, tc.Name, errMsg, true)
-	}
-
 	// Parse arguments
 	var params map[string]any
 	if len(tc.Arguments) > 0 {
@@ -780,6 +759,30 @@ func (a *Agent) executeSingleToolCall(ctx context.Context, tc provider.ToolCallB
 			}
 			return provider.NewToolResultMessage(tc.ID, tc.Name, errMsg, true)
 		}
+	}
+	if params == nil {
+		params = map[string]any{}
+	}
+
+	ch <- Event{
+		Type:       EventToolExecutionStart,
+		ToolCallID: tc.ID,
+		ToolName:   tc.Name,
+		ToolArgs:   params,
+	}
+
+	// Find tool
+	tool, ok := a.registry.Get(tc.Name)
+	if !ok {
+		errMsg := fmt.Sprintf("unknown tool: %s", tc.Name)
+		ch <- Event{
+			Type:       EventToolExecutionEnd,
+			ToolCallID: tc.ID,
+			ToolName:   tc.Name,
+			ToolResult: errMsg,
+			ToolError:  fmt.Errorf("%s", errMsg),
+		}
+		return provider.NewToolResultMessage(tc.ID, tc.Name, errMsg, true)
 	}
 
 	// Check if tool call should be blocked

@@ -663,6 +663,7 @@ func (s *server) handleAgentEvent(sessionID string, ev agent.Event) {
 				Title:         ev.ToolCall.Name,
 				Kind:          "other",
 				Status:        "pending",
+				RawInput:      toolRawInput(ev.ToolArgs),
 			})
 		}
 	case agent.EventToolExecutionStart:
@@ -671,7 +672,7 @@ func (s *server) handleAgentEvent(sessionID string, ev agent.Event) {
 			ToolCallID:    ev.ToolCallID,
 			Title:         ev.ToolName,
 			Status:        "in_progress",
-			RawInput:      map[string]any{"args": ev.ToolArgs},
+			RawInput:      toolRawInput(ev.ToolArgs),
 		})
 	case agent.EventToolExecutionEnd:
 		status := "completed"
@@ -704,7 +705,7 @@ func (s *server) requestPermission(sessionID, toolCallID, toolName string, args 
 			Title:      toolName,
 			Kind:       "execute",
 			Status:     "pending",
-			RawInput:   map[string]any{"args": args},
+			RawInput:   toolRawInput(args),
 		},
 		Options: []permissionOption{
 			{OptionID: "allow-once", Name: "Allow once", Kind: "allow_once"},
@@ -780,6 +781,14 @@ func promptToText(blocks []contentBlock) string {
 		}
 	}
 	return strings.Join(parts, "\n")
+}
+
+func toolRawInput(args map[string]any) map[string]any {
+	raw := map[string]any{"args": args}
+	for key, value := range args {
+		raw[key] = value
+	}
+	return raw
 }
 
 func normalizeStopReason(reason string) string {
