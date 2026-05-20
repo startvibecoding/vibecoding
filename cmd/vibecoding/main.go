@@ -41,6 +41,13 @@ func debugLog(format string, args ...interface{}) {
 }
 
 func main() {
+	rootCmd := newRootCommand(run, acp.Run)
+	if err := rootCmd.Execute(); err != nil {
+		os.Exit(1)
+	}
+}
+
+func newRootCommand(runFn func([]string, runOptions) error, acpRunFn func(acp.RunOptions) error) *cobra.Command {
 	var (
 		flagProvider string
 		flagModel    string
@@ -61,8 +68,9 @@ func main() {
 		Short:   "VibeCoding - AI coding assistant",
 		Long:    "VibeCoding is an AI-powered coding assistant that runs in your terminal.\nSupports OpenAI and Anthropic APIs with sandboxed execution.",
 		Version: version,
+		Args:    cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return run(args, runOptions{
+			return runFn(args, runOptions{
 				provider:  flagProvider,
 				model:     flagModel,
 				mode:      flagMode,
@@ -83,7 +91,7 @@ func main() {
 		Short: "Run the Agent Client Protocol server",
 		Long:  "Run vibecoding as an ACP-compliant stdio agent.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return acp.Run(acp.RunOptions{
+			return acpRunFn(acp.RunOptions{
 				Provider: flagProvider,
 				Model:    flagModel,
 				Mode:     flagMode,
@@ -118,9 +126,7 @@ func main() {
 	acpFlags.BoolVar(&flagDebug, "debug", false, "Enable debug logging")
 
 	rootCmd.AddCommand(acpCmd)
-	if err := rootCmd.Execute(); err != nil {
-		os.Exit(1)
-	}
+	return rootCmd
 }
 
 type runOptions struct {
