@@ -1,15 +1,18 @@
 package tools
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
+	"os/exec"
+	"regexp"
 	"strings"
+
+	"github.com/startvibecoding/vibecoding/internal/vendored"
 )
 
-// FindTool searches for files by name pattern.
+// FindTool searches for files by name pattern using fd.
 type FindTool struct {
 	registry *Registry
 }
@@ -58,6 +61,42 @@ func (t *FindTool) Parameters() json.RawMessage {
 	}`)
 }
 
+// globToRegex 将 glob 模式转换为正则表达式
+// 例如: *.go → \.go$, *.test.* → \.test\..*
+func globToRegex(pattern string) string {
+	var result strings.Builder
+	result.WriteString("^")
+
+	for i := 0; i < len(pattern); i++ {
+		c := pattern[i]
+		switch c {
+		case '*':
+			result.WriteString(".*")
+		case '?':
+			result.WriteString(".")
+		case '.':
+			result.WriteString("\\.")
+		case '{':
+			// 处理 {a,b} 这种模式
+			result.WriteString("(?:")
+		case '}':
+			result.WriteString(")")
+		case ',':
+			// 在 {a,b} 内部的逗号
+			result.WriteString("|")
+		default:
+			// 转义特殊正则字符
+			if strings.ContainsRune(`\+^${}|[]()`, rune(c)) {
+				result.WriteByte('\\')
+			}
+			result.WriteByte(c)
+		}
+	}
+
+	result.WriteString("$")
+	return result.String()
+}
+
 func (t *FindTool) Execute(ctx context.Context, params map[string]any) (ToolResult, error) {
 	pattern, _ := params["pattern"].(string)
 	if pattern == "" {
@@ -83,52 +122,57 @@ func (t *FindTool) Execute(ctx context.Context, params map[string]any) (ToolResu
 		maxResults = int(v)
 	}
 
-	var results []string
-	count := 0
+	// 获取 fd 路径
+	fdPath := vendored.FdPath()
+	if fdPath == "" {
+		return ToolResult{}, fmt.Errorf("fd 未安装，请先运行 make prepare-vendored")
+	}
 
-	depth := 0
-	filepath.Walk(searchPath, func(path string, info os.FileInfo, err error) error {
-		if err != nil || count >= maxResults {
-			return nil
+	// 将 glob 模式转为正则
+	regexPattern := globToRegex(pattern)
+	// 验证正则是否有效
+	if _, err := regexp.Compile(regexPattern); err != nil {
+		return ToolResult{}, fmt.Errorf("invalid pattern %q: %w", pattern, err)
+	}
+
+	// 构建 fd 命令参数
+	args := []string{
+		"--color=never",
+		fmt.Sprintf("--max-results=%d", maxResults),
+	}
+
+	if maxDepth >= 0 {
+		args = append(args, fmt.Sprintf("--max-depth=%d", maxDepth))
+	}
+
+	// fd 使用正则匹配
+	args = append(args, "--", regexPattern, searchPath)
+
+	// 执行 fd
+	cmd := exec.CommandContext(ctx, fdPath, args...)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err := cmd.Run()
+	if err != nil {
+		// fd 返回 1 表示没有匹配
+		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
+			return NewTextToolResult("(no files found)"), nil
 		}
-
-		// Track depth for directories
-		if info.IsDir() {
-			name := info.Name()
-			if name == ".git" || name == "node_modules" || name == "vendor" || name == ".vibe" {
-				return filepath.SkipDir
-			}
-			relPath, _ := filepath.Rel(searchPath, path)
-			if relPath == "." {
-				depth = 0
-			} else {
-				depth = strings.Count(relPath, string(os.PathSeparator)) + 1
-			}
-			if maxDepth >= 0 && depth > maxDepth {
-				return filepath.SkipDir
-			}
-			return nil
+		// 其他错误
+		errMsg := strings.TrimSpace(stderr.String())
+		if errMsg != "" {
+			return ToolResult{}, fmt.Errorf("fd 执行失败: %s", errMsg)
 		}
+		return ToolResult{}, fmt.Errorf("fd 执行失败: %w", err)
+	}
 
-		matched, _ := filepath.Match(pattern, info.Name())
-		if !matched {
-			// Also try matching the full relative path
-			relPath, _ := filepath.Rel(searchPath, path)
-			matched, _ = filepath.Match(pattern, relPath)
-		}
-
-		if matched {
-			relPath, _ := filepath.Rel(searchPath, path)
-			results = append(results, relPath)
-			count++
-		}
-
-		return nil
-	})
-
-	if len(results) == 0 {
+	output := strings.TrimSpace(stdout.String())
+	if output == "" {
 		return NewTextToolResult("(no files found)"), nil
 	}
 
-	return NewTextToolResult(strings.Join(results, "\n")), nil
+	// fd 输出就是每行一个路径，与原实现格式一致
+	return NewTextToolResult(output), nil
 }

@@ -1,17 +1,17 @@
 package tools
 
 import (
-	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
-	"regexp"
+	"os/exec"
 	"strings"
+
+	"github.com/startvibecoding/vibecoding/internal/vendored"
 )
 
-// GrepTool searches file contents using regex patterns.
+// GrepTool searches file contents using ripgrep (rg).
 type GrepTool struct {
 	registry *Registry
 }
@@ -66,11 +66,6 @@ func (t *GrepTool) Execute(ctx context.Context, params map[string]any) (ToolResu
 		return ToolResult{}, fmt.Errorf("pattern is required")
 	}
 
-	re, err := regexp.Compile(pattern)
-	if err != nil {
-		return ToolResult{}, fmt.Errorf("invalid regex: %w", err)
-	}
-
 	searchPath := t.registry.GetWorkDir()
 	if v, ok := params["path"].(string); ok && v != "" {
 		var err error
@@ -86,83 +81,52 @@ func (t *GrepTool) Execute(ctx context.Context, params map[string]any) (ToolResu
 		maxResults = int(v)
 	}
 
-	var results []string
-	count := 0
-
-	err = filepath.Walk(searchPath, func(path string, info os.FileInfo, err error) error {
-		if err != nil || count >= maxResults {
-			return nil
-		}
-		if info.IsDir() {
-			name := info.Name()
-			if name == ".git" || name == "node_modules" || name == "vendor" || name == ".vibe" {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-
-		// Filter by include pattern
-		if include != "" {
-			matched, _ := filepath.Match(include, info.Name())
-			if !matched {
-				return nil
-			}
-		}
-
-		// Skip binary files
-		if isBinary(path) {
-			return nil
-		}
-
-		f, err := os.Open(path)
-		if err != nil {
-			return nil
-		}
-		defer f.Close()
-
-		scanner := bufio.NewScanner(f)
-		lineNum := 0
-		for scanner.Scan() {
-			lineNum++
-			line := scanner.Text()
-			if re.MatchString(line) {
-				relPath, _ := filepath.Rel(searchPath, path)
-				results = append(results, fmt.Sprintf("%s:%d: %s", relPath, lineNum, strings.TrimSpace(line)))
-				count++
-				if count >= maxResults {
-					return nil
-				}
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		return ToolResult{}, fmt.Errorf("search failed: %w", err)
+	// 获取 rg 路径
+	rgPath := vendored.RgPath()
+	if rgPath == "" {
+		return ToolResult{}, fmt.Errorf("ripgrep (rg) 未安装，请先运行 make prepare-vendored")
 	}
 
-	if len(results) == 0 {
+	// 构建 rg 命令参数
+	args := []string{
+		"--no-heading",
+		"--line-number",
+		"--color=never",
+		fmt.Sprintf("--max-count=%d", maxResults),
+	}
+
+	if include != "" {
+		args = append(args, "-g", include)
+	}
+
+	args = append(args, "--", pattern, searchPath)
+
+	// 执行 rg
+	cmd := exec.CommandContext(ctx, rgPath, args...)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err := cmd.Run()
+	if err != nil {
+		// rg 返回 1 表示没有匹配，这不是错误
+		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
+			return NewTextToolResult("(no matches found)"), nil
+		}
+		// 其他错误
+		errMsg := strings.TrimSpace(stderr.String())
+		if errMsg != "" {
+			return ToolResult{}, fmt.Errorf("rg 执行失败: %s", errMsg)
+		}
+		return ToolResult{}, fmt.Errorf("rg 执行失败: %w", err)
+	}
+
+	output := strings.TrimSpace(stdout.String())
+	if output == "" {
 		return NewTextToolResult("(no matches found)"), nil
 	}
 
-	return NewTextToolResult(strings.Join(results, "\n")), nil
-}
-
-func isBinary(path string) bool {
-	f, err := os.Open(path)
-	if err != nil {
-		return true
-	}
-	defer f.Close()
-
-	buf := make([]byte, 512)
-	n, err := f.Read(buf)
-	if err != nil {
-		return true
-	}
-	for i := 0; i < n; i++ {
-		if buf[i] == 0 {
-			return true
-		}
-	}
-	return false
+	// rg 默认输出格式: file:line:content
+	// 与原实现格式一致: file:line: content
+	return NewTextToolResult(output), nil
 }

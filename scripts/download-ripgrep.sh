@@ -172,7 +172,6 @@ printf 'target\tfilename\tchecksum_filename\turl\tchecksum_url\n' > "$MANIFEST_F
 # - linux/amd64
 # - linux/arm64
 # - linux-musl/amd64
-# - linux-musl/arm64
 # - darwin/amd64
 # - darwin/arm64
 # - windows/amd64
@@ -184,18 +183,16 @@ printf 'target\tfilename\tchecksum_filename\turl\tchecksum_url\n' > "$MANIFEST_F
 # 所以这里使用显式映射。
 
 download_target "linux/amd64" required \
-    '^ripgrep_.*_amd64\.deb$' \
+    '^ripgrep-.*-x86_64-unknown-linux-musl\.tar\.gz$' \
     '^ripgrep-.*-x86_64-unknown-linux-gnu\.tar\.gz$'
 
 download_target "linux/arm64" required \
-    '^ripgrep-.*-aarch64-unknown-linux-gnu\.tar\.gz$' \
-    '^ripgrep_.*_arm64\.deb$'
+    '^ripgrep-.*-aarch64-unknown-linux-gnu\.tar\.gz$'
 
 download_target "linux-musl/amd64" required \
     '^ripgrep-.*-x86_64-unknown-linux-musl\.tar\.gz$'
 
-download_target "linux-musl/arm64" optional \
-    '^ripgrep-.*-aarch64-unknown-linux-musl\.tar\.gz$'
+
 
 download_target "darwin/amd64" required \
     '^ripgrep-.*-x86_64-apple-darwin\.tar\.gz$'

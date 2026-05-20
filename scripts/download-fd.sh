@@ -185,7 +185,6 @@ printf 'target\tfilename\tchecksum_filename\turl\tchecksum_url\n' > "$MANIFEST_F
 # - linux/amd64
 # - linux/arm64
 # - linux-musl/amd64
-# - linux-musl/arm64
 # - darwin/amd64
 # - darwin/arm64
 # - windows/amd64
@@ -195,20 +194,15 @@ printf 'target\tfilename\tchecksum_filename\turl\tchecksum_url\n' > "$MANIFEST_F
 # 若某些目标不存在，则会在 manifest 中标记为 MISSING。
 
 download_target_exact "linux/amd64" required \
-    "fd_${VERSION}_amd64.deb" \
     "fd-${TAG_WITH_V}-x86_64-unknown-linux-gnu.tar.gz"
 
 download_target_exact "linux/arm64" required \
-    "fd_${VERSION}_arm64.deb" \
     "fd-${TAG_WITH_V}-aarch64-unknown-linux-gnu.tar.gz"
 
 download_target_exact "linux-musl/amd64" required \
-    "fd-musl_${VERSION}_amd64.deb" \
     "fd-${TAG_WITH_V}-x86_64-unknown-linux-musl.tar.gz"
 
-download_target_exact "linux-musl/arm64" required \
-    "fd-musl_${VERSION}_arm64.deb" \
-    "fd-${TAG_WITH_V}-aarch64-unknown-linux-musl.tar.gz"
+
 
 download_target_exact "darwin/amd64" optional \
     "fd-${TAG_WITH_V}-x86_64-apple-darwin.tar.gz"

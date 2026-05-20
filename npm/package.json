@@ -33,7 +33,6 @@
     "vibecoding-installer-linux-x64": "v0.1.10-1-gf4728e0-dirty",
     "vibecoding-installer-linux-arm64": "v0.1.10-1-gf4728e0-dirty",
     "vibecoding-installer-linux-musl-x64": "v0.1.10-1-gf4728e0-dirty",
-    "vibecoding-installer-linux-musl-arm64": "v0.1.10-1-gf4728e0-dirty",
     "vibecoding-installer-darwin-x64": "v0.1.10-1-gf4728e0-dirty",
     "vibecoding-installer-darwin-arm64": "v0.1.10-1-gf4728e0-dirty",
     "vibecoding-installer-win32-x64": "v0.1.10-1-gf4728e0-dirty",

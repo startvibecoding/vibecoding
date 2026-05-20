@@ -3,6 +3,7 @@
 .PHONY: dist dist-linux dist-darwin dist-windows dist-deb dist-tarball dist-zip
 .PHONY: clean-all checksums
 .PHONY: npm-version npm-publish npm-publish-all npm-pack npm-pack-all
+.PHONY: prepare-vendored
 
 # Variables
 BINARY_NAME=vibecoding
@@ -21,12 +22,13 @@ help:
 	@echo "VibeCoding Build System"
 	@echo ""
 	@echo "Build targets:"
-	@echo "  build          Build for current platform"
-	@echo "  build-linux    Build for Linux (amd64, arm64)"
-	@echo "  build-linux-musl  Build for Linux musl (amd64, arm64)"
-	@echo "  build-darwin   Build for macOS (amd64, arm64)"
-	@echo "  build-windows  Build for Windows (amd64, arm64)"
-	@echo "  build-all      Build for all platforms and architectures"
+	@echo "  build            Build for current platform"
+	@echo "  build-linux      Build for Linux (amd64, arm64)"
+	@echo "  build-linux-musl Build for Linux musl (amd64)"
+	@echo "  build-darwin     Build for macOS (amd64, arm64)"
+	@echo "  build-windows    Build for Windows (amd64, arm64)"
+	@echo "  build-all        Build for all platforms and architectures"
+	@echo "  prepare-vendored Extract rg/fd binaries for go:embed"
 	@echo ""
 	@echo "Distribution targets:"
 	@echo "  dist           Build all distribution packages"
@@ -54,8 +56,12 @@ help:
 	@echo "  run            Build and run"
 	@echo "  help           Show this help"
 
-# Build for current platform
-build:
+# Prepare vendored binaries for go:embed
+prepare-vendored:
+	./scripts/prepare-vendored.sh
+
+# Build for current platform (requires prepare-vendored first)
+build: prepare-vendored
 	go build $(LDFLAGS) -o bin/$(BINARY_NAME) ./cmd/vibecoding
 
 vendored-tools:
@@ -65,7 +71,6 @@ vendored-tools:
 		linux amd64 \
 		linux arm64 \
 		linux-musl amd64 \
-		linux-musl arm64 \
 		darwin amd64 \
 		darwin arm64 \
 		windows amd64 \
@@ -88,7 +93,6 @@ build-linux-musl:
 	@echo "Building for Linux musl..."
 	@mkdir -p bin
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build $(LDFLAGS) -o bin/$(BINARY_NAME)-linux-musl-amd64 ./cmd/vibecoding
-	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build $(LDFLAGS) -o bin/$(BINARY_NAME)-linux-musl-arm64 ./cmd/vibecoding
 
 build-darwin:
 	@echo "Building for macOS..."
@@ -150,10 +154,8 @@ dist-tarball: build-linux build-linux-musl build-darwin vendored-tools
 			./scripts/build-tarball.sh $${os} $${arch} $(VERSION); \
 		done; \
 	done
-	@for arch in amd64 arm64; do \
-		echo "  Packaging $(BINARY_NAME)-linux-musl-$${arch}.tar.gz..."; \
-		./scripts/build-tarball.sh linux-musl $${arch} $(VERSION); \
-	done
+	@echo "  Packaging $(BINARY_NAME)-linux-musl-amd64.tar.gz..."; \
+	./scripts/build-tarball.sh linux-musl amd64 $(VERSION)
 
 # Distribution: deb for Linux
 dist-deb: build-linux build-linux-musl vendored-tools
@@ -163,10 +165,8 @@ dist-deb: build-linux build-linux-musl vendored-tools
 		echo "  Packaging $(BINARY_NAME)_$(VERSION)_$${arch}.deb..."; \
 		./scripts/build-deb.sh $${arch} $(VERSION); \
 	done
-	@for arch in amd64 arm64; do \
-		echo "  Packaging $(BINARY_NAME)_$(VERSION)_$${arch}-musl.deb..."; \
-		./scripts/build-deb.sh $${arch}-musl $(VERSION); \
-	done
+	@echo "  Packaging $(BINARY_NAME)_$(VERSION)_amd64-musl.deb..."; \
+	./scripts/build-deb.sh amd64-musl $(VERSION)
 
 # Distribution: zip for Windows
 dist-zip: build-windows vendored-tools

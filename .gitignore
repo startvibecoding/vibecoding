@@ -29,3 +29,4 @@ dist/
 /vibecoding
 npm/*.tgz
 *.png
+internal/vendored/bin/

@@ -9,7 +9,17 @@ import (
 	"time"
 
 	"github.com/startvibecoding/vibecoding/internal/sandbox"
+	"github.com/startvibecoding/vibecoding/internal/vendored"
 )
+
+func TestMain(m *testing.M) {
+	// 提取 vendored 二进制到 ~/.vibecoding/bin/
+	if err := vendored.Ensure(); err != nil {
+		// 如果提取失败，跳过需要 rg/fd 的测试
+		os.Exit(m.Run())
+	}
+	os.Exit(m.Run())
+}
 
 func TestNewRegistry(t *testing.T) {
 	sb := sandbox.NewNoneSandbox()

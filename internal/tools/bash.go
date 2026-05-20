@@ -14,6 +14,7 @@ import (
 
 	"github.com/startvibecoding/vibecoding/internal/platform"
 	"github.com/startvibecoding/vibecoding/internal/sandbox"
+	"github.com/startvibecoding/vibecoding/internal/vendored"
 )
 
 // limitedBuffer wraps bytes.Buffer with a max size limit.
@@ -152,13 +153,36 @@ func (t *BashTool) Execute(ctx context.Context, params map[string]any) (ToolResu
 
 	workDir := t.registry.GetWorkDir()
 
+	// 构建环境变量，将 ~/.vibecoding/bin 加入 PATH
+	rgPath := vendored.RgPath()
+	vendoredBin := ""
+	if rgPath != "" {
+		vendoredBin = filepath.Dir(rgPath)
+	}
+	env := os.Environ()
+	if vendoredBin != "" && vendoredBin != "." {
+		for i, e := range env {
+			// Windows 环境变量不区分大小写，PATH/Path/path 都可以
+			if len(e) >= 5 && strings.EqualFold(e[:5], "PATH=") {
+				env[i] = "PATH=" + vendoredBin + string(os.PathListSeparator) + e[5:]
+				break
+			}
+		}
+	}
+
 	var cmd *exec.Cmd
 	sb := t.registry.GetSandbox()
 	if sb != nil && sb.IsAvailable() {
+		envPath := os.Getenv("PATH")
+		if vendoredBin != "" && vendoredBin != "." {
+			envPath = vendoredBin + string(os.PathListSeparator) + envPath
+		}
 		opts := sandbox.ExecOpts{
 			WorkDir: workDir,
 			Timeout: timeout,
-			EnvVars: make(map[string]string),
+			EnvVars: map[string]string{
+				"PATH": envPath,
+			},
 		}
 		cmd = sb.WrapCommand(cmdCtx, shell, command, opts)
 	} else {
@@ -166,6 +190,7 @@ func (t *BashTool) Execute(ctx context.Context, params map[string]any) (ToolResu
 		args := platform.ShellArgs(shell, command)
 		cmd = exec.CommandContext(cmdCtx, shell, args...)
 		cmd.Dir = workDir
+		cmd.Env = env
 		// Detach child process group so background children don't block the shell.
 		setSysProcAttr(cmd)
 		// If the shell exits while a background child still holds stdio,
