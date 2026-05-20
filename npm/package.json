@@ -1,6 +1,6 @@
 {
   "name": "vibecoding-installer",
-  "version": "v0.1.12-dirty",
+  "version": "v0.1.12-1-gf35b555-dirty",
   "description": "AI coding assistant for the terminal",
   "main": "index.js",
   "bin": {
@@ -30,12 +30,12 @@
     "node": ">=14"
   },
   "optionalDependencies": {
-    "vibecoding-installer-linux-x64": "v0.1.12-dirty",
-    "vibecoding-installer-linux-arm64": "v0.1.12-dirty",
-    "vibecoding-installer-linux-musl-x64": "v0.1.12-dirty",
-    "vibecoding-installer-darwin-x64": "v0.1.12-dirty",
-    "vibecoding-installer-darwin-arm64": "v0.1.12-dirty",
-    "vibecoding-installer-win32-x64": "v0.1.12-dirty",
-    "vibecoding-installer-win32-arm64": "v0.1.12-dirty"
+    "vibecoding-installer-linux-x64": "v0.1.12-1-gf35b555-dirty",
+    "vibecoding-installer-linux-arm64": "v0.1.12-1-gf35b555-dirty",
+    "vibecoding-installer-linux-musl-x64": "v0.1.12-1-gf35b555-dirty",
+    "vibecoding-installer-darwin-x64": "v0.1.12-1-gf35b555-dirty",
+    "vibecoding-installer-darwin-arm64": "v0.1.12-1-gf35b555-dirty",
+    "vibecoding-installer-win32-x64": "v0.1.12-1-gf35b555-dirty",
+    "vibecoding-installer-win32-arm64": "v0.1.12-1-gf35b555-dirty"
   }
 }
