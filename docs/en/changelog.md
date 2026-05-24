@@ -1,5 +1,34 @@
 # Changelog
 
+## v0.1.19
+
+### ✨ Features
+
+- **TUI Tool Details Modal**
+  - Replaced `Ctrl+O` toggle-expand with a scrollable full-screen modal overlay showing all tool calls and results
+  - Supports PgUp/PgDn, Up/Down, Home/End navigation; Esc/Ctrl+O/q to close
+  - Tool headers now display file paths; removed content truncation in tool args display
+  - Write tool results show diff summary in the one-line summary line
+  - Key input is blocked while the modal is open to prevent accidental actions
+
+- **Write Tool Diff Summary**
+  - `write` tool now computes LCS-based line-level diff when overwriting files
+  - Returns structured diff info (`+N -N` with line ranges) in the tool result
+  - Skips diff computation for very large files (>200K line pairs) to avoid memory pressure
+
+### 🛠 Improvements
+
+- **Unified Shell Args Across Sandbox Backends**
+  - All sandbox backends (`none`, `mac`, `windows`) now use `platform.ShellArgs()` for cmd.exe/PowerShell argument construction
+  - Fixes Windows cmd.exe and PowerShell commands in sandboxed execution modes
+  - `ShellArgs` now normalizes shell name to lowercase before matching
+
+### 🧪 Testing
+
+- Added `TestNoneSandboxWrapCommandUsesPlatformShellArgs` covering cmd.exe and PowerShell argument generation
+
+---
+
 ## v0.1.18
 
 ### 🐛 Bug Fixes

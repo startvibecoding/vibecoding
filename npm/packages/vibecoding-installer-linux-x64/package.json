@@ -1,11 +1,19 @@
 {
   "name": "vibecoding-installer-linux-x64",
-  "version": "v0.1.17-dirty",
+  "version": "v0.1.19",
   "description": "VibeCoding native binary for linux-x64",
-  "os": ["linux"],
-  "cpu": ["x64"],
-  "libc": ["glibc"],
-  "files": ["bin/"],
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "libc": [
+    "glibc"
+  ],
+  "files": [
+    "bin/"
+  ],
   "license": "MIT",
   "repository": {
     "type": "git",

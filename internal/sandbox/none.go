@@ -5,6 +5,8 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+
+	"github.com/startvibecoding/vibecoding/internal/platform"
 )
 
 // NoneSandbox executes commands without any sandbox restrictions.
@@ -18,7 +20,7 @@ func NewNoneSandbox() *NoneSandbox {
 // WrapCommand returns a plain command without any sandbox restrictions.
 // It inherits the full parent environment and overlays opts.EnvVars on top.
 func (s *NoneSandbox) WrapCommand(ctx context.Context, shell, cmd string, opts ExecOpts) *exec.Cmd {
-	c := exec.CommandContext(ctx, shell, "-c", cmd)
+	c := exec.CommandContext(ctx, shell, platform.ShellArgs(shell, cmd)...)
 
 	if opts.WorkDir != "" {
 		c.Dir = opts.WorkDir

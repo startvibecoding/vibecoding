@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+
+	"github.com/startvibecoding/vibecoding/internal/platform"
 )
 
 // macSandbox implements sandbox using macOS sandbox-exec (Seatbelt).
@@ -91,7 +93,7 @@ func (s *macSandbox) WrapCommand(ctx context.Context, shell, cmd string, opts Ex
 	profilePath := f.Name()
 
 	// sandbox-exec -f profile.sb command
-	args := []string{"-f", profilePath, shell, "-c", cmd}
+	args := append([]string{"-f", profilePath, shell}, platform.ShellArgs(shell, cmd)...)
 	c := exec.CommandContext(ctx, "sandbox-exec", args...)
 	c.Dir = opts.WorkDir
 

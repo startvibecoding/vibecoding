@@ -112,10 +112,11 @@ func DefaultShell() string {
 
 // ShellArgs returns the arguments to execute a command in the shell.
 func ShellArgs(shell, command string) []string {
+	normalizedShell := strings.ToLower(shell)
 	switch {
-	case strings.Contains(shell, "powershell"):
+	case strings.Contains(normalizedShell, "powershell"):
 		return []string{"-NoProfile", "-NonInteractive", "-Command", command}
-	case strings.Contains(shell, "cmd"):
+	case strings.Contains(normalizedShell, "cmd"):
 		return []string{"/c", command}
 	default: // bash, zsh, etc.
 		return []string{"-c", command}

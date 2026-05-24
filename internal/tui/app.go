@@ -37,6 +37,11 @@ var (
 			Foreground(lipgloss.Color("243")).
 			Italic(true)
 
+	toolModalStyle = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("63")).
+			Padding(0, 1)
+
 	errorStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("196")).
 			Bold(true)
@@ -128,8 +133,10 @@ type App struct {
 	// Initial message to display
 	initialMessage string
 
-	// Tool output expansion
-	toolOutputExpanded bool
+	// Tool output modal
+	toolModalOpen         bool
+	toolModalOffset       int
+	toolModalPinnedBottom bool
 
 	// Context usage
 	contextUsage *ctxpkg.ContextUsage
@@ -370,10 +377,36 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, nil
 
 	case tea.KeyMsg:
-		// Queue the key event
-		a.queueInput(msg)
+		if a.toolModalOpen {
+			switch msg.String() {
+			case "esc", "ctrl+o", "q":
+				a.closeToolModal()
+				return a, nil
+			case "up":
+				a.scrollToolModal(-1)
+				return a, nil
+			case "down":
+				a.scrollToolModal(1)
+				return a, nil
+			case "pgup":
+				a.scrollToolModal(-a.toolModalPageSize())
+				return a, nil
+			case "pgdown":
+				a.scrollToolModal(a.toolModalPageSize())
+				return a, nil
+			case "home":
+				a.toolModalOffset = 0
+				a.toolModalPinnedBottom = false
+				return a, nil
+			case "end":
+				a.toolModalOffset = a.maxToolModalOffset()
+				a.toolModalPinnedBottom = true
+				return a, nil
+			}
+			return a, nil
+		}
 
-		// For special keys, process immediately
+		// Special keys are processed immediately; regular text input is batched.
 		switch msg.String() {
 		case "ctrl+c":
 			return a, tea.Quit
@@ -443,9 +476,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "end":
 			return a, nil
 		case "ctrl+o":
-			// Toggle tool output expansion
-			a.toolOutputExpanded = !a.toolOutputExpanded
-			a.updateViewportContent()
+			a.openLatestToolModal()
 			return a, nil
 		}
 
@@ -458,6 +489,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
+		a.queueInput(msg)
 		return a, nil
 
 	case agentStartMsg:
@@ -580,6 +612,9 @@ func (a *App) View() string {
 	}
 
 	footer := a.renderFooter()
+	if a.toolModalOpen {
+		return lipgloss.JoinVertical(lipgloss.Left, a.renderToolModal(), footer)
+	}
 
 	parts := []string{a.input.View(), footer}
 	if a.liveContent != "" {
@@ -688,23 +723,11 @@ func (a *App) renderMessageAt(idx int) string {
 }
 
 func (a *App) renderToolResult(result toolResult) string {
-	if a.toolOutputExpanded {
-		var content string
-		if result.toolArgs != nil {
-			argsStr := formatToolArgs(result.toolName, result.toolArgs)
-			if result.fullContent != "" {
-				content = fmt.Sprintf("🔧 [%s]\n%s\n---\n%s", result.toolName, argsStr, result.fullContent)
-			} else {
-				content = fmt.Sprintf("🔧 [%s]\n%s", result.toolName, argsStr)
-			}
-		} else if result.fullContent != "" {
-			content = fmt.Sprintf("🔧 [%s]\n%s", result.toolName, result.fullContent)
-		} else {
-			content = fmt.Sprintf("🔧 [%s]", result.toolName)
-		}
-		return toolStyle.Render(content)
+	summary := result.summary
+	if summary == "" {
+		summary = "..."
 	}
-	return toolStyle.Render(fmt.Sprintf("🔧 [%s] %s", result.toolName, result.summary))
+	return toolStyle.Render(fmt.Sprintf("%s %s", formatToolHeader(result), summary))
 }
 
 func (a *App) renderAssistantMessage(idx int) string {
@@ -738,10 +761,6 @@ func formatToolArgs(toolName string, args map[string]any) string {
 		}
 		if content, ok := args["content"]; ok {
 			contentStr := fmt.Sprintf("%v", content)
-			// Truncate content if too long
-			if len(contentStr) > 500 {
-				contentStr = contentStr[:500] + "..."
-			}
 			parts = append(parts, fmt.Sprintf("content:\n%s", contentStr))
 		}
 	case "edit":
@@ -755,12 +774,6 @@ func formatToolArgs(toolName string, args map[string]any) string {
 					if m, ok := e.(map[string]any); ok {
 						oldT, _ := m["oldText"].(string)
 						newT, _ := m["newText"].(string)
-						if len(oldT) > 100 {
-							oldT = oldT[:100] + "..."
-						}
-						if len(newT) > 100 {
-							newT = newT[:100] + "..."
-						}
 						parts = append(parts, fmt.Sprintf("edit[%d]:\n  old: %s\n  new: %s", idx+1, oldT, newT))
 					}
 				}
@@ -786,6 +799,182 @@ func formatToolArgs(toolName string, args map[string]any) string {
 	}
 
 	return strings.Join(parts, "\n")
+}
+
+func formatToolHeader(result toolResult) string {
+	path := toolPath(result.toolArgs)
+	if path == "" {
+		return fmt.Sprintf("🔧 [%s]", result.toolName)
+	}
+	return fmt.Sprintf("🔧 [%s] %s", result.toolName, path)
+}
+
+func toolPath(args map[string]any) string {
+	if args == nil {
+		return ""
+	}
+	path, _ := args["path"].(string)
+	return path
+}
+
+func summarizeWriteToolResult(result string) string {
+	lines := strings.Split(result, "\n")
+	diff := ""
+	deleted := ""
+	added := ""
+	for _, line := range lines {
+		if strings.HasPrefix(line, "Diff: ") {
+			diff = strings.TrimPrefix(line, "Diff: ")
+			continue
+		}
+		if strings.HasPrefix(line, "- lines: ") {
+			deleted = strings.TrimPrefix(line, "- lines: ")
+			continue
+		}
+		if strings.HasPrefix(line, "+ lines: ") {
+			added = strings.TrimPrefix(line, "+ lines: ")
+		}
+	}
+	if diff != "" && (deleted != "" || added != "") {
+		return fmt.Sprintf("%s (-%s +%s)", diff, deleted, added)
+	}
+	if diff != "" {
+		return diff
+	}
+	return "Written"
+}
+
+func (a *App) openLatestToolModal() {
+	a.toolModalOpen = true
+	a.toolModalPinnedBottom = true
+	a.toolModalOffset = a.maxToolModalOffset()
+}
+
+func (a *App) closeToolModal() {
+	a.toolModalOpen = false
+	a.toolModalOffset = 0
+	a.toolModalPinnedBottom = false
+}
+
+func formatToolModalContent(result toolResult) string {
+	var parts []string
+	if result.toolArgs != nil {
+		if args := formatToolArgs(result.toolName, result.toolArgs); strings.TrimSpace(args) != "" {
+			parts = append(parts, args)
+		}
+	}
+	if result.fullContent != "" {
+		parts = append(parts, "---", result.fullContent)
+	}
+	if len(parts) == 0 {
+		return "(no output)"
+	}
+	return strings.Join(parts, "\n")
+}
+
+func (a *App) renderExpandedTranscript() string {
+	var parts []string
+	for i := range a.messages {
+		msg := a.renderExpandedMessageAt(i)
+		if strings.TrimSpace(msg) != "" {
+			parts = append(parts, msg)
+		}
+	}
+	if len(parts) == 0 {
+		return "(no conversation yet)"
+	}
+	return strings.Join(parts, "\n\n")
+}
+
+func (a *App) renderExpandedMessageAt(idx int) string {
+	for i, tr := range a.toolResults {
+		if tr.msgIndex == idx {
+			return a.renderExpandedToolResult(a.toolResults[i])
+		}
+	}
+	if _, ok := a.assistantRaw[idx]; ok {
+		return a.renderAssistantMessage(idx)
+	}
+	if idx >= 0 && idx < len(a.messages) {
+		return a.messages[idx]
+	}
+	return ""
+}
+
+func (a *App) renderExpandedToolResult(result toolResult) string {
+	content := formatToolHeader(result)
+	details := formatToolModalContent(result)
+	if strings.TrimSpace(details) != "" {
+		content += "\n" + details
+	}
+	return toolStyle.Render(content)
+}
+
+func (a *App) renderToolModal() string {
+	width := a.width - 4
+	if width < 20 {
+		width = 20
+	}
+	height := a.toolModalPageSize()
+	contentText := a.renderExpandedTranscript()
+	lines := strings.Split(contentText, "\n")
+	maxOffset := a.maxToolModalOffset()
+	if a.toolModalPinnedBottom {
+		a.toolModalOffset = maxOffset
+	}
+	if a.toolModalOffset > maxOffset {
+		a.toolModalOffset = maxOffset
+	}
+	end := a.toolModalOffset + height
+	if end > len(lines) {
+		end = len(lines)
+	}
+	visible := strings.Join(lines[a.toolModalOffset:end], "\n")
+	if visible == "" {
+		visible = " "
+	}
+	position := fmt.Sprintf("lines %d-%d/%d", a.toolModalOffset+1, end, len(lines))
+	if len(lines) == 0 {
+		position = "lines 0-0/0"
+	}
+	title := fmt.Sprintf("Expanded transcript  %s  PgUp/PgDn Up/Down Esc", position)
+	content := title + "\n" + strings.Repeat("─", minInt(width-2, len(title))) + "\n" + visible
+	return toolModalStyle.Width(width).Height(height + 3).Render(content)
+}
+
+func (a *App) scrollToolModal(delta int) {
+	a.toolModalOffset += delta
+	if a.toolModalOffset < 0 {
+		a.toolModalOffset = 0
+	}
+	if maxOffset := a.maxToolModalOffset(); a.toolModalOffset > maxOffset {
+		a.toolModalOffset = maxOffset
+	}
+	a.toolModalPinnedBottom = a.toolModalOffset == a.maxToolModalOffset()
+}
+
+func (a *App) toolModalPageSize() int {
+	pageSize := a.height - 6
+	if pageSize < 3 {
+		return 3
+	}
+	return pageSize
+}
+
+func (a *App) maxToolModalOffset() int {
+	lines := strings.Split(a.renderExpandedTranscript(), "\n")
+	maxOffset := len(lines) - a.toolModalPageSize()
+	if maxOffset < 0 {
+		return 0
+	}
+	return maxOffset
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 // formatCachePercent calculates and returns the cache hit rate string, or empty string if no data.
@@ -888,10 +1077,10 @@ func (a *App) renderFooter() string {
 		if a.lastDuration > 0 {
 			status += " | last " + formatDuration(a.lastDuration)
 		}
-		if a.toolOutputExpanded {
-			status += " | Tab:mode Esc:abort Ctrl+O:collapse"
+		if a.toolModalOpen {
+			status += " | Esc/Ctrl+O:close PgUp/PgDn Up/Down:scroll"
 		} else {
-			status += " | Tab:mode Esc:abort Ctrl+O:expand"
+			status += " | Tab:mode Esc:abort Ctrl+O:details"
 		}
 	}
 
@@ -1226,7 +1415,8 @@ func (a *App) handleCommand(cmd string) tea.Cmd {
 		a.addMessage(statusStyle.Render("Keyboard shortcuts:"))
 		a.addMessage(statusStyle.Render("  Tab       - Cycle mode (plan/agent/yolo)"))
 		a.addMessage(statusStyle.Render("  Esc       - Abort current operation"))
-		a.addMessage(statusStyle.Render("  Ctrl+O    - Toggle tool output"))
+		a.addMessage(statusStyle.Render("  Ctrl+O    - Open latest tool details"))
+		a.addMessage(statusStyle.Render("  PgUp/PgDn - Page tool details when open"))
 		a.addMessage(statusStyle.Render("  Mouse wheel - Scroll terminal history"))
 	default:
 		// Handle /skill:<name> syntax (colon-separated)
@@ -1657,7 +1847,8 @@ func (a *App) handleAgentEvent(event agent.Event) tea.Cmd {
 				toolArgs:   event.ToolArgs,
 				msgIndex:   msgIdx,
 			})
-			a.addMessage(toolStyle.Render(fmt.Sprintf("🔧 [%s] ...", event.ToolCall.Name)))
+			a.messages = append(a.messages, "")
+			a.printHistory(a.renderMessageAt(msgIdx))
 		}
 		return a.listenAgentEvents()
 
@@ -1677,7 +1868,7 @@ func (a *App) handleAgentEvent(event agent.Event) tea.Cmd {
 					lines := strings.Split(event.ToolResult, "\n")
 					a.toolResults[j].summary = fmt.Sprintf("%d lines", len(lines))
 				case "write":
-					a.toolResults[j].summary = "Written"
+					a.toolResults[j].summary = summarizeWriteToolResult(event.ToolResult)
 				case "edit":
 					a.toolResults[j].summary = "Applied"
 				default:
@@ -1691,11 +1882,7 @@ func (a *App) handleAgentEvent(event agent.Event) tea.Cmd {
 		if foundIdx >= 0 {
 			idx := a.toolResults[foundIdx].msgIndex
 			if idx >= 0 && idx < len(a.messages) {
-				if event.ToolName == "bash" || a.toolOutputExpanded {
-					a.messages[idx] = toolStyle.Render(fmt.Sprintf("🔧 [%s]\n%s", event.ToolName, event.ToolResult))
-				} else {
-					a.messages[idx] = toolStyle.Render(fmt.Sprintf("🔧 [%s] %s", event.ToolName, a.toolResults[foundIdx].summary))
-				}
+				a.messages[idx] = ""
 				a.printHistory(a.renderMessageAt(idx))
 			}
 		}

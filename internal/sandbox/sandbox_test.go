@@ -85,6 +85,30 @@ func TestNoneSandboxWrapCommand(t *testing.T) {
 	}
 }
 
+func TestNoneSandboxWrapCommandUsesPlatformShellArgs(t *testing.T) {
+	sb := NewNoneSandbox()
+
+	cmd := sb.WrapCommand(context.Background(), "cmd.exe", "echo hello", ExecOpts{})
+	if cmd == nil {
+		t.Fatal("expected non-nil command")
+	}
+	if len(cmd.Args) != 3 || cmd.Args[1] != "/c" || cmd.Args[2] != "echo hello" {
+		t.Fatalf("expected cmd.exe arguments to use /c, got %#v", cmd.Args)
+	}
+
+	cmd = sb.WrapCommand(context.Background(), "PowerShell.exe", "echo hello", ExecOpts{})
+	if cmd == nil {
+		t.Fatal("expected non-nil command")
+	}
+	if len(cmd.Args) != 5 ||
+		cmd.Args[1] != "-NoProfile" ||
+		cmd.Args[2] != "-NonInteractive" ||
+		cmd.Args[3] != "-Command" ||
+		cmd.Args[4] != "echo hello" {
+		t.Fatalf("expected PowerShell arguments, got %#v", cmd.Args)
+	}
+}
+
 func TestNewBwrapSandbox(t *testing.T) {
 	sb := NewBwrapSandbox("/tmp", LevelStandard)
 

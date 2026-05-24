@@ -7,6 +7,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+
+	"github.com/startvibecoding/vibecoding/internal/platform"
 )
 
 // winSandbox implements a basic sandbox for Windows.
@@ -58,15 +60,7 @@ func (s *winSandbox) WrapCommand(ctx context.Context, shell, cmd string, opts Ex
 		shell = "cmd.exe"
 	}
 
-	var args []string
-	if shell == "cmd.exe" {
-		args = []string{"/c", cmd}
-	} else {
-		// PowerShell
-		args = []string{"-NoProfile", "-NonInteractive", "-Command", cmd}
-	}
-
-	c := exec.CommandContext(ctx, shell, args...)
+	c := exec.CommandContext(ctx, shell, platform.ShellArgs(shell, cmd)...)
 	c.Dir = opts.WorkDir
 
 	// Build restricted environment

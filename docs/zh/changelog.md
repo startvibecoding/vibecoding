@@ -1,5 +1,34 @@
 # 更新日志
 
+## v0.1.19
+
+### ✨ 新功能
+
+- **TUI 工具详情 Modal**
+  - 将 `Ctrl+O` 切换展开替换为可滚动的全屏 modal overlay，展示所有工具调用及结果
+  - 支持 PgUp/PgDn、Up/Down、Home/End 导航；Esc/Ctrl+O/q 关闭
+  - 工具标题现在显示文件路径；移除了工具参数中的内容截断
+  - Write 工具结果在摘要行显示 diff 信息
+  - Modal 打开时屏蔽键盘输入，防止误操作
+
+- **Write 工具 Diff 摘要**
+  - `write` 工具现在在覆盖文件时基于 LCS 算法计算行级 diff
+  - 在工具结果中返回结构化 diff 信息（`+N -N` 及行范围）
+  - 对超大文件（>20 万行对）跳过 diff 计算，避免内存压力
+
+### 🛠 改进
+
+- **沙箱后端统一 Shell 参数**
+  - 所有沙箱后端（`none`、`mac`、`windows`）现在统一使用 `platform.ShellArgs()` 构造 cmd.exe/PowerShell 参数
+  - 修复沙箱模式下 Windows cmd.exe 和 PowerShell 命令执行问题
+  - `ShellArgs` 现在在匹配前将 shell 名称转为小写
+
+### 🧪 测试
+
+- 新增 `TestNoneSandboxWrapCommandUsesPlatformShellArgs`，覆盖 cmd.exe 和 PowerShell 参数生成
+
+---
+
 ## v0.1.18
 
 ### 🐛 问题修复
