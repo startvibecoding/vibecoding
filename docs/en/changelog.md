@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.1.23
+
+### 🛠 Improvements
+
+- **DeepSeek Thinking Format**
+  - Added `thinkingFormat: "deepseek"` for DeepSeek reasoning requests
+  - OpenAI-compatible requests now send `thinking: {type: "enabled"}` with `reasoning_effort`
+  - Anthropic-compatible requests now send `thinking: {type: "enabled"}` with `output_config.effort`
+  - Kept `thinkingFormat: "xiaomi"` as the legacy thinking-only format
+
+### 🧪 Testing
+
+- Added provider tests covering the new `deepseek` thinking format for both OpenAI- and Anthropic-compatible requests
+
+### 📝 Docs
+
+- Updated `anthropic-api` skill and configuration docs for the new `thinkingFormat` option
+
+---
+
 ## v0.1.22
 
 ### ✨ Features
@@ -17,12 +37,6 @@
 - Added MCP config loader coverage for placeholder template filtering
 
 ### 🛠 Improvements
-
-- **DeepSeek Thinking Format**
-  - Added `thinkingFormat: "deepseek"` for DeepSeek reasoning requests
-  - OpenAI-compatible requests now send `thinking: {type: "enabled"}` with `reasoning_effort`
-  - Anthropic-compatible requests now send `thinking: {type: "enabled"}` with `output_config.effort`
-  - Kept `thinkingFormat: "xiaomi"` as the legacy thinking-only format
 
 - **Shared MCP Runtime**
   - Moved MCP connection/tool registration out of ACP-only code into a shared runtime used by ACP and normal CLI/TUI sessions

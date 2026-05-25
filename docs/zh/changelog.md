@@ -1,5 +1,25 @@
 # 更新日志
 
+## v0.1.23
+
+### 🛠 改进
+
+- **DeepSeek Thinking 格式**
+  - 新增 `thinkingFormat: "deepseek"`，用于 DeepSeek 推理请求
+  - OpenAI 兼容请求现在会发送 `thinking: {type: "enabled"}` 和 `reasoning_effort`
+  - Anthropic 兼容请求现在会发送 `thinking: {type: "enabled"}` 和 `output_config.effort`
+  - 保留 `thinkingFormat: "xiaomi"` 作为旧的 thinking-only 格式
+
+### 🧪 测试
+
+- 新增 provider 测试，覆盖 OpenAI 与 Anthropic 兼容请求下的 `deepseek` thinking 格式
+
+### 📝 文档
+
+- 更新 `anthropic-api` skill 与配置文档中关于 `thinkingFormat` 选项的说明
+
+---
+
 ## v0.1.22
 
 ### ✨ 新功能
@@ -17,12 +37,6 @@
 - 新增 MCP 配置加载测试，覆盖模板占位服务器过滤
 
 ### 🛠 改进
-
-- **DeepSeek Thinking 格式**
-  - 新增 `thinkingFormat: "deepseek"`，用于 DeepSeek 推理请求
-  - OpenAI 兼容请求现在会发送 `thinking: {type: "enabled"}` 和 `reasoning_effort`
-  - Anthropic 兼容请求现在会发送 `thinking: {type: "enabled"}` 和 `output_config.effort`
-  - 保留 `thinkingFormat: "xiaomi"` 作为旧的 thinking-only 格式
 
 - **共享 MCP 运行时**
   - 将 MCP 连接与工具注册从 ACP 私有实现提取为共享运行时，ACP 与普通 CLI/TUI 会话复用同一套逻辑
