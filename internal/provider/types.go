@@ -251,6 +251,7 @@ const (
 	StreamUsage                                  // Usage statistics
 	StreamDone                                   // Stream completed
 	StreamError                                  // Error occurred
+	StreamRetry                                  // Retry attempt in progress
 )
 
 // StreamEvent represents a single event from a streaming response.
@@ -263,6 +264,8 @@ type StreamEvent struct {
 	Usage          *Usage         // for StreamUsage
 	Error          error          // for StreamError
 	StopReason     string         // for StreamDone: "stop", "length", "toolUse", "error", "aborted"
+	RetryAttempt   int            // for StreamRetry: current attempt number
+	RetryMax       int            // for StreamRetry: max attempts
 }
 
 // ChatParams contains all parameters for a chat request.

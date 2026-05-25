@@ -582,13 +582,13 @@ UI color theme for the terminal interface.
 
 ### retry
 
-API call retry configuration with exponential backoff.
+API call retry configuration with exponential backoff. Retries apply to the initial HTTP connection phase only (once SSE streaming begins, it is not retried).
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `enabled` | bool | `true` | Enable automatic retries on transient API errors |
 | `maxRetries` | int | `3` | Maximum number of retry attempts |
-| `baseDelayMs` | int | `2000` | Base delay in milliseconds (doubled on each retry) |
+| `baseDelayMs` | int | `2000` | Base delay in milliseconds (doubles on each retry) |
 
 ```json
 {
@@ -596,6 +596,48 @@ API call retry configuration with exponential backoff.
     "enabled": true,
     "maxRetries": 3,
     "baseDelayMs": 2000
+  }
+}
+```
+
+#### Retryable Errors
+
+The following errors trigger automatic retries:
+
+| Category | Examples |
+|----------|----------|
+| Rate limiting | HTTP 429 |
+| Server errors | HTTP 502, 503, 504 |
+| Network errors | connection refused, connection reset, DNS errors |
+| Timeouts | HTTP client timeout, TCP timeout |
+
+The following are **not** retried:
+- Context cancellation (user pressed Ctrl+C)
+- HTTP 4xx client errors (except 429): 400, 401, 403, 404
+- Successful connections that fail mid-stream
+
+#### Backoff Strategy
+
+Each retry waits `baseDelayMs × 2^attempt` milliseconds, capped at 30 seconds:
+
+| Attempt | Delay (base=2000ms) |
+|---------|--------------------|
+| 1st | 2s |
+| 2nd | 4s |
+| 3rd | 8s |
+
+When a retry occurs, VibeCoding displays a status message in the TUI:
+```
+Retrying (1/3): request timed out — waiting 2.0s...
+Retrying (2/3): rate limited (HTTP 429) — waiting 4.0s...
+```
+
+#### Disabling Retries
+
+```json
+{
+  "retry": {
+    "enabled": false
   }
 }
 ```

@@ -25,6 +25,9 @@ type Provider struct {
 
 	thinkingFormat      string // "", "anthropic", "deepseek", "xiaomi"
 	cacheControlEnabled *bool  // nil=off (must be explicitly enabled), true=on, false=off
+
+	// Retry configuration
+	retryConfig *provider.RetryConfig
 }
 
 // DefaultModels returns the default Anthropic model list.
@@ -79,6 +82,11 @@ func NewProviderWithModels(apiKey, baseURL string, models []*provider.Model) *Pr
 // "xiaomi" = legacy thinking-only format.
 func (p *Provider) SetThinkingFormat(format string) {
 	p.thinkingFormat = format
+}
+
+// SetRetryConfig sets the retry configuration for this provider.
+func (p *Provider) SetRetryConfig(cfg *provider.RetryConfig) {
+	p.retryConfig = cfg
 }
 
 // SetCacheControlEnabled sets whether to use cache_control markers.
@@ -276,6 +284,7 @@ func (p *Provider) Chat(ctx context.Context, params provider.ChatParams) <-chan 
 			}
 		}
 
+		// Build the request body once (reused across retries)
 		body, err := json.Marshal(reqBody)
 		if err != nil {
 			ch <- provider.StreamEvent{Type: provider.StreamError, Error: fmt.Errorf("marshal: %w", err)}
@@ -287,35 +296,87 @@ func (p *Provider) Chat(ctx context.Context, params provider.ChatParams) <-chan 
 			fmt.Fprintf(os.Stderr, "[DEBUG] Request body: %s\n", string(body))
 		}
 
-		req, err := http.NewRequestWithContext(ctx, "POST", p.baseURL+"/v1/messages", bytes.NewReader(body))
-		if err != nil {
-			ch <- provider.StreamEvent{Type: provider.StreamError, Error: fmt.Errorf("request: %w", err)}
-			return
+		// Retry loop: retries only the initial HTTP connection, not the SSE stream.
+		maxRetries := 0
+		baseDelayMs := 2000
+		if p.retryConfig != nil && p.retryConfig.Enabled {
+			maxRetries = p.retryConfig.MaxRetries
+			baseDelayMs = p.retryConfig.BaseDelayMs
 		}
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("x-api-key", p.apiKey)
-		req.Header.Set("anthropic-version", "2023-06-01")
-		req.Header.Set("Accept", "text/event-stream")
-		req.Header.Set("User-Agent", ua.ProviderUserAgent())
 
-		resp, err := p.client.Do(req)
-		if err != nil {
-			ch <- provider.StreamEvent{Type: provider.StreamError, Error: fmt.Errorf("send: %w", err)}
-			return
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != http.StatusOK {
-			b, _ := io.ReadAll(resp.Body)
-			// Log request body on error for debugging
-			if os.Getenv("VIBECODING_DEBUG") != "" {
-				fmt.Fprintf(os.Stderr, "[DEBUG] API Error %d: %s\n", resp.StatusCode, string(b))
-				fmt.Fprintf(os.Stderr, "[DEBUG] Request body was: %s\n", string(body))
+		for attempt := 0; attempt <= maxRetries; attempt++ {
+			if err := ctx.Err(); err != nil {
+				ch <- provider.StreamEvent{Type: provider.StreamError, Error: err, StopReason: "aborted"}
+				return
 			}
-			ch <- provider.StreamEvent{Type: provider.StreamError, Error: fmt.Errorf("API %d: %s", resp.StatusCode, string(b))}
+
+			req, err := http.NewRequestWithContext(ctx, "POST", p.baseURL+"/v1/messages", bytes.NewReader(body))
+			if err != nil {
+				ch <- provider.StreamEvent{Type: provider.StreamError, Error: fmt.Errorf("request: %w", err)}
+				return
+			}
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("x-api-key", p.apiKey)
+			req.Header.Set("anthropic-version", "2023-06-01")
+			req.Header.Set("Accept", "text/event-stream")
+			req.Header.Set("User-Agent", ua.ProviderUserAgent())
+
+			resp, err := p.client.Do(req)
+			if err != nil {
+				if attempt < maxRetries && provider.IsRetryable(err, 0) {
+					delay := provider.RetryDelay(attempt, baseDelayMs)
+					ch <- provider.StreamEvent{
+						Type:         provider.StreamRetry,
+						RetryAttempt: attempt + 1,
+						RetryMax:     maxRetries,
+						Error:        fmt.Errorf("%s", provider.FormatRetryMessage(attempt, maxRetries, delay, err)),
+					}
+					select {
+					case <-ctx.Done():
+						ch <- provider.StreamEvent{Type: provider.StreamError, Error: ctx.Err(), StopReason: "aborted"}
+						return
+					case <-time.After(delay):
+					}
+					continue
+				}
+				ch <- provider.StreamEvent{Type: provider.StreamError, Error: fmt.Errorf("send: %w", err)}
+				return
+			}
+
+			if resp.StatusCode != http.StatusOK {
+				b, _ := io.ReadAll(resp.Body)
+				resp.Body.Close()
+				if os.Getenv("VIBECODING_DEBUG") != "" {
+					fmt.Fprintf(os.Stderr, "[DEBUG] API Error %d: %s\n", resp.StatusCode, string(b))
+					fmt.Fprintf(os.Stderr, "[DEBUG] Request body was: %s\n", string(body))
+				}
+				if attempt < maxRetries && provider.IsRetryable(nil, resp.StatusCode) {
+					delay := provider.RetryDelay(attempt, baseDelayMs)
+					ch <- provider.StreamEvent{
+						Type:         provider.StreamRetry,
+						RetryAttempt: attempt + 1,
+						RetryMax:     maxRetries,
+						Error:        fmt.Errorf("%s", provider.FormatRetryMessage(attempt, maxRetries, delay, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(b)))),
+					}
+					select {
+					case <-ctx.Done():
+						ch <- provider.StreamEvent{Type: provider.StreamError, Error: ctx.Err(), StopReason: "aborted"}
+						return
+					case <-time.After(delay):
+					}
+					continue
+				}
+				ch <- provider.StreamEvent{Type: provider.StreamError, Error: fmt.Errorf("API %d: %s", resp.StatusCode, string(b))}
+				return
+			}
+
+			// Success: stream the SSE response. No retry once streaming starts.
+			p.parseSSE(ctx, resp.Body, ch, params)
+			resp.Body.Close()
 			return
 		}
-		p.parseSSE(ctx, resp.Body, ch, params)
+
+		ch <- provider.StreamEvent{Type: provider.StreamError, Error: fmt.Errorf("all %d retry attempts exhausted", maxRetries)}
 	}()
 	return ch
 }

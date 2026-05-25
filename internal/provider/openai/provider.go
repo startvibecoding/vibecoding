@@ -26,6 +26,9 @@ type Provider struct {
 	// Configuration options
 	disableReasoning bool   // Disable reasoning_content support for incompatible APIs
 	thinkingFormat   string // "", "openai", "deepseek", "xiaomi"
+
+	// Retry configuration
+	retryConfig *provider.RetryConfig
 }
 
 // DefaultModels returns the default OpenAI model list.
@@ -86,6 +89,11 @@ func NewProviderWithModels(apiKey, baseURL string, models []*provider.Model) *Pr
 // DisableReasoning disables reasoning_content support for incompatible APIs.
 func (p *Provider) DisableReasoning() {
 	p.disableReasoning = true
+}
+
+// SetRetryConfig sets the retry configuration for this provider.
+func (p *Provider) SetRetryConfig(cfg *provider.RetryConfig) {
+	p.retryConfig = cfg
 }
 
 // IsReasoningDisabled returns whether reasoning support is disabled.
@@ -252,6 +260,7 @@ func (p *Provider) Chat(ctx context.Context, params provider.ChatParams) <-chan 
 			}
 		}
 
+		// Build the request body once (reused across retries)
 		body, err := json.Marshal(reqBody)
 		if err != nil {
 			ch <- provider.StreamEvent{Type: provider.StreamError, Error: fmt.Errorf("marshal request: %w", err)}
@@ -263,30 +272,83 @@ func (p *Provider) Chat(ctx context.Context, params provider.ChatParams) <-chan 
 			fmt.Fprintf(os.Stderr, "[DEBUG] Request body: %s\n", string(body))
 		}
 
-		req, err := http.NewRequestWithContext(ctx, "POST", p.baseURL+"/chat/completions", bytes.NewReader(body))
-		if err != nil {
-			ch <- provider.StreamEvent{Type: provider.StreamError, Error: fmt.Errorf("create request: %w", err)}
-			return
-		}
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Authorization", "Bearer "+p.apiKey)
-		req.Header.Set("Accept", "text/event-stream")
-		req.Header.Set("User-Agent", ua.ProviderUserAgent())
-
-		resp, err := p.client.Do(req)
-		if err != nil {
-			ch <- provider.StreamEvent{Type: provider.StreamError, Error: fmt.Errorf("send request: %w", err)}
-			return
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != http.StatusOK {
-			bodyBytes, _ := io.ReadAll(resp.Body)
-			ch <- provider.StreamEvent{Type: provider.StreamError, Error: fmt.Errorf("API error %d: %s", resp.StatusCode, string(bodyBytes))}
-			return
+		// Retry loop: retries only the initial HTTP connection, not the SSE stream.
+		maxRetries := 0
+		baseDelayMs := 2000
+		if p.retryConfig != nil && p.retryConfig.Enabled {
+			maxRetries = p.retryConfig.MaxRetries
+			baseDelayMs = p.retryConfig.BaseDelayMs
 		}
 
-		p.parseSSE(ctx, resp.Body, ch, params)
+		for attempt := 0; attempt <= maxRetries; attempt++ {
+			if err := ctx.Err(); err != nil {
+				ch <- provider.StreamEvent{Type: provider.StreamError, Error: err, StopReason: "aborted"}
+				return
+			}
+
+			req, err := http.NewRequestWithContext(ctx, "POST", p.baseURL+"/chat/completions", bytes.NewReader(body))
+			if err != nil {
+				ch <- provider.StreamEvent{Type: provider.StreamError, Error: fmt.Errorf("create request: %w", err)}
+				return
+			}
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Authorization", "Bearer "+p.apiKey)
+			req.Header.Set("Accept", "text/event-stream")
+			req.Header.Set("User-Agent", ua.ProviderUserAgent())
+
+			resp, err := p.client.Do(req)
+			if err != nil {
+				if attempt < maxRetries && provider.IsRetryable(err, 0) {
+					delay := provider.RetryDelay(attempt, baseDelayMs)
+					ch <- provider.StreamEvent{
+						Type:         provider.StreamRetry,
+						RetryAttempt: attempt + 1,
+						RetryMax:     maxRetries,
+						Error:        fmt.Errorf("%s", provider.FormatRetryMessage(attempt, maxRetries, delay, err)),
+					}
+					select {
+					case <-ctx.Done():
+						ch <- provider.StreamEvent{Type: provider.StreamError, Error: ctx.Err(), StopReason: "aborted"}
+						return
+					case <-time.After(delay):
+					}
+					continue
+				}
+				ch <- provider.StreamEvent{Type: provider.StreamError, Error: fmt.Errorf("send request: %w", err)}
+				return
+			}
+
+			if resp.StatusCode != http.StatusOK {
+				bodyBytes, _ := io.ReadAll(resp.Body)
+				resp.Body.Close()
+				if attempt < maxRetries && provider.IsRetryable(nil, resp.StatusCode) {
+					delay := provider.RetryDelay(attempt, baseDelayMs)
+					ch <- provider.StreamEvent{
+						Type:         provider.StreamRetry,
+						RetryAttempt: attempt + 1,
+						RetryMax:     maxRetries,
+						Error:        fmt.Errorf("%s", provider.FormatRetryMessage(attempt, maxRetries, delay, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(bodyBytes)))),
+					}
+					select {
+					case <-ctx.Done():
+						ch <- provider.StreamEvent{Type: provider.StreamError, Error: ctx.Err(), StopReason: "aborted"}
+						return
+					case <-time.After(delay):
+					}
+					continue
+				}
+				ch <- provider.StreamEvent{Type: provider.StreamError, Error: fmt.Errorf("API error %d: %s", resp.StatusCode, string(bodyBytes))}
+				return
+			}
+
+			// Success: stream the SSE response. No retry once streaming starts.
+			p.parseSSE(ctx, resp.Body, ch, params)
+			resp.Body.Close()
+			return
+		}
+
+		// All retries exhausted (should not reach here with for..break logic, but safety net)
+		ch <- provider.StreamEvent{Type: provider.StreamError, Error: fmt.Errorf("all %d retry attempts exhausted", maxRetries)}
 	}()
 
 	return ch

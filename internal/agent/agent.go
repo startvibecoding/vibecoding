@@ -495,6 +495,10 @@ func (a *Agent) loop(ctx context.Context, ch chan<- Event) {
 			case provider.StreamError:
 				streamErr = event.Error
 				stopReason = event.StopReason
+			case provider.StreamRetry:
+				if event.Error != nil {
+					ch <- Event{Type: EventStatus, StatusMessage: event.Error.Error()}
+				}
 			}
 		}
 

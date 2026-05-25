@@ -393,12 +393,14 @@ func createProvider(settings *config.Settings, providerName, modelID string) (pr
 			if pc.CacheControl != nil {
 				ap.SetCacheControlEnabled(pc.CacheControl)
 			}
+			configureRetry(ap, settings)
 			p = ap
 		case "openai-chat", "openai":
 			op := openai.NewProviderWithModels(apiKey, pc.BaseURL, models)
 			if pc.ThinkingFormat != "" {
 				op.SetThinkingFormat(pc.ThinkingFormat)
 			}
+			configureRetry(op, settings)
 			p = op
 		default:
 			return nil, nil, fmt.Errorf("unsupported API type: %s (use 'openai-chat' or 'anthropic-messages')", api)
@@ -441,6 +443,22 @@ func createProvider(settings *config.Settings, providerName, modelID string) (pr
 	}
 
 	return p, model, nil
+}
+
+// retryConfigurable is implemented by providers that support retry configuration.
+type retryConfigurable interface {
+	SetRetryConfig(cfg *provider.RetryConfig)
+}
+
+// configureRetry sets retry config on a provider if it supports it.
+func configureRetry(p provider.Provider, settings *config.Settings) {
+	if rc, ok := p.(retryConfigurable); ok {
+		rc.SetRetryConfig(&provider.RetryConfig{
+			Enabled:     settings.Retry.Enabled,
+			MaxRetries:  settings.Retry.MaxRetries,
+			BaseDelayMs: settings.Retry.BaseDelayMs,
+		})
+	}
 }
 
 // convertModelConfigs converts config.ModelConfig to provider.Model.
