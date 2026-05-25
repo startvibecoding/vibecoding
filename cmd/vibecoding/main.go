@@ -309,7 +309,7 @@ func run(args []string, opts runOptions) error {
 
 	// Setup tools
 	registry := tools.NewRegistry(cwd, sbMgr.GetActive())
-	registry.RegisterDefaults()
+	registry.RegisterDefaultsWithPlanTool(settings.IsPlanToolEnabled())
 
 	// Register skill reference tool if skills are available
 	if skillsMgr != nil {

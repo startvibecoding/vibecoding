@@ -70,6 +70,7 @@ Project-level configuration overrides global configuration.
   "defaultProvider": "deepseek-openai",
   "defaultModel": "deepseek-v4-flash",
   "defaultMode": "agent",
+  "enablePlanTool": true,
   "defaultThinkingLevel": "medium",
   "maxOutputTokens": 384000,
   "maxContextTokens": 1000000,
@@ -211,6 +212,20 @@ Options:
 - `plan`: Read-only analysis mode
 - `agent`: Standard read/write mode (default)
 - `yolo`: Full access mode
+
+### enablePlanTool
+
+Whether to register the built-in `plan` tool.
+
+```json
+{
+  "enablePlanTool": true
+}
+```
+
+Options:
+- `true`: Register `plan` tool (default)
+- `false`: Do not register `plan` tool
 
 ### defaultThinkingLevel
 

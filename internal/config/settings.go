@@ -21,6 +21,7 @@ type Settings struct {
 	DefaultModel         string                     `json:"defaultModel,omitempty"`
 	DefaultThinkingLevel string                     `json:"defaultThinkingLevel,omitempty"`
 	DefaultMode          string                     `json:"defaultMode,omitempty"`
+	EnablePlanTool       *bool                      `json:"enablePlanTool,omitempty"`
 	MaxContextTokens     int                        `json:"maxContextTokens,omitempty"`
 	MaxOutputTokens      int                        `json:"maxOutputTokens,omitempty"`
 	ContextFiles         ContextFilesSettings       `json:"contextFiles"`
@@ -130,6 +131,7 @@ func DefaultSettings() *Settings {
 		DefaultModel:         "deepseek-v4-flash",
 		DefaultThinkingLevel: "medium",
 		DefaultMode:          "agent",
+		EnablePlanTool:       boolPtr(true),
 		ContextFiles:         ContextFilesSettings{Enabled: true},
 		SkillsDir:            platform.SkillsDir(),
 		Compaction:           CompactionSettings{Enabled: true, ReserveTokens: 16384, KeepRecentTokens: 20000},
@@ -245,6 +247,9 @@ func mergeSettings(s, proj *Settings) {
 	}
 	if proj.DefaultMode != "" {
 		s.DefaultMode = proj.DefaultMode
+	}
+	if proj.EnablePlanTool != nil {
+		s.EnablePlanTool = boolPtr(*proj.EnablePlanTool)
 	}
 	if proj.MaxContextTokens != 0 {
 		s.MaxContextTokens = proj.MaxContextTokens
@@ -420,6 +425,13 @@ func (s *Settings) GetGlobalSkillsDir() string {
 		return s.SkillsDir
 	}
 	return platform.SkillsDir()
+}
+
+func (s *Settings) IsPlanToolEnabled() bool {
+	if s.EnablePlanTool == nil {
+		return true
+	}
+	return *s.EnablePlanTool
 }
 
 func SaveGlobalSettings(s *Settings) error {

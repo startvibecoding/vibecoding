@@ -255,6 +255,16 @@ func TestDefaultSettingsConfirmBeforeWrite(t *testing.T) {
 	}
 }
 
+func TestDefaultSettingsEnablePlanTool(t *testing.T) {
+	s := DefaultSettings()
+	if s.EnablePlanTool == nil || !*s.EnablePlanTool {
+		t.Fatal("expected enablePlanTool to be enabled by default")
+	}
+	if !s.IsPlanToolEnabled() {
+		t.Fatal("expected IsPlanToolEnabled to return true by default")
+	}
+}
+
 func TestMergeSettingsIgnoresNilProviderAndKeepsExistingProviders(t *testing.T) {
 	base := &Settings{
 		Providers: map[string]*ProviderConfig{
@@ -280,6 +290,18 @@ func TestMergeSettingsIgnoresNilProviderAndKeepsExistingProviders(t *testing.T) 
 	}
 	if base.Providers["new"] == nil || base.Providers["new"].API != "anthropic" {
 		t.Fatalf("new provider = %#v, want anthropic provider", base.Providers["new"])
+	}
+}
+
+func TestMergeSettingsEnablePlanToolOverride(t *testing.T) {
+	base := DefaultSettings()
+	disabled := false
+	project := &Settings{EnablePlanTool: &disabled}
+
+	mergeSettings(base, project)
+
+	if base.IsPlanToolEnabled() {
+		t.Fatal("expected enablePlanTool=false override to be applied")
 	}
 }
 

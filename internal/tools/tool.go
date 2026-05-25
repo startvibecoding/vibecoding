@@ -264,11 +264,18 @@ func (r *Registry) SetSandbox(sb sandbox.Sandbox) {
 
 // RegisterDefaults registers all default tools.
 func (r *Registry) RegisterDefaults() {
+	r.RegisterDefaultsWithPlanTool(true)
+}
+
+// RegisterDefaultsWithPlanTool registers all default tools, optionally including the plan tool.
+func (r *Registry) RegisterDefaultsWithPlanTool(enablePlanTool bool) {
 	r.Register(NewReadTool(r))
 	r.Register(NewLsTool(r))
 	r.Register(NewGrepTool(r))
 	r.Register(NewFindTool(r))
-	r.Register(NewPlanTool(r))
+	if enablePlanTool {
+		r.Register(NewPlanTool(r))
+	}
 	r.Register(NewWriteTool(r))
 	r.Register(NewEditTool(r))
 	bashTool := NewBashTool(r)

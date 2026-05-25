@@ -432,7 +432,7 @@ func convertModelConfigs(providerName string, models []config.ModelConfig) []*pr
 
 func (s *server) newToolRegistry() *tools.Registry {
 	registry := tools.NewRegistry(s.cwd, s.sbMgr.GetActive())
-	registry.RegisterDefaults()
+	registry.RegisterDefaultsWithPlanTool(s.settings.IsPlanToolEnabled())
 	if s.skillsMgr != nil {
 		registry.Register(tools.NewSkillRefTool(s.skillsMgr))
 	}

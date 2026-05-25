@@ -147,6 +147,7 @@ vibecoding --no-sandbox
   "defaultModel": "deepseek-v4-flash",
   "defaultThinkingLevel": "medium",
   "defaultMode": "agent",
+  "enablePlanTool": true,
   "maxContextTokens": 1000000,
   "maxOutputTokens": 384000,
   "compaction": {

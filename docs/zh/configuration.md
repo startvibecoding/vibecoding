@@ -70,6 +70,7 @@ VibeCoding 使用两个配置文件:
   "defaultProvider": "deepseek-openai",
   "defaultModel": "deepseek-v4-flash",
   "defaultMode": "agent",
+  "enablePlanTool": true,
   "defaultThinkingLevel": "medium",
   "maxOutputTokens": 384000,
   "maxContextTokens": 1000000,
@@ -211,6 +212,20 @@ VibeCoding 使用两个配置文件:
 - `plan`: 只读分析模式
 - `agent`: 标准读写模式 (默认)
 - `yolo`: 完全访问模式
+
+### enablePlanTool
+
+是否注册内置 `plan` 工具。
+
+```json
+{
+  "enablePlanTool": true
+}
+```
+
+可选值:
+- `true`: 注册 `plan` 工具 (默认)
+- `false`: 不注册 `plan` 工具
 
 ### defaultThinkingLevel
 
