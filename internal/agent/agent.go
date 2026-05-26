@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	agentpkg "github.com/startvibecoding/vibecoding/agent"
 	"github.com/startvibecoding/vibecoding/internal/config"
 	ctxpkg "github.com/startvibecoding/vibecoding/internal/context"
 	"github.com/startvibecoding/vibecoding/internal/provider"
@@ -18,6 +19,8 @@ import (
 
 // Config holds the agent configuration.
 type Config struct {
+	ID                 agentpkg.AgentID
+	ParentID           agentpkg.AgentID
 	Provider           provider.Provider
 	Model              *provider.Model
 	Mode               string // "plan", "agent", "yolo"
@@ -121,15 +124,18 @@ type AgentContext struct {
 }
 
 // Agent is the core agent loop.
+// Agent is the core agent loop.
 type Agent struct {
-	config      AgentLoopConfig
-	registry    *tools.Registry
-	mu          sync.RWMutex
-	context     *AgentContext
-	abort       chan struct{}
-	abortOnce   sync.Once
-	messages    []provider.Message
-	isStreaming bool
+	id           agentpkg.AgentID
+	parentID     agentpkg.AgentID
+	config       AgentLoopConfig
+	registry     *tools.Registry
+	mu           sync.RWMutex
+	context      *AgentContext
+	abort        chan struct{}
+	abortOnce    sync.Once
+	messages     []provider.Message
+	isStreaming  bool
 
 	// Frozen system prompt and tools (built once, never change during session)
 	// This is critical for prompt cache optimization - see LLM_Agent_Cache.md
@@ -282,7 +288,14 @@ func New(cfg Config, registry *tools.Registry) *Agent {
 		MaxIterations:     200,
 	}
 
+	id := cfg.ID
+	if id == "" {
+		id = agentpkg.AgentID(fmt.Sprintf("agent-%d", time.Now().UnixNano()))
+	}
+
 	agent := &Agent{
+		id:               id,
+		parentID:         cfg.ParentID,
 		config:           loopConfig,
 		registry:         registry,
 		abort:            make(chan struct{}),
@@ -305,7 +318,14 @@ func NewWithLoopConfig(cfg AgentLoopConfig, registry *tools.Registry) *Agent {
 		cfg.ToolExecutionMode = "parallel"
 	}
 
+	id := cfg.ID
+	if id == "" {
+		id = agentpkg.AgentID(fmt.Sprintf("agent-%d", time.Now().UnixNano()))
+	}
+
 	agent := &Agent{
+		id:               id,
+		parentID:         cfg.ParentID,
 		config:           cfg,
 		registry:         registry,
 		abort:            make(chan struct{}),
@@ -328,11 +348,26 @@ func (a *Agent) LoadHistoryMessages(messages []provider.Message) {
 }
 
 // Abort signals the agent to stop processing.
+// Satisfies both internal and public agent.Agent interface.
 func (a *Agent) Abort() {
 	a.abortOnce.Do(func() {
 		close(a.abort)
 	})
 }
+
+// emit sends an event with this agent's ID stamped on it.
+func (a *Agent) emit(ch chan<- Event, event Event) {
+	event.AgentID = a.id
+	ch <- event
+}
+
+// --- Public agent.Agent interface methods ---
+
+// ID returns the agent's unique identifier.
+func (a *Agent) ID() agentpkg.AgentID { return a.id }
+
+// ParentID returns the parent agent's ID, or empty if top-level.
+func (a *Agent) ParentID() agentpkg.AgentID { return a.parentID }
 
 // Run processes a user message and streams events back.
 func (a *Agent) Run(ctx context.Context, userMsg string) <-chan Event {

@@ -1,6 +1,7 @@
 package agent
 
 import (
+	agentpkg "github.com/startvibecoding/vibecoding/agent"
 	ctxpkg "github.com/startvibecoding/vibecoding/internal/context"
 	"github.com/startvibecoding/vibecoding/internal/provider"
 	"github.com/startvibecoding/vibecoding/internal/tools"
@@ -50,7 +51,8 @@ const (
 
 // Event represents an event from the agent to the UI.
 type Event struct {
-	Type EventType
+	Type    EventType
+	AgentID agentpkg.AgentID
 
 	// Agent lifecycle
 	Messages []provider.Message
