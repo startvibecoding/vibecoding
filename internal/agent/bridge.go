@@ -8,18 +8,6 @@ import (
 	"github.com/startvibecoding/vibecoding/internal/provider"
 )
 
-// init registers the internal builder function with the public agent package.
-func init() {
-	agentpkg.SetBuilderFunc(buildFromPublicBuilder)
-}
-
-// buildFromPublicBuilder converts a public Builder to an internal Agent.
-func buildFromPublicBuilder(b *agentpkg.Builder) (agentpkg.Agent, error) {
-	// This will be fully implemented in Phase 3 (AgentFactory).
-	// For now, it's a placeholder that enables the Builder pattern.
-	return nil, nil
-}
-
 // --- Type conversion helpers ---
 
 // MessageToPublic converts an internal provider.Message to a public agent.Message.
