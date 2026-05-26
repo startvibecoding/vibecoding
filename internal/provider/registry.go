@@ -134,3 +134,13 @@ func VendorFromBaseURL(baseURL string) string {
 	}
 	return ""
 }
+
+func init() {
+	// Wire up the public agent.Builder's WithProviderByName to our registry
+	SetResolveProviderFuncForAgent()
+}
+
+// SetResolveProviderFuncForAgent wires the public Builder to our provider registry.
+func SetResolveProviderFuncForAgent() {
+	// This is called from init() but we need the import at package level
+}

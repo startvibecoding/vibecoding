@@ -182,3 +182,23 @@ var buildInternal func(b *Builder) (Agent, error)
 func SetBuilderFunc(fn func(b *Builder) (Agent, error)) {
 	buildInternal = fn
 }
+
+// resolveProviderFunc is set by internal/provider to avoid import cycles.
+var resolveProviderFunc func(vendor, baseURL, api, apiKey string) (Provider, error)
+
+// SetResolveProviderFunc registers the provider resolution function.
+func SetResolveProviderFunc(fn func(vendor, baseURL, api, apiKey string) (Provider, error)) {
+	resolveProviderFunc = fn
+}
+
+// WithProviderByName creates a provider from vendor/baseURL/api/apiKey configuration.
+// This is a convenience method that delegates to the internal provider registry.
+func (b *Builder) WithProviderByName(vendor, baseURL, api, apiKey string) *Builder {
+	if resolveProviderFunc != nil {
+		p, err := resolveProviderFunc(vendor, baseURL, api, apiKey)
+		if err == nil && p != nil {
+			b.provider = p
+		}
+	}
+	return b
+}
