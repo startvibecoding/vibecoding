@@ -18,6 +18,8 @@ This file is for AI agents working in this repository. Keep changes aligned with
 - `internal/context/` — context window and compaction
 - `internal/contextfiles/` — `AGENTS.md` / `CLAUDE.md` discovery
 - `internal/provider/` — provider abstraction and implementations
+- `internal/provider/factory/` — shared provider/model construction from config
+- `internal/provider/vendor*.go` — vendor adapter registry and per-vendor defaults
 - `internal/sandbox/` — sandbox backends
 - `internal/session/` — JSONL session storage
 - `internal/skills/` — skills loading
@@ -30,6 +32,11 @@ This file is for AI agents working in this repository. Keep changes aligned with
 ## Architecture Notes
 
 - Providers stream responses through the provider abstraction.
+- Provider creation should go through `internal/provider/factory` so CLI and ACP keep the same behavior.
+- Vendor-specific behavior belongs in `internal/provider/vendor*.go` adapters and model `compat` flags, not in CLI/ACP wiring.
+- Each vendor that needs detection or defaults should have a separate `internal/provider/vendor_<name>.go` file.
+- Vendors without special behavior should fall back to the generic OpenAI-compatible or Anthropic-compatible provider based on `api` / base URL detection.
+- Do not change the settings JSON schema or the expected meaning of existing provider config fields when adding vendor support.
 - The agent loop builds a system prompt, sends messages, handles stream events, executes tools, and continues until completion.
 - Tools should stay stateless when possible; shared execution state belongs in registries/managers.
 - Context files and skills are first-class prompt inputs.
