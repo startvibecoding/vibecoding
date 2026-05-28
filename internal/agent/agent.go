@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	agentpkg "github.com/startvibecoding/vibecoding/agent"
@@ -179,6 +180,9 @@ type Agent struct {
 	pendingApprovals map[string]chan bool // approvalID -> response channel
 	approvalMu       sync.Mutex
 	approvalCounter  int64
+
+	// Force compaction flag — set by /compact command, consumed by ShouldCompact
+	forceCompact int32 // atomic: 0=false, 1=true
 }
 
 // buildFrozenPrompt builds the system prompt and tools once at construction time.
@@ -1066,8 +1070,27 @@ func (a *Agent) GetContextUsage() *ctxpkg.ContextUsage {
 	}
 }
 
+// SetForceCompact marks the agent for forced compaction on the next turn.
+// Called by /compact command in TUI and Gateway.
+func (a *Agent) SetForceCompact() {
+	atomic.StoreInt32(&a.forceCompact, 1)
+}
+
 // ShouldCompact checks if compaction should trigger.
+// Returns true if context exceeds the threshold OR if forced via SetForceCompact.
 func (a *Agent) ShouldCompact() bool {
+	// Check force flag first (consumes it)
+	if atomic.CompareAndSwapInt32(&a.forceCompact, 1, 0) {
+		// Force compaction requested — still need a model and some messages
+		a.mu.RLock()
+		hasModel := a.config.Model != nil
+		hasMsgs := len(a.messages) >= 2
+		a.mu.RUnlock()
+		if hasModel && hasMsgs {
+			return true
+		}
+	}
+
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	if !a.config.CompactionSettings.Enabled {

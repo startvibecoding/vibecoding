@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/startvibecoding/vibecoding/internal/agent"
 	"github.com/startvibecoding/vibecoding/internal/config"
 	"github.com/startvibecoding/vibecoding/internal/provider"
 	"github.com/startvibecoding/vibecoding/internal/sandbox"
@@ -35,8 +36,8 @@ func TestDefaultGatewayConfig(t *testing.T) {
 	if cfg.SystemPromptMode != "append" {
 		t.Errorf("default system prompt mode = %q, want append", cfg.SystemPromptMode)
 	}
-	if cfg.RequestTimeoutSecs != 300 {
-		t.Errorf("default timeout = %d, want 300", cfg.RequestTimeoutSecs)
+	if cfg.RequestTimeoutSecs != 1800 {
+		t.Errorf("default timeout = %d, want 1800", cfg.RequestTimeoutSecs)
 	}
 	if cfg.Auth.Enabled {
 		t.Error("auth should be disabled by default")
@@ -1031,4 +1032,601 @@ func TestToolVisibility_DefaultDetail(t *testing.T) {
 	if cfg.GetToolDetail() != "collapsed" {
 		t.Errorf("default detail = %q, want collapsed", cfg.GetToolDetail())
 	}
+}
+
+// --- CORS middleware disabled test ---
+
+func TestCORSMiddleware_Disabled(t *testing.T) {
+	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	handler := CORSMiddleware(CORSConfig{Enabled: false}, inner)
+	req := httptest.NewRequest("GET", "/test", nil)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200", w.Code)
+	}
+	// CORS headers should NOT be set
+	if got := w.Header().Get("Access-Control-Allow-Origin"); got != "" {
+		t.Errorf("CORS origin should be empty, got %q", got)
+	}
+}
+
+func TestCORSMiddleware_DefaultOrigins(t *testing.T) {
+	handler := CORSMiddleware(CORSConfig{Enabled: true}, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	req := httptest.NewRequest("GET", "/test", nil)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+	if got := w.Header().Get("Access-Control-Allow-Origin"); got != "*" {
+		t.Errorf("CORS origin = %q, want *", got)
+	}
+}
+
+// --- Concurrency middleware at capacity test ---
+
+func TestConcurrencyMiddleware_AtCapacity(t *testing.T) {
+	blocking := make(chan struct{})
+	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-blocking // block until released
+		w.WriteHeader(http.StatusOK)
+	})
+	handler := ConcurrencyMiddleware(1, inner)
+
+	// Fill the single slot
+	go func() {
+		req := httptest.NewRequest("GET", "/test", nil)
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+	}()
+
+	// Give goroutine time to start
+	time.Sleep(20 * time.Millisecond)
+
+	// Second request should be rejected
+	req := httptest.NewRequest("GET", "/test", nil)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusTooManyRequests {
+		t.Errorf("status = %d, want 429", w.Code)
+	}
+
+	// Release the blocking goroutine
+	close(blocking)
+}
+
+// --- Auth with non-Bearer prefix ---
+
+func TestAuthMiddleware_NonBearerPrefix(t *testing.T) {
+	handler := AuthMiddleware(AuthConfig{Enabled: true, Tokens: []string{"sk-test"}}, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.Header.Set("Authorization", "Basic dXNlcjpwYXNz")
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("status = %d, want 401", w.Code)
+	}
+}
+
+// --- extractBearerToken tests ---
+
+func TestExtractBearerToken(t *testing.T) {
+	tests := []struct {
+		name string
+		auth string
+		want string
+	}{
+		{"empty", "", ""},
+		{"bearer", "Bearer sk-test", "sk-test"},
+		{"bearer with spaces", "Bearer  sk-test ", "sk-test"},
+		{"basic", "Basic dXNlcjpwYXNz", ""},
+		{"no prefix", "sk-test", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest("GET", "/", nil)
+			if tt.auth != "" {
+				req.Header.Set("Authorization", tt.auth)
+			}
+			got := extractBearerToken(req)
+			if got != tt.want {
+				t.Errorf("extractBearerToken(%q) = %q, want %q", tt.auth, got, tt.want)
+			}
+		})
+	}
+}
+
+// --- SessionPool advanced tests ---
+
+func TestSessionPool_ReplaceSameID(t *testing.T) {
+	pool := NewSessionPool(1, 0)
+	defer pool.Stop()
+
+	sess1 := &GatewaySession{ID: "sess-1", WorkDir: "/tmp/a", LastUsed: time.Now()}
+	if err := pool.Put(sess1); err != nil {
+		t.Fatalf("put 1: %v", err)
+	}
+
+	// Replace same ID should succeed even at max capacity
+	sess1v2 := &GatewaySession{ID: "sess-1", WorkDir: "/tmp/b", LastUsed: time.Now()}
+	if err := pool.Put(sess1v2); err != nil {
+		t.Fatalf("replace same ID should succeed: %v", err)
+	}
+
+	got := pool.Get("sess-1")
+	if got.WorkDir != "/tmp/b" {
+		t.Errorf("workdir = %q, want /tmp/b", got.WorkDir)
+	}
+}
+
+func TestSessionPool_EvictIdle(t *testing.T) {
+	pool := NewSessionPool(0, 50*time.Millisecond)
+	defer pool.Stop()
+
+	sess := &GatewaySession{ID: "sess-1", LastUsed: time.Now()}
+	pool.Put(sess)
+	// Manually backdate LastUsed after Put (which calls Touch)
+	sess.LastUsed = time.Now().Add(-time.Hour)
+
+	pool.evictIdle()
+
+	if pool.Get("sess-1") != nil {
+		t.Error("idle session should be evicted")
+	}
+}
+
+func TestSessionPool_EvictIdleKeepsFresh(t *testing.T) {
+	pool := NewSessionPool(0, time.Hour)
+	defer pool.Stop()
+
+	sess := &GatewaySession{ID: "sess-1", LastUsed: time.Now()}
+	pool.Put(sess)
+
+	pool.evictIdle()
+
+	if pool.Get("sess-1") == nil {
+		t.Error("fresh session should not be evicted")
+	}
+}
+
+func TestPoolFullError_Error(t *testing.T) {
+	e := &PoolFullError{Max: 5}
+	if e.Error() != "session pool is at capacity" {
+		t.Errorf("error = %q", e.Error())
+	}
+}
+
+// --- parseMessages advanced tests ---
+
+func TestParseMessages_MultipleSystem(t *testing.T) {
+	msgs := []RequestMessage{
+		{Role: "system", Content: "sys1"},
+		{Role: "system", Content: "sys2"},
+		{Role: "user", Content: "hello"},
+	}
+	lastUser, sysMsgs, history := parseMessages(msgs)
+	if lastUser != "hello" {
+		t.Errorf("lastUser = %q", lastUser)
+	}
+	if len(sysMsgs) != 2 {
+		t.Errorf("sysMsgs len = %d, want 2", len(sysMsgs))
+	}
+	if len(history) != 0 {
+		t.Errorf("history len = %d, want 0", len(history))
+	}
+}
+
+func TestParseMessages_SingleUser(t *testing.T) {
+	msgs := []RequestMessage{
+		{Role: "user", Content: "only message"},
+	}
+	lastUser, sysMsgs, history := parseMessages(msgs)
+	if lastUser != "only message" {
+		t.Errorf("lastUser = %q", lastUser)
+	}
+	if len(sysMsgs) != 0 {
+		t.Errorf("sysMsgs len = %d", len(sysMsgs))
+	}
+	if len(history) != 0 {
+		t.Errorf("history len = %d", len(history))
+	}
+}
+
+// --- convertHistoryMessages tests ---
+
+func TestConvertHistoryMessages(t *testing.T) {
+	msgs := []RequestMessage{
+		{Role: "user", Content: "hello"},
+		{Role: "assistant", Content: "hi"},
+		{Role: "system", Content: "ignored"},
+	}
+	result := convertHistoryMessages(msgs)
+	if len(result) != 2 {
+		t.Fatalf("result len = %d, want 2", len(result))
+	}
+	if result[0].Role != "user" {
+		t.Errorf("result[0].Role = %q", result[0].Role)
+	}
+	if result[1].Role != "assistant" {
+		t.Errorf("result[1].Role = %q", result[1].Role)
+	}
+}
+
+func TestConvertHistoryMessages_Empty(t *testing.T) {
+	result := convertHistoryMessages(nil)
+	if len(result) != 0 {
+		t.Errorf("result len = %d, want 0", len(result))
+	}
+}
+
+// --- resolveToolEvent tests ---
+
+func TestResolveToolEvent_FromTopLevel(t *testing.T) {
+	ev := agent.Event{
+		ToolName:   "read",
+		ToolCallID: "call-1",
+	}
+	name, callID := resolveToolEvent(ev)
+	if name != "read" {
+		t.Errorf("name = %q", name)
+	}
+	if callID != "call-1" {
+		t.Errorf("callID = %q", callID)
+	}
+}
+
+func TestResolveToolEvent_FallbackToToolCall(t *testing.T) {
+	ev := agent.Event{
+		ToolCall: &provider.ToolCallBlock{
+			ID:   "call-2",
+			Name: "bash",
+		},
+	}
+	name, callID := resolveToolEvent(ev)
+	if name != "bash" {
+		t.Errorf("name = %q", name)
+	}
+	if callID != "call-2" {
+		t.Errorf("callID = %q", callID)
+	}
+}
+
+func TestResolveToolEvent_TopLevelTakesPrecedence(t *testing.T) {
+	ev := agent.Event{
+		ToolName:   "read",
+		ToolCallID: "call-1",
+		ToolCall: &provider.ToolCallBlock{
+			ID:   "call-2",
+			Name: "bash",
+		},
+	}
+	name, callID := resolveToolEvent(ev)
+	if name != "read" {
+		t.Errorf("name = %q, want read", name)
+	}
+	if callID != "call-1" {
+		t.Errorf("callID = %q, want call-1", callID)
+	}
+}
+
+// --- Commands: mode/model/sessions edge cases ---
+
+func TestCommands_ModeInvalid(t *testing.T) {
+	srv := newTestServer(t)
+	result := srv.cmdMode(nil, []string{"/mode", "invalid"})
+	if !result.Error {
+		t.Error("expected error for invalid mode")
+	}
+}
+
+func TestCommands_ModeShowCurrent(t *testing.T) {
+	srv := newTestServer(t)
+	result := srv.cmdMode(nil, []string{"/mode"})
+	if result.Error {
+		t.Error("unexpected error")
+	}
+	if !strings.Contains(result.Message, "YOLO") {
+		t.Errorf("expected current mode YOLO, got %q", result.Message)
+	}
+}
+
+func TestCommands_ModeShowSessionOverride(t *testing.T) {
+	srv := newTestServer(t)
+	sess := &GatewaySession{ID: "s1", Mode: "plan"}
+	result := srv.cmdMode(sess, []string{"/mode"})
+	if !strings.Contains(result.Message, "PLAN") {
+		t.Errorf("expected PLAN, got %q", result.Message)
+	}
+}
+
+func TestCommands_ModelNotFound(t *testing.T) {
+	srv := newTestServer(t)
+	result := srv.cmdModel([]string{"/model", "nonexistent"})
+	if !result.Error {
+		t.Error("expected error for unknown model")
+	}
+}
+
+func TestCommands_ModelShowCurrent(t *testing.T) {
+	srv := newTestServer(t)
+	result := srv.cmdModel([]string{"/model"})
+	if result.Error {
+		t.Error("unexpected error")
+	}
+	if !strings.Contains(result.Message, "Model 1") {
+		t.Errorf("expected Model 1, got %q", result.Message)
+	}
+}
+
+func TestCommands_SessionsList(t *testing.T) {
+	srv := newTestServer(t)
+	srv.pool.Put(&GatewaySession{ID: "s1", LastUsed: time.Now()})
+	srv.pool.Put(&GatewaySession{ID: "s2", LastUsed: time.Now()})
+
+	result := srv.cmdSessions([]string{"/sessions"})
+	if result.Error {
+		t.Error("unexpected error")
+	}
+	if !strings.Contains(result.Message, "s1") || !strings.Contains(result.Message, "s2") {
+		t.Errorf("expected both session IDs, got %q", result.Message)
+	}
+}
+
+func TestCommands_SessionsEmpty(t *testing.T) {
+	srv := newTestServer(t)
+	result := srv.cmdSessions([]string{"/sessions"})
+	if !strings.Contains(result.Message, "No active sessions") {
+		t.Errorf("expected no sessions message, got %q", result.Message)
+	}
+}
+
+func TestCommands_SessionsDelete(t *testing.T) {
+	srv := newTestServer(t)
+	srv.pool.Put(&GatewaySession{ID: "s1", LastUsed: time.Now()})
+	result := srv.cmdSessions([]string{"/sessions", "del", "s1"})
+	if result.Error {
+		t.Error("unexpected error")
+	}
+	if srv.pool.Get("s1") != nil {
+		t.Error("session should be deleted")
+	}
+}
+
+func TestCommands_SessionsDeleteNotFound(t *testing.T) {
+	srv := newTestServer(t)
+	result := srv.cmdSessions([]string{"/sessions", "del", "nonexistent"})
+	if !result.Error {
+		t.Error("expected error for missing session")
+	}
+}
+
+func TestCommands_SessionsDeleteMissingID(t *testing.T) {
+	srv := newTestServer(t)
+	result := srv.cmdSessions([]string{"/sessions", "del"})
+	if !result.Error {
+		t.Error("expected error for missing ID")
+	}
+}
+
+func TestCommands_SessionsUnknownSubcmd(t *testing.T) {
+	srv := newTestServer(t)
+	result := srv.cmdSessions([]string{"/sessions", "badcmd"})
+	if !result.Error {
+		t.Error("expected error for unknown subcmd")
+	}
+}
+
+func TestCommands_StatusNoSession(t *testing.T) {
+	srv := newTestServer(t)
+	result := srv.cmdStatus(nil)
+	if !result.Error {
+		t.Error("expected error for nil session")
+	}
+}
+
+func TestCommands_SkillNoManager(t *testing.T) {
+	srv := newTestServer(t)
+	srv.skillsMgr = nil
+	result := srv.cmdSkill([]string{"/skill", "test"})
+	if !result.Error {
+		t.Error("expected error when no skills manager")
+	}
+}
+
+func TestCommands_SkillNotFound(t *testing.T) {
+	srv := newTestServer(t)
+	result := srv.cmdSkill([]string{"/skill", "nonexistent"})
+	if !result.Error {
+		t.Error("expected error for unknown skill")
+	}
+}
+
+func TestCommands_SkillsEmpty(t *testing.T) {
+	srv := newTestServer(t)
+	result := srv.cmdSkills()
+	if !strings.Contains(result.Message, "No skills found") {
+		t.Errorf("expected no skills message, got %q", result.Message)
+	}
+}
+
+func TestCommands_Help(t *testing.T) {
+	srv := newTestServer(t)
+	result := srv.cmdHelp()
+	for _, cmd := range []string{"/clear", "/mode", "/model", "/compact", "/help"} {
+		if !strings.Contains(result.Message, cmd) {
+			t.Errorf("help missing %s", cmd)
+		}
+	}
+}
+
+// --- Chat handler method-not-allowed test ---
+
+func TestChatHandler_MethodNotAllowed(t *testing.T) {
+	srv := newTestServer(t)
+	defer srv.pool.Stop()
+
+	req := httptest.NewRequest("GET", "/v1/chat/completions", nil)
+	w := httptest.NewRecorder()
+	srv.handleChatCompletions(w, req)
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("status = %d, want 405", w.Code)
+	}
+}
+
+// --- Type helper tests ---
+
+func TestNewCompletionID(t *testing.T) {
+	id := newCompletionID()
+	if !strings.HasPrefix(id, "chatcmpl-") {
+		t.Errorf("id = %q, want chatcmpl- prefix", id)
+	}
+}
+
+func TestNewCommandCompletionID(t *testing.T) {
+	id := newCommandCompletionID()
+	if !strings.HasPrefix(id, "chatcmpl-cmd-") {
+		t.Errorf("id = %q, want chatcmpl-cmd- prefix", id)
+	}
+}
+
+func TestStringPtr(t *testing.T) {
+	p := stringPtr("test")
+	if *p != "test" {
+		t.Errorf("*p = %q", *p)
+	}
+}
+
+func TestMarshalJSON(t *testing.T) {
+	data := marshalJSON(map[string]string{"key": "val"})
+	if !strings.Contains(string(data), "key") {
+		t.Errorf("data = %s", data)
+	}
+}
+
+// --- langFromPath extended tests ---
+
+func TestLangFromPath(t *testing.T) {
+	tests := []struct {
+		path string
+		want string
+	}{
+		{"main.go", "go"},
+		{"app.py", "python"},
+		{"index.js", "javascript"},
+		{"app.ts", "typescript"},
+		{"comp.tsx", "tsx"},
+		{"comp.jsx", "jsx"},
+		{"main.rs", "rust"},
+		{"app.rb", "ruby"},
+		{"Main.java", "java"},
+		{"main.c", "c"},
+		{"main.h", "c"},
+		{"main.cpp", "cpp"},
+		{"main.cc", "cpp"},
+		{"main.cs", "csharp"},
+		{"main.swift", "swift"},
+		{"main.kt", "kotlin"},
+		{"script.sh", "bash"},
+		{"script.bash", "bash"},
+		{"script.zsh", "zsh"},
+		{"script.ps1", "powershell"},
+		{"query.sql", "sql"},
+		{"index.html", "html"},
+		{"style.css", "css"},
+		{"style.scss", "scss"},
+		{"data.json", "json"},
+		{"config.yaml", "yaml"},
+		{"config.yml", "yaml"},
+		{"config.toml", "toml"},
+		{"data.xml", "xml"},
+		{"README.md", "markdown"},
+		{"main.tf", "hcl"},
+		{"main.lua", "lua"},
+		{"main.php", "php"},
+		{"main.pl", "perl"},
+		{"main.ex", "elixir"},
+		{"main.erl", "erlang"},
+		{"main.hs", "haskell"},
+		{"main.scala", "scala"},
+		{"main.clj", "clojure"},
+		{"main.vim", "vim"},
+		{"schema.proto", "protobuf"},
+		{"schema.graphql", "graphql"},
+		{"config.ini", "ini"},
+		{".env", "bash"},
+		{"Makefile", "makefile"},
+		{"Dockerfile", "dockerfile"},
+		{"Gemfile", "ruby"},
+		{"unknown.xyz", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			got := langFromPath(tt.path)
+			if got != tt.want {
+				t.Errorf("langFromPath(%q) = %q, want %q", tt.path, got, tt.want)
+			}
+		})
+	}
+}
+
+// --- formatToolHeaderMD tests ---
+
+func TestFormatToolHeaderMD(t *testing.T) {
+	got := formatToolHeaderMD("read", map[string]any{"path": "main.go"})
+	if got != "🔧 read: main.go" {
+		t.Errorf("got %q", got)
+	}
+	got2 := formatToolHeaderMD("plan", nil)
+	if got2 != "🔧 plan" {
+		t.Errorf("got %q", got2)
+	}
+}
+
+// --- formatToolHeader tests ---
+
+func TestFormatToolHeader(t *testing.T) {
+	got := formatToolHeader("bash", map[string]any{"command": "ls"})
+	if got != "🔧 [bash] ls" {
+		t.Errorf("got %q", got)
+	}
+	got2 := formatToolHeader("plan", nil)
+	if got2 != "🔧 [plan]" {
+		t.Errorf("got %q", got2)
+	}
+}
+
+// --- toolKeyArg: bash long command truncation ---
+
+func TestToolKeyArg_BashLongCommand(t *testing.T) {
+	longCmd := strings.Repeat("a", 200)
+	got := toolKeyArg("bash", map[string]any{"command": longCmd})
+	if len(got) > 124 { // 120 + "..."
+		t.Errorf("expected truncated, got len %d", len(got))
+	}
+	if !strings.HasSuffix(got, "...") {
+		t.Error("expected ... suffix")
+	}
+}
+
+// --- GatewaySession Touch/Lock ---
+
+func TestGatewaySession_Touch(t *testing.T) {
+	sess := &GatewaySession{ID: "s1"}
+	sess.Touch()
+	if sess.LastUsed.IsZero() {
+		t.Error("expected non-zero LastUsed after Touch")
+	}
+}
+
+func TestGatewaySession_LockUnlock(t *testing.T) {
+	sess := &GatewaySession{ID: "s1"}
+	sess.Lock()
+	sess.Unlock()
+	// No panic = pass
 }

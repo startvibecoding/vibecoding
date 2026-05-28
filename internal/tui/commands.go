@@ -270,6 +270,22 @@ func (a *App) handleCommand(cmd string) tea.Cmd {
 		} else {
 			a.listSkills()
 		}
+	case "/compact":
+		if a.agent == nil {
+			a.addMessage(errorStyle.Render("Nothing to compact: no active conversation."))
+		} else {
+			msgs := a.agent.GetMessages()
+			if len(msgs) < 2 {
+				a.addMessage(errorStyle.Render("Nothing to compact: conversation is too short."))
+			} else {
+				a.agent.SetForceCompact()
+				if usage := a.agent.GetContextUsage(); usage != nil && usage.Percent != nil {
+					a.addMessage(statusStyle.Render(fmt.Sprintf("✅ Context compaction will be triggered on the next message. (current: %d tokens, %.0f%% used)", usage.Tokens, *usage.Percent)))
+				} else {
+					a.addMessage(statusStyle.Render("✅ Context compaction will be triggered on the next message."))
+				}
+			}
+		}
 	case "/clear":
 		a.messages = nil
 		a.agent = nil
@@ -303,6 +319,7 @@ func (a *App) handleCommand(cmd string) tea.Cmd {
 		a.addMessage(statusStyle.Render("  /skills                 - List available skills"))
 		a.addMessage(statusStyle.Render("  /skill <name>           - Activate a skill"))
 		a.addMessage(statusStyle.Render("  /clear                  - Clear conversation"))
+		a.addMessage(statusStyle.Render("  /compact                - Trigger context compaction"))
 		a.addMessage(statusStyle.Render("  /sessions               - List sessions for this project"))
 		a.addMessage(statusStyle.Render("  /sessions ls            - List sessions"))
 		a.addMessage(statusStyle.Render("  /sessions set <id>      - Switch to session"))

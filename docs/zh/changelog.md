@@ -52,7 +52,7 @@
   - `vibecoding --init-gateway` 生成配置模板；`--force` 强制覆盖
 
 - **请求超时与并发控制**
-  - `requestTimeoutSeconds` (默认 300s)；streaming 有数据流动不超时
+  - `requestTimeoutSeconds` (默认 1800s)；streaming 有数据流动不超时
   - `maxConcurrentRequests` (默认 0 = 不限制)
 
 ### 📝 文档

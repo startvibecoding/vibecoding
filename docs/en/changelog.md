@@ -52,7 +52,7 @@
   - `vibecoding --init-gateway` to generate template; `--force` to overwrite
 
 - **Request Timeout & Concurrency**
-  - `requestTimeoutSeconds` (default 300s); streaming keeps alive as long as data flows
+  - `requestTimeoutSeconds` (default 1800s); streaming keeps alive as long as data flows
   - `maxConcurrentRequests` (default 0 = unlimited)
 
 ### 📝 Docs

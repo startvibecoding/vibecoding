@@ -83,7 +83,7 @@ func DefaultGatewayConfig() *GatewayConfig {
 		CORS:                 CORSConfig{Enabled: false, AllowOrigins: []string{"*"}},
 		ToolVisibility:       ToolVisibilityConfig{Mode: "content", Detail: "collapsed"},
 		SystemPromptMode:     "append",
-		RequestTimeoutSecs:   300,
+		RequestTimeoutSecs:   1800,
 		LogLevel:             "info",
 	}
 }
@@ -154,7 +154,7 @@ func normalizeConfig(cfg *GatewayConfig) {
 		cfg.SystemPromptMode = "append"
 	}
 	if cfg.RequestTimeoutSecs <= 0 {
-		cfg.RequestTimeoutSecs = 300
+		cfg.RequestTimeoutSecs = 1800
 	}
 }
 

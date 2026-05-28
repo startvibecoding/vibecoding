@@ -656,3 +656,95 @@ func containsSubstring(s, substr string) bool {
 	}
 	return false
 }
+
+// --- ForceCompact tests ---
+
+func TestSetForceCompact_ShouldCompactReturnsTrue(t *testing.T) {
+	mockProvider := provider.NewMockProvider("mock", []*provider.Model{
+		{ID: "model1", Name: "Model 1", ContextWindow: 100000},
+	}, nil)
+
+	sb := sandbox.NewNoneSandbox()
+	registry := tools.NewRegistry(t.TempDir(), sb)
+
+	cfg := Config{
+		Provider: mockProvider,
+		Model:    mockProvider.Models()[0],
+		Mode:     "agent",
+	}
+
+	a := New(cfg, registry)
+
+	// Load some messages so there's something to compact
+	a.LoadHistoryMessages([]provider.Message{
+		provider.NewUserMessage("Hello"),
+		provider.NewAssistantMessage([]provider.ContentBlock{{Type: "text", Text: "Hi there"}}),
+	})
+
+	// Without force, ShouldCompact should be false (context is tiny)
+	if a.ShouldCompact() {
+		t.Fatal("ShouldCompact should be false without force and small context")
+	}
+
+	// Set force flag
+	a.SetForceCompact()
+
+	// Now ShouldCompact should return true (force flag set)
+	if !a.ShouldCompact() {
+		t.Fatal("ShouldCompact should be true after SetForceCompact")
+	}
+
+	// Force flag is consumed — second call should return false
+	if a.ShouldCompact() {
+		t.Fatal("ShouldCompact should be false after force flag was consumed")
+	}
+}
+
+func TestSetForceCompact_NoMessagesDoesNotForce(t *testing.T) {
+	mockProvider := provider.NewMockProvider("mock", []*provider.Model{
+		{ID: "model1", Name: "Model 1", ContextWindow: 100000},
+	}, nil)
+
+	sb := sandbox.NewNoneSandbox()
+	registry := tools.NewRegistry(t.TempDir(), sb)
+
+	cfg := Config{
+		Provider: mockProvider,
+		Model:    mockProvider.Models()[0],
+		Mode:     "agent",
+	}
+
+	a := New(cfg, registry)
+
+	// No messages loaded — force should not trigger (nothing to compact)
+	a.SetForceCompact()
+	if a.ShouldCompact() {
+		t.Fatal("ShouldCompact should be false with force but no messages")
+	}
+}
+
+func TestSetForceCompact_NoModelDoesNotForce(t *testing.T) {
+	mockProvider := provider.NewMockProvider("mock", []*provider.Model{
+		{ID: "model1", Name: "Model 1"},
+	}, nil)
+
+	sb := sandbox.NewNoneSandbox()
+	registry := tools.NewRegistry(t.TempDir(), sb)
+
+	cfg := Config{
+		Provider: mockProvider,
+		Model:    nil, // no model
+		Mode:     "agent",
+	}
+
+	a := New(cfg, registry)
+	a.LoadHistoryMessages([]provider.Message{
+		provider.NewUserMessage("Hello"),
+		provider.NewAssistantMessage([]provider.ContentBlock{{Type: "text", Text: "Hi"}}),
+	})
+
+	a.SetForceCompact()
+	if a.ShouldCompact() {
+		t.Fatal("ShouldCompact should be false with force but no model")
+	}
+}

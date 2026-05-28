@@ -154,7 +154,7 @@ CLI 实现为 `rootCmd.AddCommand(gatewayCmd)`，与现有 `acp` 子命令平级
 
   // 请求超时（秒）— agent 执行的最大时长
   // streaming 模式下只要有数据流动就不超时
-  "requestTimeoutSeconds": 300,
+  "requestTimeoutSeconds": 1800,
 
   // 全局并发限制（0 = 不限制）
   "maxConcurrentRequests": 0,
@@ -775,7 +775,7 @@ Sandbox 配置复用 `settings.json` 中的 `sandbox` 字段（`allowedRead`, `d
 
 | 风险 | 缓解 |
 |------|------|
-| Agent loop 挂起（tool 执行超时） | 请求级 context timeout（默认 5 分钟），可配置 |
+| Agent loop 挂起（tool 执行超时） | 请求级 context timeout（默认 30 分钟），可配置 |
 | 内存膨胀（大量 session） | idleTimeout 自动清理 + maxSessions 限制 |
 | 并发安全 | session 级 mutex + pool 级 RWMutex |
 | tool 执行安全 | allowedWorkDirs 白名单 + sandbox 可选开启；建议公网部署开启 sandbox |
@@ -869,5 +869,5 @@ response2 = client.chat.completions.create(
 | 1 | Tool 可见性 | 默认 `content` 模式（混入 `content` 字段），可配为 `sse_event` 或 `none` | `toolVisibility.mode` |
 | 2 | System prompt | 默认 `append`（追加到内置 prompt 末尾），可配为 `ignore` | `systemPromptMode` |
 | 3 | Working directory | `allowedWorkDirs` 白名单 + sandbox 双重保护 | `allowedWorkDirs` |
-| 4 | 请求超时 | 默认 5 分钟，streaming 有数据流动不超时 | `requestTimeoutSeconds` |
+| 4 | 请求超时 | 默认 30 分钟，streaming 有数据流动不超时 | `requestTimeoutSeconds` |
 | 5 | 并发限制 | 默认不限制，可配置 | `maxConcurrentRequests` |
