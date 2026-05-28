@@ -48,7 +48,8 @@ type Server struct {
 	skillsMgr  *skills.Manager
 	pool       *SessionPool
 
-	extraContext string
+	extraContext     string
+	defaultSessionID string // used when x_session_id is empty
 }
 
 // Run starts the gateway server.

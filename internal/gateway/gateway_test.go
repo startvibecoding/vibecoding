@@ -1630,3 +1630,97 @@ func TestGatewaySession_LockUnlock(t *testing.T) {
 	sess.Unlock()
 	// No panic = pass
 }
+
+// --- Default session ID tests ---
+
+func TestDefaultSessionID_EmptyReusesSession(t *testing.T) {
+	srv := newTestServer(t)
+	defer srv.pool.Stop()
+
+	// First request without x_session_id — should create a session
+	body1 := `{"messages":[{"role":"user","content":"/status"}],"stream":false}`
+	req1 := httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(body1))
+	w1 := httptest.NewRecorder()
+	srv.handleChatCompletions(w1, req1)
+
+	if w1.Code != http.StatusOK {
+		t.Fatalf("req1 status = %d, body = %s", w1.Code, w1.Body.String())
+	}
+	var resp1 ChatCompletionResponse
+	json.NewDecoder(w1.Body).Decode(&resp1)
+	sessID1 := resp1.XSessionID
+	if sessID1 == "" {
+		t.Fatal("first request should return a session ID")
+	}
+
+	// Second request without x_session_id — should reuse the same session
+	body2 := `{"messages":[{"role":"user","content":"/status"}],"stream":false}`
+	req2 := httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(body2))
+	w2 := httptest.NewRecorder()
+	srv.handleChatCompletions(w2, req2)
+
+	if w2.Code != http.StatusOK {
+		t.Fatalf("req2 status = %d", w2.Code)
+	}
+	var resp2 ChatCompletionResponse
+	json.NewDecoder(w2.Body).Decode(&resp2)
+
+	if resp2.XSessionID != sessID1 {
+		t.Errorf("second request should reuse session: got %q, want %q", resp2.XSessionID, sessID1)
+	}
+}
+
+func TestDefaultSessionID_ExplicitIDOverrides(t *testing.T) {
+	srv := newTestServer(t)
+	defer srv.pool.Stop()
+
+	// First request without x_session_id
+	body1 := `{"messages":[{"role":"user","content":"/status"}],"stream":false}`
+	req1 := httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(body1))
+	w1 := httptest.NewRecorder()
+	srv.handleChatCompletions(w1, req1)
+	var resp1 ChatCompletionResponse
+	json.NewDecoder(w1.Body).Decode(&resp1)
+	defaultID := resp1.XSessionID
+
+	// Second request WITH explicit x_session_id — should use that, not default
+	body2 := `{"messages":[{"role":"user","content":"/status"}],"stream":false,"x_session_id":"explicit-sess"}`
+	req2 := httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(body2))
+	w2 := httptest.NewRecorder()
+	srv.handleChatCompletions(w2, req2)
+	var resp2 ChatCompletionResponse
+	json.NewDecoder(w2.Body).Decode(&resp2)
+
+	if resp2.XSessionID != "explicit-sess" {
+		t.Errorf("explicit session should be used: got %q", resp2.XSessionID)
+	}
+
+	// Third request without x_session_id — should still use the default, not "explicit-sess"
+	body3 := `{"messages":[{"role":"user","content":"/status"}],"stream":false}`
+	req3 := httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(body3))
+	w3 := httptest.NewRecorder()
+	srv.handleChatCompletions(w3, req3)
+	var resp3 ChatCompletionResponse
+	json.NewDecoder(w3.Body).Decode(&resp3)
+
+	if resp3.XSessionID != defaultID {
+		t.Errorf("third request should reuse default: got %q, want %q", resp3.XSessionID, defaultID)
+	}
+}
+
+func TestDefaultSessionID_PoolCount(t *testing.T) {
+	srv := newTestServer(t)
+	defer srv.pool.Stop()
+
+	// Multiple requests without x_session_id should all share one session
+	for i := 0; i < 5; i++ {
+		body := `{"messages":[{"role":"user","content":"/help"}],"stream":false}`
+		req := httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(body))
+		w := httptest.NewRecorder()
+		srv.handleChatCompletions(w, req)
+	}
+
+	if srv.pool.Count() != 1 {
+		t.Errorf("pool count = %d, want 1 (all should share default session)", srv.pool.Count())
+	}
+}

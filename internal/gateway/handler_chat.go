@@ -70,6 +70,12 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 
 	// Get or create session
 	sessionID := req.XSessionID
+	if sessionID == "" {
+		// Fall back to the default session for this gateway instance
+		s.mu.RLock()
+		sessionID = s.defaultSessionID
+		s.mu.RUnlock()
+	}
 	sess := s.getOrCreateSession(sessionID, workDir)
 	if sess == nil {
 		writeError(w, http.StatusServiceUnavailable, "session pool is at capacity", "server_error")
@@ -446,6 +452,18 @@ func (s *Server) getOrCreateSession(sessionID, workDir string) *GatewaySession {
 	if err := s.pool.Put(sess); err != nil {
 		return nil
 	}
+
+	// If this session was created without a client-supplied ID,
+	// remember it as the default so subsequent empty x_session_id
+	// requests reuse the same session.
+	if sessionID == "" {
+		s.mu.Lock()
+		if s.defaultSessionID == "" {
+			s.defaultSessionID = sess.ID
+		}
+		s.mu.Unlock()
+	}
+
 	return sess
 }
 
