@@ -20,6 +20,7 @@ import (
 	"github.com/startvibecoding/vibecoding/internal/config"
 	ctxpkg "github.com/startvibecoding/vibecoding/internal/context"
 	"github.com/startvibecoding/vibecoding/internal/contextfiles"
+	"github.com/startvibecoding/vibecoding/internal/gateway"
 	"github.com/startvibecoding/vibecoding/internal/mcp"
 	"github.com/startvibecoding/vibecoding/internal/provider"
 	providerfactory "github.com/startvibecoding/vibecoding/internal/provider/factory"
@@ -49,18 +50,20 @@ func main() {
 
 func newRootCommand(runFn func([]string, runOptions) error, acpRunFn func(acp.RunOptions) error) *cobra.Command {
 	var (
-		flagProvider   string
-		flagModel      string
-		flagMode       string
-		flagThinking   string
-		flagContinue   bool
-		flagResume     string
-		flagSession    string
-		flagSandbox    bool
-		flagPrint      bool
-		flagVerbose    bool
-		flagDebug      bool
-		flagMultiAgent bool
+		flagProvider     string
+		flagModel        string
+		flagMode         string
+		flagThinking     string
+		flagContinue     bool
+		flagResume       string
+		flagSession      string
+		flagSandbox      bool
+		flagPrint        bool
+		flagVerbose      bool
+		flagDebug        bool
+		flagMultiAgent   bool
+		flagInitGateway  bool
+		flagForce        bool
 	)
 
 	rootCmd := &cobra.Command{
@@ -71,6 +74,14 @@ func newRootCommand(runFn func([]string, runOptions) error, acpRunFn func(acp.Ru
 		Version: version,
 		Args:    cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if flagInitGateway {
+				path, err := gateway.InitGatewayConfig(flagForce)
+				if err != nil {
+					return err
+				}
+				fmt.Fprintf(os.Stderr, "Created gateway config: %s\n", path)
+				return nil
+			}
 			return runFn(args, runOptions{
 				provider:   flagProvider,
 				model:      flagModel,
@@ -119,6 +130,8 @@ func newRootCommand(runFn func([]string, runOptions) error, acpRunFn func(acp.Ru
 	flags.BoolVar(&flagVerbose, "verbose", false, "Verbose output")
 	flags.BoolVar(&flagDebug, "debug", false, "Enable debug logging")
 	flags.BoolVar(&flagMultiAgent, "multi-agent", false, "Enable multi-agent mode (sub-agent tools)")
+	flags.BoolVar(&flagInitGateway, "init-gateway", false, "Create gateway.json config template")
+	flags.BoolVar(&flagForce, "force", false, "Force overwrite existing files (used with --init-gateway)")
 
 	acpFlags := acpCmd.Flags()
 	acpFlags.StringVarP(&flagProvider, "provider", "p", "", "Provider (openai, anthropic, or custom provider name)")
@@ -130,7 +143,44 @@ func newRootCommand(runFn func([]string, runOptions) error, acpRunFn func(acp.Ru
 	acpFlags.BoolVar(&flagDebug, "debug", false, "Enable debug logging")
 	acpFlags.BoolVar(&flagMultiAgent, "multi-agent", false, "Enable multi-agent mode (sub-agent tools)")
 
+	var (
+		flagGatewayPort    string
+		flagGatewayConfig  string
+		flagGatewayWorkDir string
+	)
+
+	gatewayCmd := &cobra.Command{
+		Use:   "gateway",
+		Short: "Run the OpenAI-compatible HTTP gateway",
+		Long:  "Start VibeCoding as an HTTP server exposing a standard OpenAI Chat Completions API.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return gateway.Run(gateway.RunOptions{
+				ConfigPath: flagGatewayConfig,
+				Port:       flagGatewayPort,
+				Provider:   flagProvider,
+				Model:      flagModel,
+				WorkDir:    flagGatewayWorkDir,
+				Sandbox:    flagSandbox,
+				MultiAgent: flagMultiAgent,
+				Verbose:    flagVerbose,
+				Debug:      flagDebug,
+			}, version)
+		},
+	}
+
+	gatewayFlags := gatewayCmd.Flags()
+	gatewayFlags.StringVar(&flagGatewayPort, "port", "", "Listen port (default: from gateway.json or 8080)")
+	gatewayFlags.StringVar(&flagGatewayConfig, "config", "", "Path to gateway.json")
+	gatewayFlags.StringVar(&flagGatewayWorkDir, "work-dir", "", "Default working directory")
+	gatewayFlags.StringVarP(&flagProvider, "provider", "p", "", "Provider (openai, anthropic, or custom provider name)")
+	gatewayFlags.StringVarP(&flagModel, "model", "m", "", "Model ID")
+	gatewayFlags.BoolVar(&flagSandbox, "sandbox", false, "Enable sandbox (bwrap) for secure execution")
+	gatewayFlags.BoolVar(&flagMultiAgent, "multi-agent", false, "Enable multi-agent mode (sub-agent tools)")
+	gatewayFlags.BoolVar(&flagVerbose, "verbose", false, "Verbose output")
+	gatewayFlags.BoolVar(&flagDebug, "debug", false, "Enable debug logging")
+
 	rootCmd.AddCommand(acpCmd)
+	rootCmd.AddCommand(gatewayCmd)
 	return rootCmd
 }
 

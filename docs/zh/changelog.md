@@ -1,6 +1,65 @@
 # 更新日志
 
 
+## v0.1.26
+
+### ✨ 新功能
+
+- **Gateway 模式** (`vibecoding gateway`)
+  - 新增 HTTP 服务，对外暴露标准 OpenAI Chat Completions API (`/v1/chat/completions`、`/v1/models`、`/health`)
+  - 任何兼容 OpenAI SDK 的客户端（Cursor、Continue、Open WebUI、Python SDK 等）可直接接入
+  - 完整支持 Streaming (SSE) 和 Non-streaming 响应
+  - 后端由 VibeCoding agent 循环驱动，tool 执行对调用方透明
+
+- **多 Session 支持**
+  - 内置 `SessionPool` 支持并发 session，每个 session 拥有独立的 agent、工具和消息历史
+  - 通过请求体中的 `x_session_id` 关联 session，未指定时自动创建
+  - 可配置空闲超时 (`session.idleTimeoutSeconds`) 和最大 session 数 (`session.maxSessions`)
+
+- **Gateway Sub-Agent 支持**
+  - 可选 `enableSubAgents` 配置，在 gateway 模式下启用多 Agent 编排
+  - 复用现有 `AgentFactory` / `AgentManager` / 子Agent 工具，无需改动核心 agent 逻辑
+
+- **Bearer Token 认证**
+  - 通过 `gateway.json` 的 `auth.enabled` 和 `auth.tokens` 列表配置
+  - 默认关闭；`/health` 端点始终不需认证
+
+- **API 指令系统 (Slash Commands)**
+  - `/clear`、`/mode`、`/model`、`/models`、`/sessions`、`/compact`、`/status`、`/skill`、`/skills`、`/help`
+  - 当最后一条用户消息以 `/` 开头时触发，在 gateway 层直接处理，不调用 LLM
+  - 响应使用标准 OpenAI 格式，附加 `x_command` 扩展字段
+
+- **Tool 可见性配置** (`toolVisibility.mode`)
+  - `"content"` (默认): streaming 时通过 `content` 字段发送 tool 状态文本
+  - `"sse_event"`: 通过扩展 SSE event 发送，适合自定义客户端
+  - `"none"`: 完全透明，客户端只见最终文本
+
+- **System Prompt 处理策略** (`systemPromptMode`)
+  - `"append"` (默认): 客户端 system message 追加到内置 system prompt 末尾
+  - `"ignore"`: 完全忽略客户端 system message
+
+- **安全: allowedWorkDirs 白名单**
+  - 请求级 `x_working_dir` 的目录白名单，支持路径分隔符感知的前缀匹配
+  - 三层安全模型: L1 认证 + L2 目录管控 + L3 沙箱 (bwrap)
+
+- **Gateway Sandbox 支持**
+  - 通过 `gateway.json` 的 `sandbox.enabled` / `sandbox.level` 或 `--sandbox` flag 配置
+  - 细节配置（allowedRead、deniedPaths 等）继承 `settings.json`
+
+- **Gateway 配置文件** (`gateway.json`)
+  - 独立配置文件，位于 `~/.config/vibecoding/gateway.json`
+  - 覆盖: 监听地址、认证、模式、沙箱、工作目录、目录白名单、session 管理、CORS、tool 可见性、system prompt 策略、请求超时、并发限制、日志
+  - `vibecoding --init-gateway` 生成配置模板；`--force` 强制覆盖
+
+- **请求超时与并发控制**
+  - `requestTimeoutSeconds` (默认 300s)；streaming 有数据流动不超时
+  - `maxConcurrentRequests` (默认 0 = 不限制)
+
+### 📝 文档
+
+- 新增 `docs/gateway-proposal.md`，包含完整架构、API 设计、安全模型和实现计划
+- 更新 `AGENTS.md` 版本标注
+
 ## v0.1.25
 
 ### ✨ 新功能

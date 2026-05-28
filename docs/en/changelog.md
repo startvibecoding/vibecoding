@@ -1,6 +1,65 @@
 # Changelog
 
 
+## v0.1.26
+
+### ✨ Features
+
+- **Gateway Mode** (`vibecoding gateway`)
+  - New HTTP server exposing a standard OpenAI Chat Completions API (`/v1/chat/completions`, `/v1/models`, `/health`)
+  - Any OpenAI-compatible client (Cursor, Continue, Open WebUI, Python SDK, etc.) can connect directly
+  - Streaming (SSE) and non-streaming responses fully supported
+  - Backend powered by VibeCoding agent loop with tool execution transparent to the caller
+
+- **Multi-Session Support**
+  - Built-in `SessionPool` for concurrent sessions, each with isolated agent, tools, and message history
+  - Session association via `x_session_id` in request body; auto-created when absent
+  - Configurable idle timeout (`session.idleTimeoutSeconds`) and max session limit (`session.maxSessions`)
+
+- **Sub-Agent Support in Gateway**
+  - Optional `enableSubAgents` config to enable multi-agent orchestration in gateway mode
+  - Reuses existing `AgentFactory` / `AgentManager` / sub-agent tools with no core agent changes
+
+- **Bearer Token Authentication**
+  - Configurable via `gateway.json` with `auth.enabled` and `auth.tokens` list
+  - Disabled by default; `/health` endpoint always unauthenticated
+
+- **Slash Commands via API**
+  - `/clear`, `/mode`, `/model`, `/models`, `/sessions`, `/compact`, `/status`, `/skill`, `/skills`, `/help`
+  - Triggered when the last user message starts with `/`; processed at gateway layer without invoking LLM
+  - Responses use standard OpenAI format with `x_command` extension field
+
+- **Tool Visibility Configuration** (`toolVisibility.mode`)
+  - `"content"` (default): tool status sent as text in `content` field during streaming
+  - `"sse_event"`: tool status sent as extended SSE events for custom clients
+  - `"none"`: fully transparent, client sees only final text
+
+- **System Prompt Handling** (`systemPromptMode`)
+  - `"append"` (default): client system messages appended to built-in system prompt
+  - `"ignore"`: client system messages discarded entirely
+
+- **Security: allowedWorkDirs**
+  - Directory whitelist for `x_working_dir` request-level overrides with path-separator-aware prefix matching
+  - Three-layer security model: L1 auth + L2 directory control + L3 sandbox (bwrap)
+
+- **Sandbox Support in Gateway**
+  - Configurable via `gateway.json` `sandbox.enabled` / `sandbox.level` or `--sandbox` flag
+  - Inherits detailed sandbox settings (allowedRead, deniedPaths, etc.) from `settings.json`
+
+- **Gateway Configuration** (`gateway.json`)
+  - Independent config file at `~/.config/vibecoding/gateway.json`
+  - Covers: listen address, auth, mode, sandbox, workingDir, allowedWorkDirs, session management, CORS, tool visibility, system prompt mode, request timeout, concurrency limit, logging
+  - `vibecoding --init-gateway` to generate template; `--force` to overwrite
+
+- **Request Timeout & Concurrency**
+  - `requestTimeoutSeconds` (default 300s); streaming keeps alive as long as data flows
+  - `maxConcurrentRequests` (default 0 = unlimited)
+
+### 📝 Docs
+
+- Added `docs/gateway-proposal.md` with full architecture, API design, security model, and implementation plan
+- Updated `AGENTS.md` version note
+
 ## v0.1.25
 
 ### ✨ Features
