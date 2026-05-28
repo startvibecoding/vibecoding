@@ -425,6 +425,7 @@ func (d *Dispatcher) runAgent(ctx context.Context, sess *HermesSession, userInpu
 	var response strings.Builder
 	var thinkBuf strings.Builder
 	var eventCount int
+	var toolCount int
 	pendingToolArgs := make(map[string]map[string]any) // ToolCallID → args
 	flushThink := func() {
 		if progress != nil && thinkBuf.Len() > 0 {
@@ -450,6 +451,7 @@ func (d *Dispatcher) runAgent(ctx context.Context, sess *HermesSession, userInpu
 			}
 		case agent.EventToolExecutionEnd:
 			flushThink()
+			toolCount++
 			if progress != nil {
 				args := pendingToolArgs[ev.ToolCallID]
 				delete(pendingToolArgs, ev.ToolCallID)
@@ -468,7 +470,13 @@ func (d *Dispatcher) runAgent(ctx context.Context, sess *HermesSession, userInpu
 	}
 
 	result := response.String()
-	log.Printf("[hermes] Agent completed for %s/%s: events=%d, response_len=%d", sess.Platform, sess.UserID, eventCount, len(result))
+	log.Printf("[hermes] Agent completed for %s/%s: events=%d, tools=%d, response_len=%d", sess.Platform, sess.UserID, eventCount, toolCount, len(result))
+
+	// If agent produced no text but executed tools, provide a fallback summary
+	if result == "" && toolCount > 0 {
+		result = fmt.Sprintf("✅ Done (%d tool calls completed)", toolCount)
+	}
+
 	return result, nil
 }
 
