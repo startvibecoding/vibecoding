@@ -520,11 +520,15 @@ func (a *Agent) loop(ctx context.Context, ch chan<- Event) {
 		// Process pending steering messages
 		if a.config.GetSteeringMessages != nil {
 			steeringMessages := a.config.GetSteeringMessages()
-			for _, msg := range steeringMessages {
-				ch <- Event{Type: EventMessageStart, Message: msg}
-				ch <- Event{Type: EventMessageEnd, Message: msg}
-				a.messages = append(a.messages, msg)
-				a.context.Messages = append(a.context.Messages, msg)
+			if len(steeringMessages) > 0 {
+				a.mu.Lock()
+				for _, msg := range steeringMessages {
+					ch <- Event{Type: EventMessageStart, Message: msg}
+					ch <- Event{Type: EventMessageEnd, Message: msg}
+					a.messages = append(a.messages, msg)
+					a.context.Messages = append(a.context.Messages, msg)
+				}
+				a.mu.Unlock()
 			}
 		}
 

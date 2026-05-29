@@ -630,19 +630,32 @@ func (d *Dispatcher) handleCommand(msg messaging.InboundMessage) (string, error)
 		}
 		sess.Lock()
 		defer sess.Unlock()
-		// Reset session in-place
-		workDir := sess.WorkDir
+		// Archive old session before clearing (same as /new)
 		dir := d.hermesSessionDir(msg.Platform, msg.UserID)
-		newMgr := session.New(workDir, dir)
-		if err := newMgr.Init(); err != nil {
-			return "❌ Failed to clear: " + err.Error(), nil
-		}
 		activePath := filepath.Join(dir, "active.jsonl")
-		if newMgr.GetFile() != activePath {
-			os.Rename(newMgr.GetFile(), activePath)
-			newMgr, _ = session.Open(activePath)
+		if _, statErr := os.Stat(activePath); statErr == nil {
+			mgr, openErr := session.Open(activePath)
+			if openErr == nil {
+				hdr := mgr.GetHeader()
+				idPrefix := "unknown"
+				if hdr != nil && len(hdr.ID) >= 8 {
+					idPrefix = hdr.ID[:8]
+				}
+				archived := filepath.Join(dir, fmt.Sprintf("%s_%s.jsonl",
+					time.Now().Format("20060102-150405"), idPrefix))
+				os.Rename(activePath, archived)
+			} else {
+				archived := filepath.Join(dir, fmt.Sprintf("%s_corrupt.jsonl",
+					time.Now().Format("20060102-150405")))
+				os.Rename(activePath, archived)
+			}
 		}
-		sess.Manager = newMgr
+		// Close MCP clients before replacing session
+		key := sessionKey(msg.Platform, msg.UserID)
+		if len(sess.MCPClients) > 0 {
+			mcp.CloseClients(sess.MCPClients)
+		}
+		delete(d.sessions, key)
 		return "✅ Session cleared.", nil
 	case "/status":
 		sess := d.GetSession(sessionKey(msg.Platform, msg.UserID))

@@ -24,6 +24,11 @@ func NewWebhookHandler(dispatcher *Dispatcher, platforms map[string]messaging.Pl
 	}
 }
 
+// SetPlatforms replaces the platform map. Used to wire platforms after construction.
+func (h *WebhookHandler) SetPlatforms(platforms map[string]messaging.Platform) {
+	h.platforms = platforms
+}
+
 // HandleWebhookEvent processes an incoming webhook event by spawning an agent task.
 func (h *WebhookHandler) HandleWebhookEvent(ctx context.Context, route webhook.RouteConfig, payload []byte) error {
 	if h.dispatcher.agentMgr == nil {

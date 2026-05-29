@@ -129,6 +129,9 @@ func Run(opts RunOptions, version string) error {
 	gw := ws.NewGateway(cfg.GetListenAddr(), cfg.Server.AuthToken, version)
 	gw.SetDispatcher(newWSDispatcherAdapter(dispatcher))
 
+	// webhook handler is stored here so we can wire platforms after startPlatforms
+	var webhookHandler *WebhookHandler
+
 	// Register webhook routes if configured
 	if cfg.Webhooks.Enabled && len(cfg.Webhooks.Routes) > 0 {
 		var routes []webhook.RouteConfig
@@ -140,7 +143,7 @@ func Run(opts RunOptions, version string) error {
 				Delivery: r.Delivery,
 			})
 		}
-		webhookHandler := NewWebhookHandler(dispatcher, nil) // platforms wired after startPlatforms
+		webhookHandler = NewWebhookHandler(dispatcher, nil) // platforms wired after startPlatforms
 		router := webhook.NewRouter(routes, cfg.Webhooks.Secret, webhookHandler)
 		gw.RegisterHandler("/webhook/", router)
 	}
@@ -185,8 +188,23 @@ func Run(opts RunOptions, version string) error {
 		fmt.Fprintf(os.Stderr, "  Cron: disabled\n")
 	}
 
+	if cfg.Webhooks.Enabled && len(cfg.Webhooks.Routes) > 0 {
+		fmt.Fprintf(os.Stderr, "  Webhooks: %d routes\n", len(cfg.Webhooks.Routes))
+	} else {
+		fmt.Fprintf(os.Stderr, "  Webhooks: disabled\n")
+	}
+
 	// Start messaging platforms
 	srv.startPlatforms()
+
+	// Wire platform map into webhook handler now that platforms are started
+	if webhookHandler != nil && len(srv.platforms) > 0 {
+		pm := make(map[string]messaging.Platform, len(srv.platforms))
+		for _, p := range srv.platforms {
+			pm[p.Name()] = p
+		}
+		webhookHandler.SetPlatforms(pm)
+	}
 
 	// Start gateway (blocking)
 	errCh := make(chan error, 1)

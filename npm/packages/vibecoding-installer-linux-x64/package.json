@@ -1,6 +1,6 @@
 {
   "name": "vibecoding-installer-linux-x64",
-  "version": "v0.1.26-5-g221dccd-dirty",
+  "version": "v0.1.26-14-gf0f6f9c-dirty",
   "description": "VibeCoding native binary for linux-x64",
   "os": ["linux"],
   "cpu": ["x64"],

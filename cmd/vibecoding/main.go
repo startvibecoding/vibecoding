@@ -747,6 +747,7 @@ func newHermesCommand() *cobra.Command {
 		flagForce      bool
 		flagProject    bool
 		flagGlobal     bool
+		flagWebhook    bool
 		flagSchedule   string
 		flagOneShot    bool
 	)
@@ -819,6 +820,18 @@ func newHermesCommand() *cobra.Command {
 			if flagProject && flagGlobal {
 				return fmt.Errorf("--project and --global are mutually exclusive")
 			}
+			if flagWebhook {
+				path, err := hermes.InitWebhookConfig(flagProject, flagForce)
+				if err != nil {
+					return err
+				}
+				fmt.Fprintf(os.Stderr, "Created webhook config: %s\n", path)
+				fmt.Fprintf(os.Stderr, "\nSample routes:\n")
+				fmt.Fprintf(os.Stderr, "  POST /webhook/github  — GitHub events (push, pull_request, issues)\n")
+				fmt.Fprintf(os.Stderr, "  POST /webhook/ci      — CI events (all types)\n")
+				fmt.Fprintf(os.Stderr, "\nSet WEBHOOK_SECRET env var or replace ${WEBHOOK_SECRET} in config.\n")
+				return nil
+			}
 			path, err := hermes.InitHermesConfig(flagProject, flagForce)
 			if err != nil {
 				return err
@@ -830,6 +843,7 @@ func newHermesCommand() *cobra.Command {
 	configInitCmd.Flags().BoolVar(&flagProject, "project", false, "Write to .vibe/hermes.json")
 	configInitCmd.Flags().BoolVar(&flagGlobal, "global", false, "Write to global hermes.json (default)")
 	configInitCmd.Flags().BoolVar(&flagForce, "force", false, "Overwrite existing file")
+	configInitCmd.Flags().BoolVar(&flagWebhook, "webhook", false, "Include sample webhook routes (GitHub, CI)")
 
 	configShowCmd := &cobra.Command{
 		Use:   "show",

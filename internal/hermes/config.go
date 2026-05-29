@@ -281,6 +281,71 @@ func InitHermesConfig(project, force bool) (string, error) {
 	return path, nil
 }
 
+// InitWebhookConfig adds sample webhook routes to the hermes config.
+// If the config file already exists, it merges webhook routes into it.
+// If not, it creates a new config with webhook routes included.
+// The returned path is the config file that was written.
+func InitWebhookConfig(project, force bool) (string, error) {
+	var path string
+	if project {
+		path = ProjectHermesConfigPath()
+	} else {
+		path = HermesConfigPath()
+	}
+
+	// Load existing config or start from defaults
+	cfg := DefaultHermesConfig()
+	if data, err := os.ReadFile(path); err == nil {
+		if err := json.Unmarshal(data, cfg); err != nil {
+			return "", fmt.Errorf("parse existing config %s: %w", path, err)
+		}
+	} else if !os.IsNotExist(err) {
+		return "", fmt.Errorf("read config %s: %w", path, err)
+	}
+
+	// Check if webhook routes already exist
+	if len(cfg.Webhooks.Routes) > 0 && !force {
+		return path, fmt.Errorf("webhook routes already exist in %s (use --force to overwrite)", path)
+	}
+
+	// Add sample webhook configuration
+	cfg.Webhooks = WebhookConfig{
+		Enabled: true,
+		Secret:  "${WEBHOOK_SECRET}",
+		Routes: []WebhookRoute{
+			{
+				Path:     "/github",
+				Events:   []string{"push", "pull_request", "issues"},
+				Skill:    "code-review",
+				Delivery: "",
+			},
+			{
+				Path:     "/ci",
+				Events:   []string{"*"},
+				Skill:    "ci-monitor",
+				Delivery: "",
+			},
+		},
+	}
+
+	// Ensure parent directory exists
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return "", fmt.Errorf("create directory %s: %w", dir, err)
+	}
+
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return "", fmt.Errorf("marshal config: %w", err)
+	}
+
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		return "", fmt.Errorf("write config: %w", err)
+	}
+
+	return path, nil
+}
+
 // resolveEnvVars resolves ${VAR} references in string fields.
 func (c *HermesConfig) resolveEnvVars() {
 	c.Server.AuthToken = resolveEnv(c.Server.AuthToken)

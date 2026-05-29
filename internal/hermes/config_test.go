@@ -152,6 +152,65 @@ func TestInitHermesConfig(t *testing.T) {
 	}
 }
 
+func TestInitWebhookConfig(t *testing.T) {
+	// Use project mode to write to .vibe/hermes.json in a temp dir
+	dir := t.TempDir()
+	origDir, _ := os.Getwd()
+	os.Chdir(dir)
+	t.Cleanup(func() { os.Chdir(origDir) })
+
+	// Test: create webhook config on non-existing file
+	path, err := InitWebhookConfig(true, false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Read back and verify
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	var cfg HermesConfig
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatalf("parse config: %v", err)
+	}
+
+	// Verify webhook fields
+	if !cfg.Webhooks.Enabled {
+		t.Error("expected webhooks enabled")
+	}
+	if cfg.Webhooks.Secret != "${WEBHOOK_SECRET}" {
+		t.Errorf("expected secret ${WEBHOOK_SECRET}, got %s", cfg.Webhooks.Secret)
+	}
+	if len(cfg.Webhooks.Routes) != 2 {
+		t.Errorf("expected 2 routes, got %d", len(cfg.Webhooks.Routes))
+	}
+	if len(cfg.Webhooks.Routes) > 0 {
+		r := cfg.Webhooks.Routes[0]
+		if r.Path != "/github" {
+			t.Errorf("expected /github, got %s", r.Path)
+		}
+		if r.Skill != "code-review" {
+			t.Errorf("expected code-review skill, got %s", r.Skill)
+		}
+	}
+
+	// Test: duplicate without --force should error
+	_, err = InitWebhookConfig(true, false)
+	if err == nil {
+		t.Error("expected error for duplicate webhook routes")
+	}
+
+	// Test: --force should overwrite
+	path2, err := InitWebhookConfig(true, true)
+	if err != nil {
+		t.Fatalf("--force should succeed: %v", err)
+	}
+	if path2 != path {
+		t.Errorf("expected same path, got %s vs %s", path, path2)
+	}
+}
+
 func TestCronConfig(t *testing.T) {
 	cfg := &HermesConfig{
 		Cron: CronConfig{
