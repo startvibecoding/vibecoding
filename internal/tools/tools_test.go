@@ -69,6 +69,16 @@ func TestRegisterDefaults(t *testing.T) {
 	}
 }
 
+func TestRegisterDefaultsWithPlanToolDisabled(t *testing.T) {
+	sb := sandbox.NewNoneSandbox()
+	r := NewRegistry("/tmp", sb)
+	r.RegisterDefaultsWithPlanTool(false)
+
+	if _, ok := r.Get("plan"); ok {
+		t.Fatal("expected plan tool to be disabled")
+	}
+}
+
 func TestModeTools(t *testing.T) {
 	sb := sandbox.NewNoneSandbox()
 	r := NewRegistry("/tmp", sb)

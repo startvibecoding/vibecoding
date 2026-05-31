@@ -1,15 +1,5 @@
-# Ignore everything
-*
-
-# Except these files
-!package.json
-!postinstall.js
-!index.js
-!README.md
-
-# Ignore generated files
-tgz
+# Package contents are controlled by package.json "files".
 *.tgz
 
-# Ignore platform packages directory (published as separate packages)
+# Platform packages are published separately.
 packages/

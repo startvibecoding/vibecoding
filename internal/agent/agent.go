@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
+	agentpkg "github.com/startvibecoding/vibecoding/agent"
 	"github.com/startvibecoding/vibecoding/internal/config"
 	ctxpkg "github.com/startvibecoding/vibecoding/internal/context"
 	"github.com/startvibecoding/vibecoding/internal/provider"
@@ -16,8 +18,42 @@ import (
 	"github.com/startvibecoding/vibecoding/internal/tools"
 )
 
+// contextKey is an unexported type for context keys defined in this package.
+type contextKey int
+
+const (
+	// agentIDKey is the context key for the current agent's ID.
+	agentIDKey contextKey = iota
+	// agentEventChanKey is the context key for the current agent's event channel.
+	agentEventChanKey
+)
+
+// ContextWithAgentID returns a new context with the agent ID attached.
+func ContextWithAgentID(ctx context.Context, id agentpkg.AgentID) context.Context {
+	return context.WithValue(ctx, agentIDKey, id)
+}
+
+// AgentIDFromContext extracts the agent ID from the context.
+func AgentIDFromContext(ctx context.Context) (agentpkg.AgentID, bool) {
+	id, ok := ctx.Value(agentIDKey).(agentpkg.AgentID)
+	return id, ok
+}
+
+// ContextWithEventChan returns a new context with the event channel attached.
+func ContextWithEventChan(ctx context.Context, ch chan<- Event) context.Context {
+	return context.WithValue(ctx, agentEventChanKey, ch)
+}
+
+// EventChanFromContext extracts the event channel from the context.
+func EventChanFromContext(ctx context.Context) (chan<- Event, bool) {
+	ch, ok := ctx.Value(agentEventChanKey).(chan<- Event)
+	return ch, ok
+}
+
 // Config holds the agent configuration.
 type Config struct {
+	ID                 agentpkg.AgentID
+	ParentID           agentpkg.AgentID
 	Provider           provider.Provider
 	Model              *provider.Model
 	Mode               string // "plan", "agent", "yolo"
@@ -29,6 +65,7 @@ type Config struct {
 	ExtraContext       string // extra context from files and skills
 	CompactionSettings ctxpkg.CompactionSettings
 	ApprovalHandler    func(toolCallID, toolName string, args map[string]any) bool
+	MultiAgent         bool // Decision 8: multi-agent mode
 }
 
 // AgentLoopConfig extends Config with loop-specific settings.
@@ -60,6 +97,14 @@ type AgentLoopConfig struct {
 
 	// AfterToolCall is called after a tool finishes executing.
 	AfterToolCall func(ctx AfterToolCallContext) *ToolCallResult
+
+	// ContextPressureThreshold is the context usage percentage (0-1) that triggers EventContextPressure.
+	// 0 means disabled. Default: 0.55 (55%).
+	ContextPressureThreshold float64
+
+	// BudgetPressureThreshold is the remaining iteration ratio (0-1) that triggers EventBudgetPressure.
+	// 0 means disabled. Default: 0.20 (remaining 20%).
+	BudgetPressureThreshold float64
 }
 
 // ShouldStopAfterTurnContext is passed to ShouldStopAfterTurn.
@@ -122,6 +167,8 @@ type AgentContext struct {
 
 // Agent is the core agent loop.
 type Agent struct {
+	id          agentpkg.AgentID
+	parentID    agentpkg.AgentID
 	config      AgentLoopConfig
 	registry    *tools.Registry
 	mu          sync.RWMutex
@@ -141,6 +188,9 @@ type Agent struct {
 	pendingApprovals map[string]chan bool // approvalID -> response channel
 	approvalMu       sync.Mutex
 	approvalCounter  int64
+
+	// Force compaction flag — set by /compact command, consumed by ShouldCompact
+	forceCompact int32 // atomic: 0=false, 1=true
 }
 
 // buildFrozenPrompt builds the system prompt and tools once at construction time.
@@ -160,9 +210,45 @@ func (a *Agent) buildFrozenPrompt() {
 		a.config.ExtraContext,
 		toolSnippets,
 		toolGuidelines,
+		a.config.MultiAgent,
 	)
 	a.frozenToolDefs = a.registry.ModeTools(a.config.Mode)
 	a.frozenToolNames = toolNames
+}
+
+// supportsImages checks if the model supports image input.
+func (a *Agent) supportsImages() bool {
+	if a.config.Model == nil {
+		return false
+	}
+	for _, input := range a.config.Model.Input {
+		if input == "image" {
+			return true
+		}
+	}
+	return false
+}
+
+// stripImageContent removes image content blocks from messages.
+// This prevents 404 errors when sending to models that don't support image input.
+func stripImageContent(messages []provider.Message) []provider.Message {
+	result := make([]provider.Message, 0, len(messages))
+	for _, msg := range messages {
+		if len(msg.Contents) > 0 {
+			var filtered []provider.ContentBlock
+			for _, c := range msg.Contents {
+				if c.Type != "image" {
+					filtered = append(filtered, c)
+				}
+			}
+			if len(filtered) == 0 && msg.Content == "" {
+				continue // skip message with only image content and no text
+			}
+			msg.Contents = filtered
+		}
+		result = append(result, msg)
+	}
+	return result
 }
 
 // buildSessionContextMessage builds the [session context] message with dynamic information.
@@ -282,7 +368,14 @@ func New(cfg Config, registry *tools.Registry) *Agent {
 		MaxIterations:     200,
 	}
 
+	id := cfg.ID
+	if id == "" {
+		id = agentpkg.AgentID(fmt.Sprintf("agent-%d", time.Now().UnixNano()))
+	}
+
 	agent := &Agent{
+		id:               id,
+		parentID:         cfg.ParentID,
 		config:           loopConfig,
 		registry:         registry,
 		abort:            make(chan struct{}),
@@ -293,6 +386,8 @@ func New(cfg Config, registry *tools.Registry) *Agent {
 	}
 	// Build frozen system prompt once at construction time (R2.1)
 	agent.buildFrozenPrompt()
+	agent.context.SystemPrompt = agent.frozenSystemPrompt
+	agent.context.Tools = agent.frozenToolDefs
 	return agent
 }
 
@@ -305,7 +400,14 @@ func NewWithLoopConfig(cfg AgentLoopConfig, registry *tools.Registry) *Agent {
 		cfg.ToolExecutionMode = "parallel"
 	}
 
+	id := cfg.ID
+	if id == "" {
+		id = agentpkg.AgentID(fmt.Sprintf("agent-%d", time.Now().UnixNano()))
+	}
+
 	agent := &Agent{
+		id:               id,
+		parentID:         cfg.ParentID,
 		config:           cfg,
 		registry:         registry,
 		abort:            make(chan struct{}),
@@ -316,6 +418,8 @@ func NewWithLoopConfig(cfg AgentLoopConfig, registry *tools.Registry) *Agent {
 	}
 	// Build frozen system prompt once at construction time (R2.1)
 	agent.buildFrozenPrompt()
+	agent.context.SystemPrompt = agent.frozenSystemPrompt
+	agent.context.Tools = agent.frozenToolDefs
 	return agent
 }
 
@@ -328,11 +432,26 @@ func (a *Agent) LoadHistoryMessages(messages []provider.Message) {
 }
 
 // Abort signals the agent to stop processing.
+// Satisfies both internal and public agent.Agent interface.
 func (a *Agent) Abort() {
 	a.abortOnce.Do(func() {
 		close(a.abort)
 	})
 }
+
+// emit sends an event with this agent's ID stamped on it.
+func (a *Agent) emit(ch chan<- Event, event Event) {
+	event.AgentID = a.id
+	ch <- event
+}
+
+// --- Public agent.Agent interface methods ---
+
+// ID returns the agent's unique identifier.
+func (a *Agent) ID() agentpkg.AgentID { return a.id }
+
+// ParentID returns the parent agent's ID, or empty if top-level.
+func (a *Agent) ParentID() agentpkg.AgentID { return a.parentID }
 
 // Run processes a user message and streams events back.
 func (a *Agent) Run(ctx context.Context, userMsg string) <-chan Event {
@@ -389,6 +508,10 @@ func (a *Agent) loop(ctx context.Context, ch chan<- Event) {
 	const maxConsecutiveNoTextAfterWarning = 5 // After warning, allow 5 more turns before stopping
 	warningIssued := false
 
+	// Pressure tracking — fire events once per threshold crossing
+	contextPressureFired := false
+	budgetPressureFired := false
+
 	for i := 0; i < a.config.MaxIterations; i++ {
 		select {
 		case <-ctx.Done():
@@ -409,11 +532,15 @@ func (a *Agent) loop(ctx context.Context, ch chan<- Event) {
 		// Process pending steering messages
 		if a.config.GetSteeringMessages != nil {
 			steeringMessages := a.config.GetSteeringMessages()
-			for _, msg := range steeringMessages {
-				ch <- Event{Type: EventMessageStart, Message: msg}
-				ch <- Event{Type: EventMessageEnd, Message: msg}
-				a.messages = append(a.messages, msg)
-				a.context.Messages = append(a.context.Messages, msg)
+			if len(steeringMessages) > 0 {
+				a.mu.Lock()
+				for _, msg := range steeringMessages {
+					ch <- Event{Type: EventMessageStart, Message: msg}
+					ch <- Event{Type: EventMessageEnd, Message: msg}
+					a.messages = append(a.messages, msg)
+					a.context.Messages = append(a.context.Messages, msg)
+				}
+				a.mu.Unlock()
 			}
 		}
 
@@ -431,6 +558,11 @@ func (a *Agent) loop(ctx context.Context, ch chan<- Event) {
 		allMessages = append(allMessages, sessionContextMsg)
 		allMessages = append(allMessages, a.messages...)
 		a.mu.RUnlock()
+
+		// Strip image content if model doesn't support it
+		if !a.supportsImages() {
+			allMessages = stripImageContent(allMessages)
+		}
 
 		// Select cache markers (dual-marker rolling buffer, R3.1-R3.3)
 		markers := selectCacheMarkers(allMessages)
@@ -495,6 +627,10 @@ func (a *Agent) loop(ctx context.Context, ch chan<- Event) {
 			case provider.StreamError:
 				streamErr = event.Error
 				stopReason = event.StopReason
+			case provider.StreamRetry:
+				if event.Error != nil {
+					ch <- Event{Type: EventStatus, StatusMessage: event.Error.Error()}
+				}
 			}
 		}
 
@@ -556,39 +692,9 @@ func (a *Agent) loop(ctx context.Context, ch chan<- Event) {
 			usage.CalculateCost(a.config.Model)
 		}
 
-		// Track progress for loop detection
-		if textContent == "" {
-			consecutiveNoText++
-			threshold := maxConsecutiveNoText
-			if warningIssued {
-				threshold = maxConsecutiveNoTextAfterWarning
-			}
-			if consecutiveNoText >= threshold {
-				if !warningIssued {
-					// Inject a warning message to let the AI explain itself
-					warningMsg := provider.NewUserMessage("[System] You have been making tool calls for " + fmt.Sprintf("%d", consecutiveNoText) + " consecutive turns without any text response. Please explain what you are doing and whether you are stuck. If you are making progress, briefly describe your current task and continue. If you are truly stuck, please stop and explain the issue.")
-					ch <- Event{Type: EventMessageStart, Message: warningMsg}
-					ch <- Event{Type: EventMessageEnd, Message: warningMsg}
-					a.mu.Lock()
-					a.messages = append(a.messages, warningMsg)
-					a.context.Messages = append(a.context.Messages, warningMsg)
-					a.mu.Unlock()
-					warningIssued = true
-					consecutiveNoText = 0 // Reset counter for post-warning phase
-				} else {
-					// Already warned, now truly stuck
-					ch <- Event{Type: EventError, Error: fmt.Errorf("agent appears stuck: %d consecutive turns without text output after warning", consecutiveNoText+maxConsecutiveNoText), StopReason: "stuck"}
-					ch <- Event{Type: EventAgentEnd, Messages: func() []provider.Message {
-						a.mu.RLock()
-						defer a.mu.RUnlock()
-						m := make([]provider.Message, len(a.messages))
-						copy(m, a.messages)
-						return m
-					}()}
-					return
-				}
-			}
-		} else {
+		// Track progress for loop detection. Tool-only warnings are injected
+		// after tool results are recorded so provider message ordering stays valid.
+		if textContent != "" {
 			consecutiveNoText = 0
 			warningIssued = false // AI responded with text, reset warning state
 		}
@@ -632,7 +738,96 @@ func (a *Agent) loop(ctx context.Context, ch chan<- Event) {
 			}
 		}
 
+		if textContent == "" {
+			consecutiveNoText++
+			threshold := maxConsecutiveNoText
+			if warningIssued {
+				threshold = maxConsecutiveNoTextAfterWarning
+			}
+			if consecutiveNoText >= threshold {
+				if !warningIssued {
+					// Inject a warning message to let the AI explain itself.
+					warningMsg := provider.NewUserMessage("[System] You have been making tool calls for " + fmt.Sprintf("%d", consecutiveNoText) + " consecutive turns without any text response. Please explain what you are doing and whether you are stuck. If you are making progress, briefly describe your current task and continue. If you are truly stuck, please stop and explain the issue.")
+					ch <- Event{Type: EventMessageStart, Message: warningMsg}
+					ch <- Event{Type: EventMessageEnd, Message: warningMsg}
+					a.mu.Lock()
+					a.messages = append(a.messages, warningMsg)
+					a.context.Messages = append(a.context.Messages, warningMsg)
+					a.mu.Unlock()
+					if a.config.Session != nil {
+						if _, err := a.config.Session.AppendMessage(warningMsg); err != nil {
+							ch <- Event{Type: EventError, Error: fmt.Errorf("save warning message to session: %w", err)}
+							return
+						}
+					}
+					warningIssued = true
+					consecutiveNoText = 0 // Reset counter for post-warning phase
+				} else {
+					// Already warned, now truly stuck. Tool results have already been
+					// appended, so the saved transcript remains provider-valid.
+					ch <- Event{Type: EventError, Error: fmt.Errorf("agent appears stuck: %d consecutive turns without text output after warning", consecutiveNoText+maxConsecutiveNoText), StopReason: "stuck"}
+					ch <- Event{Type: EventAgentEnd, Messages: func() []provider.Message {
+						a.mu.RLock()
+						defer a.mu.RUnlock()
+						m := make([]provider.Message, len(a.messages))
+						copy(m, a.messages)
+						return m
+					}()}
+					return
+				}
+			}
+		}
+
 		ch <- Event{Type: EventTurnEnd, TurnMessage: assistantMsg, TurnToolResults: toolResults, ContextUsage: a.GetContextUsage()}
+
+		// --- Pressure checks (fire once per threshold crossing) ---
+
+		// Context Pressure: fire EventContextPressure once when usage exceeds threshold
+		if !contextPressureFired {
+			threshold := a.config.ContextPressureThreshold
+			if threshold <= 0 {
+				threshold = 0.55 // default 55%
+			}
+			if ctx := a.GetContextUsage(); ctx != nil && ctx.Percent != nil {
+				if *ctx.Percent >= threshold {
+					contextPressureFired = true
+					warnMsg := fmt.Sprintf(
+						"[Context Pressure] %.0f%% of context window used (%d/%d tokens). " +
+							"Compaction will trigger soon. Consider saving important context to memory.md and wrapping up the current task.",
+						*ctx.Percent, ctx.Tokens, ctx.ContextWindow)
+					ch <- Event{
+						Type:           EventContextPressure,
+						PressureMessage: warnMsg,
+						PressureType:    "context",
+						PressurePercent: *ctx.Percent,
+						ContextUsage:    ctx,
+					}
+				}
+			}
+		}
+
+		// Budget Pressure: fire EventBudgetPressure once when remaining iterations reach threshold
+		if !budgetPressureFired {
+			threshold := a.config.BudgetPressureThreshold
+			if threshold <= 0 {
+				threshold = 0.20 // default 20%
+			}
+			remaining := float64(a.config.MaxIterations-i) / float64(a.config.MaxIterations)
+			if remaining <= threshold {
+				budgetPressureFired = true
+				remainingTurns := a.config.MaxIterations - i
+				warnMsg := fmt.Sprintf(
+					"[Budget Pressure] %d/%d turns remaining (%.0f%%). " +
+						"Complete the current task and summarize progress.",
+					remainingTurns, a.config.MaxIterations, remaining*100)
+				ch <- Event{
+					Type:           EventBudgetPressure,
+					PressureMessage: warnMsg,
+					PressureType:    "budget",
+					PressurePercent: remaining * 100,
+				}
+			}
+		}
 
 		// Check if compaction should trigger
 		if a.ShouldCompact() {
@@ -851,6 +1046,10 @@ func (a *Agent) executeSingleToolCall(ctx context.Context, tc provider.ToolCallB
 	toolCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 
+	// Inject agent ID and event channel into context for sub-agent tools
+	toolCtx = ContextWithAgentID(toolCtx, a.id)
+	toolCtx = ContextWithEventChan(toolCtx, ch)
+
 	result, err := tool.Execute(toolCtx, params)
 	isError := err != nil
 	resultContent := result.Text
@@ -976,8 +1175,27 @@ func (a *Agent) GetContextUsage() *ctxpkg.ContextUsage {
 	}
 }
 
+// SetForceCompact marks the agent for forced compaction on the next turn.
+// Called by /compact command in TUI and Gateway.
+func (a *Agent) SetForceCompact() {
+	atomic.StoreInt32(&a.forceCompact, 1)
+}
+
 // ShouldCompact checks if compaction should trigger.
+// Returns true if context exceeds the threshold OR if forced via SetForceCompact.
 func (a *Agent) ShouldCompact() bool {
+	// Check force flag first (consumes it)
+	if atomic.CompareAndSwapInt32(&a.forceCompact, 1, 0) {
+		// Force compaction requested — still need a model and some messages
+		a.mu.RLock()
+		hasModel := a.config.Model != nil
+		hasMsgs := len(a.messages) >= 2
+		a.mu.RUnlock()
+		if hasModel && hasMsgs {
+			return true
+		}
+	}
+
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	if !a.config.CompactionSettings.Enabled {

@@ -9,7 +9,7 @@ import (
 )
 
 // BuildSystemPrompt constructs the system prompt based on mode and context.
-func BuildSystemPrompt(mode string, toolNames []string, cwd string, extraContext string, toolSnippets map[string]string, toolGuidelines []string) string {
+func BuildSystemPrompt(mode string, toolNames []string, cwd string, extraContext string, toolSnippets map[string]string, toolGuidelines []string, multiAgent bool) string {
 	var sb strings.Builder
 
 	// Get platform-specific shell
@@ -133,6 +133,29 @@ Focus on getting the task done quickly and correctly.
 
 	// Behavior guidelines are now included in the Guidelines section above
 
+	// Sub-Agent section (Decision 8: only in multi-agent mode)
+	if multiAgent {
+		sb.WriteString(`
+## Sub-Agent Tools
+You can delegate bounded, independent subtasks to sub-agents using these tools:
+- subagent_spawn: Create and start a sub-agent for a subtask (returns handle)
+- subagent_status: Check sub-agent status and get results
+- subagent_send: Send follow-up instructions to a running sub-agent
+- subagent_destroy: Destroy a finished sub-agent to release resources
+
+Act as the orchestrator:
+- Keep the final answer and user-facing decisions in the main agent
+- Spawn sub-agents only for work that can be described with clear scope, expected output, and stop conditions
+- Prefer parallel sub-agents for independent research, codebase inspection, test investigation, or review tasks
+- Avoid delegation for tiny, sequential, highly stateful, or ambiguous work where coordination costs exceed the benefit
+- Give each sub-agent one focused task, relevant paths/context, allowed tools if useful, and the exact artifact you need back
+- Poll sub-agents with subagent_status, reconcile their outputs yourself, verify important claims before acting, and destroy finished agents
+- Do not assume sub-agent output is correct; treat it as evidence to review
+
+Sub-agents run independently with isolated context and tools. They cannot create nested sub-agents.
+`)
+	}
+
 	// Append extra context from files and skills
 	if extraContext != "" {
 		sb.WriteString("\n## Context from project files\n")
@@ -141,6 +164,22 @@ Focus on getting the task done quickly and correctly.
 	}
 
 	return sb.String()
+}
+
+// BuildSubAgentContext returns extra system context for sub-agents.
+func BuildSubAgentContext() string {
+	return `
+## Sub-Agent Operating Contract
+You are a worker sub-agent. Execute only the delegated task, stay within the requested scope, and do not broaden the objective.
+
+Report back with:
+- Result: the direct answer or completed change
+- Evidence: files inspected, commands run, tests/checks performed, and relevant outputs summarized
+- Changes: files modified, if any
+- Risks: assumptions, uncertainty, and follow-up needed
+
+Stop when the delegated artifact is ready, blocked, or unsafe to continue. Do not ask the user directly unless the task explicitly requires it.
+`
 }
 
 // formatToolListWithSnippets formats the tool list with snippets for the system prompt.

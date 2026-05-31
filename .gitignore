@@ -1,5 +1,6 @@
 # Binaries
 bin/
+npm/bin/
 *.exe
 *.exe~
 *.dll
@@ -31,3 +32,4 @@ dist/
 npm/*.tgz
 *.png
 internal/vendored/bin/
+.vibe

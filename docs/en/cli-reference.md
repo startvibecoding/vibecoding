@@ -18,6 +18,7 @@ Alias: `vc`
 | `--model` | `-m` | Default from config file | Model ID |
 | `--mode` | `-M` | `agent` | Run mode (plan, agent, yolo) |
 | `--thinking` | `-t` | `off` | Thinking level (off, minimal, low, medium, high, xhigh) |
+| `--multi-agent` | - | `false` | Enable multi-agent tools and commands |
 
 ### Session Management
 
@@ -46,6 +47,10 @@ Alias: `vc`
 
 | Parameter | Short | Description |
 |-----------|-------|-------------|
+| `--init-gateway` | - | Create `gateway.json` config template |
+| `--init-a2a-master-config` | - | Create `a2a-list.json` config template |
+| `--enable-a2a-master` | - | Enable A2A master mode (remote agent dispatch) |
+| `--force` | - | Force overwrite existing files (used with `--init-*`) |
 | `--version` | `-v` | Show version |
 | `--help` | `-h` | Show help |
 
@@ -70,8 +75,30 @@ Supports VS Code, JetBrains IDEs, and any ACP-compatible editor.
 | `--sandbox` | - | false | Enable sandbox |
 | `--verbose` | - | false | Verbose output |
 | `--debug` | - | false | Debug logging |
+| `--multi-agent` | - | false | Enable multi-agent tools for ACP sessions |
 
 See the [ACP Protocol](acp.md) documentation for IDE integration details.
+
+### `a2a` - A2A Protocol Server
+
+Run the A2A (Agent-to-Agent) protocol server, supporting standalone and integrated modes.
+
+```
+vibecoding a2a [command]
+```
+
+| Subcommand | Description |
+|------------|-------------|
+| `start` | Start A2A server |
+| `stop` | Stop A2A server |
+| `status` | Show server status |
+| `card` | Show/generate Agent Card |
+| `send <message>` | Send task to remote A2A server |
+| `discover <url>` | Discover remote Agent Card |
+| `--init-a2a-config` | Create `a2a.json` config template |
+| `--force` | Force overwrite existing config file |
+
+See [A2A Protocol](a2a.md) documentation for details.
 
 ## Usage Examples
 
@@ -113,6 +140,18 @@ vibecoding -M agent
 # YOLO mode - full access
 vibecoding -M yolo
 ```
+
+### Multi-Agent Mode
+
+```bash
+# Enable sub-agent tools and multi-agent commands
+vibecoding --multi-agent
+
+# ACP sessions can also opt in
+vibecoding acp --multi-agent
+```
+
+When enabled, VibeCoding registers the `subagent_*` tools and exposes multi-agent workflows such as delegated background investigation. Cron command entry points also depend on multi-agent mode.
 
 ### Thinking Levels
 

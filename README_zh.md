@@ -8,11 +8,26 @@
   一个基于终端的 AI 编码助手，使用约 10,000 行 Go 代码编写，灵感来源于 <a href="https://pi.dev">pi.dev</a>
 </p>
 
+<p align="center">
+  主打渐进式、敏捷开发体验的 VibeCoding 工具，整体打包为单个文件，开箱即用，无需重复搭建部署 Claude Code 、 codex、Claw、Hermes 环境。
+</p>
+
+<p align="center">
+  <a href="https://www.npmjs.com/package/vibecoding-installer"><img src="https://img.shields.io/npm/dm/vibecoding-installer.svg" alt="npm downloads"></a>
+  <a href="https://github.com/startvibecoding/vibecoding/releases/latest"><img src="https://img.shields.io/github/release/startvibecoding/vibecoding.svg" alt="GitHub release"></a>
+  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
+  <a href="https://goreportcard.com/report/github.com/startvibecoding/vibecoding"><img src="https://goreportcard.com/badge/github.com/startvibecoding/vibecoding" alt="Go Report Card"></a>
+  <a href="https://pkg.go.dev/github.com/startvibecoding/vibecoding"><img src="https://pkg.go.dev/badge/github.com/startvibecoding/vibecoding?status.svg" alt="GoDoc"></a>
+  <a href="https://github.com/startvibecoding/vibecoding/network/dependencies"><img src="https://img.shields.io/librariesio/release/github/startvibecoding/vibecoding" alt="Dependencies"></a>
+</p>
+
 ## 功能特性
 
-- **多提供商支持**：DeepSeek（默认）、OpenAI、Anthropic，以及任何通过 OpenAI/Anthropic 兼容 API 的自定义提供商
+- **多提供商支持**：DeepSeek（默认）、OpenAI、Anthropic，以及面向 OpenAI/Anthropic 格式兼容 API 的厂商适配器
 - **SSE 流式传输**：实时令牌流式传输，快速响应
 - **思考模式**：扩展思考/推理支持（DeepSeek 推理）
+- **多 Agent 工作流**：可选 `--multi-agent` 模式，支持委托子 Agent 和 cron 命令入口
+- **A2A Master 模式**：可选 `--enable-a2a-master` 模式，通过 `a2a-list.json` 管理多个远程 A2A Agent，注册 `a2a_dispatch` tool 自动分发任务
 - **三种模式**：
   - 🗒️ **计划** — 只读分析和规划。沙箱化，无文件写入
   - 🔧 **代理**（默认）— 对项目的受控读写访问。Bash 需要批准（可配置白名单）。沙箱化，无网络
@@ -95,7 +110,12 @@ export DEEPSEEK_API_KEY=sk-...
 ```json
 {
   "providers": {
-    "deepseek-openai": { "apiKey": "sk-..." }
+    "deepseek-openai": {
+      "vendor": "deepseek",
+      "api": "openai-chat",
+      "baseUrl": "https://api.deepseek.com",
+      "apiKey": "sk-..."
+    }
   }
 }
 ```
@@ -114,6 +134,9 @@ vibecoding -p "用 Go 写一个 hello world"
 
 # 指定提供商和模型
 vibecoding --provider deepseek-openai --model deepseek-v4-flash
+
+# 启用子 Agent 工具和多 Agent 命令
+vibecoding --multi-agent
 
 # 更改模式
 vibecoding --mode plan    # 只读规划
@@ -147,6 +170,7 @@ vibecoding --no-sandbox
   "defaultModel": "deepseek-v4-flash",
   "defaultThinkingLevel": "medium",
   "defaultMode": "agent",
+  "enablePlanTool": true,
   "maxContextTokens": 1000000,
   "maxOutputTokens": 384000,
   "compaction": {
@@ -185,6 +209,7 @@ vibecoding --no-sandbox
 | `VIBECODING_MODE` | 覆盖默认模式 |
 | `VIBECODING_THINKING` | 覆盖默认思考级别 |
 | `VIBECODING_USER_AGENT` | 自定义用户代理字符串 |
+| `VIBECODING_DEBUG` | 启用 provider 级请求/响应调试输出 |
 
 ## 沙箱安全
 
@@ -220,6 +245,8 @@ vibecoding [标志] [消息...]
   -m, --model string       模型 ID
   -M, --mode string        模式 (plan, agent, yolo)
   -t, --thinking string    思考级别 (off, minimal, low, medium, high, xhigh)
+      --multi-agent        启用多 Agent 工具和命令
+      --enable-a2a-master   启用 A2A Master 模式（远程 agent 调度）
   -c, --continue           继续最近会话
   -r, --resume string      通过 ID 或路径恢复会话
       --session string     使用特定会话文件或 ID
@@ -270,21 +297,44 @@ make dist       # 构建分发包 (.deb, .tar.gz)
 vibecoding/
 ├── cmd/vibecoding/        # CLI 入口点
 ├── internal/
-│   ├── agent/             # 核心代理循环
+│   ├── a2a/               # A2A 协议服务器与 Master 模式
+│   ├── acp/               # ACP / MCP 集成
+│   ├── agent/             # 核心 Agent 循环
 │   ├── config/            # 配置系统
 │   ├── context/           # 上下文管理和令牌估算
 │   ├── contextfiles/      # 上下文文件发现 (AGENTS.md, CLAUDE.md 等)
+│   ├── cron/              # 多 Agent 工作流的定时任务
+│   ├── gateway/           # OpenAI 兼容 HTTP 网关
+│   ├── hermes/            # 消息平台网关 (微信/飞书/WebSocket)
+│   ├── mcp/               # MCP 服务器集成
+│   ├── memory/            # 持久化记忆 (memory.md)
+│   ├── messaging/         # 消息平台抽象
 │   ├── platform/          # 跨平台兼容性工具
 │   ├── provider/          # LLM 提供商抽象
+│   │   ├── factory/       # 共享 provider/model 创建逻辑
 │   │   ├── openai/        # OpenAI Chat Completions API
-│   │   └── anthropic/     # Anthropic Messages API
+│   │   ├── anthropic/     # Anthropic Messages API
+│   │   └── vendor*.go     # 厂商适配注册和默认值
 │   ├── sandbox/           # 沙箱 (bwrap) 实现
 │   ├── session/           # 会话管理 (JSONL)
 │   ├── skills/            # 技能系统
 │   ├── tools/             # 工具实现
 │   ├── tui/               # 终端界面 (BubbleTea)
-│   └── ua/                # 用户代理字符串生成
+│   ├── ua/                # 用户代理字符串生成
+│   └── vendored/          # 内嵌二进制 (rg, fd)
 └── pkg/sdk/               # 公共 SDK 接口
+```
+
+### 运行模式
+
+```
+vibecoding                    # 交互式终端 (TUI)
+vibecoding -p "..."           # 非交互打印模式
+vibecoding acp                # ACP stdio 代理 (编辑器集成)
+vibecoding gateway            # OpenAI 兼容 HTTP 网关
+vibecoding hermes             # 消息平台网关 (微信/飞书/WebSocket)
+vibecoding a2a start          # A2A 协议服务器 (独立模式)
+vibecoding --enable-a2a-master  # A2A Master 模式 (远程 agent 调度)
 ```
 
 ## 许可证

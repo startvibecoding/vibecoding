@@ -115,6 +115,29 @@ func TestAppendMessage(t *testing.T) {
 	}
 }
 
+func TestAppendMessageAutoInitializesSession(t *testing.T) {
+	tmpDir := t.TempDir()
+	sessionDir := filepath.Join(tmpDir, "sessions")
+
+	m := New("/tmp/test", sessionDir)
+	id, err := m.AppendMessage(provider.NewUserMessage("Hello"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if id == "" {
+		t.Fatal("expected non-empty message ID")
+	}
+	if m.GetHeader() == nil {
+		t.Fatal("expected session header to be initialized")
+	}
+	if m.GetFile() == "" {
+		t.Fatal("expected session file to be initialized")
+	}
+	if _, err := os.Stat(m.GetFile()); err != nil {
+		t.Fatalf("expected session file to exist: %v", err)
+	}
+}
+
 func TestAppendModelChange(t *testing.T) {
 	tmpDir := t.TempDir()
 	sessionDir := filepath.Join(tmpDir, "sessions")
@@ -554,5 +577,249 @@ func TestSessionInfo(t *testing.T) {
 		if s.ModTime.IsZero() {
 			t.Error("expected non-zero mod time")
 		}
+	}
+}
+
+func TestDeleteSession(t *testing.T) {
+	tmpDir := t.TempDir()
+	sessionDir := filepath.Join(tmpDir, "sessions")
+
+	m := New("/tmp/test", sessionDir)
+	m.Init()
+
+	path := m.GetFile()
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("session file should exist: %v", err)
+	}
+
+	err := DeleteSession(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Error("expected session file to be deleted")
+	}
+}
+
+func TestDeleteSessionNonExistent(t *testing.T) {
+	err := DeleteSession("/nonexistent/path.jsonl")
+	if err == nil {
+		t.Error("expected error for non-existent file")
+	}
+}
+
+func TestListForDirDetailed(t *testing.T) {
+	tmpDir := t.TempDir()
+	sessionDir := filepath.Join(tmpDir, "sessions")
+
+	// Create a session with messages
+	m := New("/tmp/test", sessionDir)
+	m.Init()
+	m.AppendMessage(provider.NewUserMessage("Hello world"))
+	m.AppendMessage(provider.NewAssistantMessage([]provider.ContentBlock{
+		{Type: "text", Text: "Hi there"},
+	}))
+	m.AppendMessage(provider.NewUserMessage("Another message"))
+
+	details, err := ListForDirDetailed("/tmp/test", sessionDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(details) != 1 {
+		t.Fatalf("expected 1 session detail, got %d", len(details))
+	}
+
+	d := details[0]
+	if d.MessageCount != 3 {
+		t.Errorf("expected 3 messages, got %d", d.MessageCount)
+	}
+	if d.Preview != "Hello world" {
+		t.Errorf("expected preview 'Hello world', got %q", d.Preview)
+	}
+	if d.ID == "" {
+		t.Error("expected non-empty ID")
+	}
+}
+
+func TestListForDirDetailedLongPreview(t *testing.T) {
+	tmpDir := t.TempDir()
+	sessionDir := filepath.Join(tmpDir, "sessions")
+
+	m := New("/tmp/test", sessionDir)
+	m.Init()
+	// Message longer than 60 chars
+	longMsg := strings.Repeat("a", 100)
+	m.AppendMessage(provider.NewUserMessage(longMsg))
+
+	details, err := ListForDirDetailed("/tmp/test", sessionDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(details) != 1 {
+		t.Fatalf("expected 1 session, got %d", len(details))
+	}
+
+	if len(details[0].Preview) > 64 { // 60 + "..."
+		t.Errorf("preview should be truncated, got length %d", len(details[0].Preview))
+	}
+	if !strings.HasSuffix(details[0].Preview, "...") {
+		t.Error("expected truncated preview to end with '...'")
+	}
+}
+
+func TestListForDirDetailedEmpty(t *testing.T) {
+	tmpDir := t.TempDir()
+	sessionDir := filepath.Join(tmpDir, "sessions")
+
+	details, err := ListForDirDetailed("/tmp/nonexistent", sessionDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(details) != 0 {
+		t.Errorf("expected 0 details, got %d", len(details))
+	}
+}
+
+func TestListForDirDetailedContentBlocks(t *testing.T) {
+	tmpDir := t.TempDir()
+	sessionDir := filepath.Join(tmpDir, "sessions")
+
+	m := New("/tmp/test", sessionDir)
+	m.Init()
+	// User message with content blocks (no Content field)
+	m.AppendMessage(provider.Message{
+		Role: "user",
+		Contents: []provider.ContentBlock{
+			{Type: "text", Text: "Block content"},
+		},
+	})
+
+	details, err := ListForDirDetailed("/tmp/test", sessionDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(details) != 1 {
+		t.Fatalf("expected 1 session, got %d", len(details))
+	}
+	if details[0].Preview != "Block content" {
+		t.Errorf("expected preview 'Block content', got %q", details[0].Preview)
+	}
+}
+
+func TestAppendSessionInfo(t *testing.T) {
+	tmpDir := t.TempDir()
+	sessionDir := filepath.Join(tmpDir, "sessions")
+
+	m := New("/tmp/test", sessionDir)
+	m.Init()
+
+	id, err := m.AppendSessionInfo("My Session")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if id == "" {
+		t.Error("expected non-empty ID")
+	}
+	if len(m.entries) != 1 {
+		t.Errorf("expected 1 entry, got %d", len(m.entries))
+	}
+}
+
+func TestEncodePath(t *testing.T) {
+	// Same path should produce same encoding
+	e1 := encodePath("/tmp/test")
+	e2 := encodePath("/tmp/test")
+	if e1 != e2 {
+		t.Error("expected same encoding for same path")
+	}
+
+	// Different paths should produce different encodings
+	e3 := encodePath("/tmp/test2")
+	if e1 == e3 {
+		t.Error("expected different encoding for different path")
+	}
+
+	// Paths that are similar but different should not collide
+	e4 := encodePath("/tmp/test-1")
+	e5 := encodePath("/tmp/test:1")
+	if e4 == e5 {
+		t.Error("expected different encoding for paths with different special chars")
+	}
+}
+
+func TestInitWithID(t *testing.T) {
+	tmpDir := t.TempDir()
+	sessionDir := filepath.Join(tmpDir, "sessions")
+
+	m := New("/tmp/test", sessionDir)
+	err := m.InitWithID("custom-id")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	header := m.GetHeader()
+	if header.ID != "custom-id" {
+		t.Errorf("expected ID 'custom-id', got %q", header.ID)
+	}
+}
+
+func TestSessionFileID(t *testing.T) {
+	tests := []struct {
+		path     string
+		expected string
+	}{
+		{"/path/to/20240101-120000_abcd1234.jsonl", "abcd1234"},
+		{"/path/to/session.jsonl", ""},
+		{"simple_id.jsonl", "id"},
+	}
+
+	for _, tt := range tests {
+		result := sessionFileID(tt.path)
+		if result != tt.expected {
+			t.Errorf("sessionFileID(%q) = %q, want %q", tt.path, result, tt.expected)
+		}
+	}
+}
+
+func TestOpenByPathOrIDEmptyValue(t *testing.T) {
+	_, err := OpenByPathOrID("/tmp", "/tmp/sessions", "")
+	if err == nil {
+		t.Error("expected error for empty value")
+	}
+}
+
+func TestSessionRoundTrip(t *testing.T) {
+	tmpDir := t.TempDir()
+	sessionDir := filepath.Join(tmpDir, "sessions")
+
+	// Create session with various entry types
+	m1 := New("/tmp/test", sessionDir)
+	m1.Init()
+	m1.AppendMessage(provider.NewUserMessage("Hello"))
+	m1.AppendMessage(provider.NewAssistantMessage([]provider.ContentBlock{
+		{Type: "text", Text: "Hi"},
+	}))
+	m1.AppendModelChange("anthropic", "claude-sonnet-4-20250514")
+	m1.AppendThinkingLevelChange("high")
+	m1.AppendCompaction("Summary", "", 1000)
+	m1.AppendSessionInfo("Test Session")
+
+	// Re-open and verify all entries loaded
+	m2, err := Open(m1.GetFile())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(m2.entries) != 6 {
+		t.Errorf("expected 6 entries, got %d", len(m2.entries))
+	}
+
+	msgs := m2.GetMessages()
+	if len(msgs) != 2 {
+		t.Errorf("expected 2 messages, got %d", len(msgs))
 	}
 }

@@ -1,5 +1,318 @@
 # 更新日志
 
+
+## v0.1.27
+
+### ✨ 新功能
+
+- **Hermes 模式** (`vibecoding hermes`)
+  - 新增消息平台网关模式，支持微信、飞书和 WebSocket
+  - 持久化 per-user session，`/new` 时自动归档
+  - 默认 `yolo` 模式，适合无人值守场景
+  - 智能审批分级策略（low/medium/high 风险等级）
+  - 用户白名单访问控制
+  - WebSocket 流式推送：text_delta/think_delta/tool_call/tool_result/tool_diff/usage/done
+
+- **A2A 协议** (`vibecoding a2a`)
+  - 新增 Agent-to-Agent 协议服务器（JSON-RPC 2.0 over HTTP + SSE 流式）
+  - 独立模式：`vibecoding a2a start`（端口 8093）
+  - 集成模式：`hermes.json` 中 `a2a.enabled: true`，共享 hermes HTTP 端口
+  - Agent Card：`/.well-known/agent.json`
+  - Task 生命周期：submitted → working → completed/failed/canceled
+  - REST 端点：`/a2a/send`、`/a2a/task`、`/a2a/task/cancel`、`/a2a/events`
+  - **A2A Client**：`vibecoding a2a send <message>` 向其他 A2A Server 发送任务
+  - **A2A 发现**：`vibecoding a2a discover <url>` 获取远程 Agent Card
+  - **A2A 调度**：Cron 任务支持 `--a2a-target` 参数，定时向 A2A Server 发送任务
+
+- **A2A Master 模式** (`--enable-a2a-master`)
+  - 通过 `a2a-list.json` 配置多个远程 A2A Agent
+  - 注册 `a2a_dispatch` tool，LLM 可自动向远程 agent 分发任务
+  - 支持全局（`~/.vibecoding/a2a-list.json`）和项目级（`.vibe/a2a-list.json`）配置
+  - `--init-a2a-master-config` 生成示例配置文件
+  - 默认关闭，需显式启用
+
+- **A2A 配置初始化**
+  - `vibecoding a2a --init-a2a-config` 生成 `a2a.json` 配置模板
+  - `vibecoding --init-gateway` 生成 `gateway.json` 配置模板（已有）
+  - `vibecoding --init-a2a-master-config` 生成 `a2a-list.json` 配置模板
+  - 所有 `--init-*` 支持 `--force` 覆盖已存在的文件
+
+- **场景演示文档**
+  - 新增 `docs/scenarios.md`（中英文），覆盖 9 种实际使用场景
+  - 涵盖：日常编码、CI 集成、多 Agent、VS Code ACP、A2A 服务器、
+    A2A Master 跨机器调度、Gateway HTTP 网关、Hermes 消息平台、组合模式
+
+- **文档全面更新**
+  - `architecture.md`：补全全部模块（a2a/acp/gateway/hermes/mcp/memory/messaging/vendored）
+  - `tools.md`：新增 `a2a_dispatch` 和 `skill_ref` 工具文档
+  - `cli-reference.md`：新增 `--enable-a2a-master`、`--init-a2a-master-config`、
+    `--init-gateway`、`--force`、`a2a` 子命令文档
+  - `README.md`：架构图补全、新增运行模式总览
+
+- **压力系统**
+  - Context Pressure：55% context 使用率时触发 `EventContextPressure`（可通过 `context_pressure_threshold` 配置）
+  - Budget Pressure：剩余 20% 迭代时触发 `EventBudgetPressure`（可通过 `budget_pressure_threshold` 配置）
+  - 一次性触发：每个阈值越界只触发一次，非每轮触发
+  - 消息平台通过进度回调接收压力警告
+
+- **智能审批（分级策略）**
+  - low 风险：自动批准
+  - medium 风险：自动批准 + 通知用户
+  - high 风险（WebSocket）：发送 `approval_request`，等待用户 `approval_response`（5 分钟超时）
+  - high 风险（消息平台）：自动拒绝 + 通知用户
+  - 命令风险分类：基于 bash 命令模式的 low/medium/high 分级
+
+- **Provider/Model 配置**
+  - `hermes.json` 新增 `default_provider` / `default_model`（覆盖 `settings.json`）
+  - `hermes start` 新增 `-p`/`--provider` 和 `-m`/`--model` CLI 标志
+  - 优先级：CLI 标志 > `hermes.json` > `settings.json`
+
+- **多 Agent 模式** (`--multi-agent`)
+  - 启用子 Agent 工具（spawn/status/send/destroy）
+  - 通过 `hermes.json` 的 `multi_agent` 字段或 `--multi-agent` CLI 标志配置
+
+- **Sandbox 模式** (`--sandbox`)
+  - 可选 bwrap 沙箱隔离（默认关闭）
+  - 通过 `hermes.json` 的 `sandbox` 字段或 `--sandbox` CLI 标志配置
+
+- **MCP 工具继承**
+  - Hermes 自动加载全局/项目 `mcp.json` 中的 MCP 服务器
+  - MCP 工具按 session 注册，session 移除时自动关闭连接
+
+- **消息平台进度事件推送**
+  - agent 执行过程中实时向微信/飞书推送工具执行进度
+  - 格式：`[tool]: args ✅/❌`（工具）、`💭 ...`（思考过程）
+  - agent 完成后发送完整总结
+
+- **memory 工具**
+  - `memory` 工具支持 read/add/update/delete 操作
+  - section 级操作（User Profile、Working Memory、Lessons Learned）
+  - 默认写入 `.vibe/memory.md`（项目目录）
+  - 查找优先级：`memory.path` 配置 → `.vibe/memory.md` → `<GLOBAL_DIR>/memory.md`
+  - `/api/memory` HTTP 端点（GET/PUT）用于 memory 访问
+
+- **Hermes CLI 命令**
+  - `hermes start` — 启动守护进程（支持所有 CLI 标志）
+  - `hermes stop` — 通过 PID 文件 + SIGTERM 停止守护进程
+  - `hermes status` — 通过 PID + HTTP health 检查守护进程状态
+  - `hermes client` — WebSocket 客户端（流式输出 + 斜杠命令）
+  - `hermes config init/show` — 配置管理
+  - `hermes wechat login/status` — 微信 iLink 管理
+  - `hermes feishu setup/status` — 飞书配置
+  - `hermes webhook list` — webhook 路由查看
+  - `hermes memory show/clear` — memory 管理
+  - `hermes sessions list` — 活跃 session 列表（查询运行实例）
+  - `hermes cron list/add/remove/enable/disable` — 定时任务管理
+  - `a2a start/stop/status/card` — A2A 服务器管理
+
+### 📝 变更
+
+- 微信 iLink 协议实现，零外部依赖（5 个文件：types/protocol/auth/crypto/wechat）
+- 飞书 Bot 使用官方 SDK + WebSocket 长连接
+- Shell Hooks 支持 pre/post tool call 外部脚本（JSON stdin/stdout）
+- Webhook 入站路由，支持 HMAC-SHA256 签名验证
+- WebSocket 使用 `golang.org/x/net/websocket`（标准库兼容）
+- 基于 PID 文件的守护进程管理（hermes stop/status）
+
+### 🐛 问题修复
+
+- **NPM 安装包修复**
+  - 修复发布流水线，确保 `vibecoding-installer` 始终包含可执行入口 `bin/vibecoding`。
+  - 新增 `scripts/npm-installer-wrapper.js` 作为统一的 wrapper 逻辑源，并被 `scripts/build-npm.sh`
+    与 `scripts/build-npm-packages.sh` 复用，避免实现分叉。
+  - 调整 `npm/.npmignore` 与 `npm/bin` 的处理方式，避免误打包非发布文件，并通过 `files` 字段显式声明要发布内容。
+
+## v0.1.26
+
+### ✨ 新功能
+
+- **Gateway 模式** (`vibecoding gateway`)
+  - 新增 HTTP 服务，对外暴露标准 OpenAI Chat Completions API (`/v1/chat/completions`、`/v1/models`、`/health`)
+  - 任何兼容 OpenAI SDK 的客户端（Cursor、Continue、Open WebUI、Python SDK 等）可直接接入
+  - 完整支持 Streaming (SSE) 和 Non-streaming 响应
+  - 后端由 VibeCoding agent 循环驱动，tool 执行对调用方透明
+
+- **多 Session 支持**
+  - 内置 `SessionPool` 支持并发 session，每个 session 拥有独立的 agent、工具和消息历史
+  - 通过请求体中的 `x_session_id` 关联 session，未指定时自动创建
+  - 可配置空闲超时 (`session.idleTimeoutSeconds`) 和最大 session 数 (`session.maxSessions`)
+
+- **Gateway Sub-Agent 支持**
+  - 可选 `enableSubAgents` 配置，在 gateway 模式下启用多 Agent 编排
+  - 复用现有 `AgentFactory` / `AgentManager` / 子Agent 工具，无需改动核心 agent 逻辑
+
+- **Bearer Token 认证**
+  - 通过 `gateway.json` 的 `auth.enabled` 和 `auth.tokens` 列表配置
+  - 默认关闭；`/health` 端点始终不需认证
+
+- **API 指令系统 (Slash Commands)**
+  - `/clear`、`/mode`、`/model`、`/models`、`/sessions`、`/compact`、`/status`、`/skill`、`/skills`、`/help`
+  - 当最后一条用户消息以 `/` 开头时触发，在 gateway 层直接处理，不调用 LLM
+  - 响应使用标准 OpenAI 格式，附加 `x_command` 扩展字段
+
+- **Tool 可见性配置** (`toolVisibility.mode`)
+  - `"content"` (默认): streaming 时通过 `content` 字段发送 tool 状态文本
+  - `"sse_event"`: 通过扩展 SSE event 发送，适合自定义客户端
+  - `"none"`: 完全透明，客户端只见最终文本
+
+- **System Prompt 处理策略** (`systemPromptMode`)
+  - `"append"` (默认): 客户端 system message 追加到内置 system prompt 末尾
+  - `"ignore"`: 完全忽略客户端 system message
+
+- **安全: allowedWorkDirs 白名单**
+  - 请求级 `x_working_dir` 的目录白名单，支持路径分隔符感知的前缀匹配
+  - 三层安全模型: L1 认证 + L2 目录管控 + L3 沙箱 (bwrap)
+
+- **Gateway Sandbox 支持**
+  - 通过 `gateway.json` 的 `sandbox.enabled` / `sandbox.level` 或 `--sandbox` flag 配置
+  - 细节配置（allowedRead、deniedPaths 等）继承 `settings.json`
+
+- **Gateway 配置文件** (`gateway.json`)
+  - 独立配置文件，位于 `~/.config/vibecoding/gateway.json`
+  - 覆盖: 监听地址、认证、模式、沙箱、工作目录、目录白名单、session 管理、CORS、tool 可见性、system prompt 策略、请求超时、并发限制、日志
+  - `vibecoding --init-gateway` 生成配置模板；`--force` 强制覆盖
+
+- **请求超时与并发控制**
+  - `requestTimeoutSeconds` (默认 1800s)；streaming 有数据流动不超时
+  - `maxConcurrentRequests` (默认 0 = 不限制)
+
+### 📝 文档
+
+- 新增 `docs/gateway-proposal.md`，包含完整架构、API 设计、安全模型和实现计划
+- 更新 `AGENTS.md` 版本标注
+
+## v0.1.25
+
+### ✨ 新功能
+
+- **多 Agent 模式**
+  - 在 CLI、TUI、ACP 模式中新增可选的 `--multi-agent` 支持
+  - 新增 `AgentManager`、`EventRouter` 和每个 Agent 独立的 registry，隔离工具、job manager、session、messages 与 context
+  - 新增 `subagent_spawn`、`subagent_status`、`subagent_send`、`subagent_destroy` 工具，用于派生后台子任务
+  - 新增多 Agent system prompt 指引，并限制子 Agent 继续派生子 Agent
+
+- **Cron 定时任务**
+  - 新增 `internal/cron`，支持 cron store 持久化与调度器测试覆盖
+  - 在多 Agent TUI 工作流中新增 `/cron` 命令入口
+
+- **Provider 厂商适配层**
+  - 新增 `internal/provider/vendor*.go` 厂商适配注册机制
+  - 将 provider/model 创建逻辑统一到 `internal/provider/factory`
+  - 新增 DeepSeek、Xiaomi、Kimi、MiniMax、Seed、Qianfan、Bailian、Gitee、OpenRouter、Together、Groq、Fireworks、OpenAI、Anthropic 等厂商识别
+  - 保持现有 provider 配置格式不变，同时支持厂商默认值和通用 OpenAI/Anthropic 兼容 fallback
+  - 新增模型 `compat` 处理，覆盖 thinking 格式、reasoning effort、max token 字段、自适应 Anthropic thinking，以及 DeepSeek/Xiaomi assistant `reasoning_content`
+
+### 🐛 问题修复
+
+- session 首次 append 时自动初始化，避免子 Agent 写入 session 前必须显式初始化
+- 修复子 Agent 测试中的后台运行清理顺序，确保临时目录删除前已等待并销毁派生 Agent
+- 在 provider 创建逻辑迁移到共享 factory 后，保留 ACP Anthropic cache-control 行为
+
+### 📝 文档
+
+- 更新 `AGENTS.md`，补充 provider factory 与 vendor adapter 工作约定
+- 将多 Agent 实施 checklist 更新为已落地架构/状态说明
+- 删除已过时的根目录 `todo.md`
+
+### 🧪 测试
+
+- 新增 provider vendor 解析、provider factory 创建、OpenAI/Anthropic compat、多 Agent manager/router/sub-agent 流程、cron 存储/调度、session 自动初始化等测试覆盖
+- 已通过 `make test`（`go test -v -race ./...`）
+
+---
+
+## v0.1.24
+
+### ✨ 新功能
+
+- **API 重试与指数退避**
+  - 对暂时性错误（5xx、网络故障、速率限制）在初始 HTTP 连接阶段自动重试
+  - 指数退避策略：`baseDelay × 2^attempt`，上限 30 秒
+  - 不会重试：用户中止（`context.Canceled`）、4xx 客户端错误、流传输中途失败
+  - 通过 `retry` 配置项（`maxRetries`、`baseDelay`、`maxDelay`）灵活调整
+  - Agent 将重试事件作为状态更新透出到 TUI 和 print 模式
+  - ACP 模式同样接收重试配置
+
+### 🐛 问题修复
+
+- **Anthropic `cache_control` 改为显式启用**
+  - 默认关闭 `cache_control`（此前会根据官方 API base URL 自动启用）
+  - 需在 provider 配置中显式设置 `cacheControl: true` 才能启用 prompt 缓存
+  - ACP provider 创建时显式为 Anthropic 启用 `cache_control`
+
+- **Anthropic Tool Result 分组**
+  - 修复连续 `toolResult` 消息未合并为单条 `user` 消息的问题
+  - Anthropic API 要求前一轮 `tool_use` 对应的所有 `tool_result` 块在后续内容之前集中出现
+  - 工具结果中的图片块现在会在同一消息中追加到所有结果块之后
+  
+- **Agent 纯工具循环告警顺序**
+  - 将无文本输出的工具循环告警改为在 tool result 追加之后再注入
+  - 保持 assistant -> toolResult -> warning 的消息顺序，确保 provider 与 session transcript 都合法
+  - 告警消息现在也会持久化写入 session 存储
+
+### 📝 文档
+
+- **配置文档全面重写**
+  - 补充缺失配置项：`cacheControl`、空闲压缩、完整沙箱字段（`bwrapPath`、`allowedRead`、`allowedWrite`、`deniedPaths`、`passEnv`、`tmpSize`）、`shellPath`、`shellCommandPrefix`、`sessionDir`、`skillsDir`、`theme`、`retry`
+  - 记录 shell 命令格式的 `apiKey`（`!cmd`），支持密码管理器集成
+  - 修正密钥解析顺序：优先使用配置中的 `apiKey`，其次使用推导的环境变量
+  - 修正 macOS 配置路径：`~/Library/Application Support/vibecoding/`
+  - 新增顶层字段参考表及所有默认值
+  - 新增各平台沙箱路径与环境变量默认值
+  - 改进示例：Claude provider `cacheControl`、空闲压缩、项目级覆盖、自定义沙箱路径
+
+### 🧪 测试
+
+- 新增重试测试，覆盖 `IsRetryable`、`RetryDelay` 和 `FormatRetryMessage`
+- 新增 Anthropic provider 测试，覆盖连续 tool result 分组
+- 新增回归测试，覆盖 tool result 之后的纯工具循环告警插入位置
+
+---
+
+## v0.1.23
+
+### 🛠 改进
+
+- **DeepSeek Thinking 格式**
+  - 新增 `thinkingFormat: "deepseek"`，用于 DeepSeek 推理请求
+  - OpenAI 兼容请求现在会发送 `thinking: {type: "enabled"}` 和 `reasoning_effort`
+  - Anthropic 兼容请求现在会发送 `thinking: {type: "enabled"}` 和 `output_config.effort`
+  - 保留 `thinkingFormat: "xiaomi"` 作为旧的 thinking-only 格式
+
+### 🧪 测试
+
+- 新增 provider 测试，覆盖 OpenAI 与 Anthropic 兼容请求下的 `deepseek` thinking 格式
+
+### 📝 文档
+
+- 更新 `anthropic-api` skill 与配置文档中关于 `thinkingFormat` 选项的说明
+
+---
+
+## v0.1.22
+
+### ✨ 新功能
+
+- **CLI/TUI MCP 自动加载**
+  - CLI/TUI 启动时现在会加载全局与项目 `mcp.json`，连接已配置的 MCP 服务器，并在 agent 工具列表冻结前注册 MCP 工具
+
+### 🐛 问题修复
+
+- **Markdown 渲染样式**
+  - 将 CLI print 模式和 TUI 的 Markdown 渲染从 Glamour 自动样式检测改为固定 `dark` 样式，提升不同终端中的显示一致性
+
+### 🧪 测试
+
+- 新增 MCP 配置加载测试，覆盖模板占位服务器过滤
+
+### 🛠 改进
+
+- **共享 MCP 运行时**
+  - 将 MCP 连接与工具注册从 ACP 私有实现提取为共享运行时，ACP 与普通 CLI/TUI 会话复用同一套逻辑
+  - 自动启动加载时会忽略 starter 模板中的占位 MCP 服务器
+
+---
+
 ## v0.1.21
 
 ### ✨ 新功能
@@ -14,9 +327,28 @@
   - 新生成的默认配置会启用写入/编辑确认
   - TUI 审批提示会用字节数摘要写入内容，避免直接展示完整文件内容
 
+- **MCP 配置命令**
+  - 新增 `/init_mcp`，支持创建项目/全局 `mcp.json`，并提供 `basic`/`full` 模板及 `--force` 覆盖
+  - 新增 `/mcps`，用于列出全局与项目 `mcp.json` 中的 MCP 服务器
+  - MCP 配置改为独立 `mcp.json`（不与 `settings.json` 混用）
+
 ### 🧪 测试
 
 - 新增 `plan` 工具和 write/edit 审批门控测试覆盖
+- 新增基于 HTTP 的 MCP 集成测试，覆盖 tool/resource/prompt 注册与回调链路
+- 新增基于 SSE 的 MCP 集成测试，覆盖流通知回调与 message endpoint 请求/响应链路
+
+### 🛠 改进
+
+- **ACP MCP 健壮性增强**
+  - 新增 `http` 和 `sse` MCP 传输支持（保留现有 `stdio`）
+  - 为 MCP 初始化与工具发现增加超时控制，避免 ACP 会话长时间挂起
+  - 为 `tools/list` 增加分页拉取与页数上限保护
+  - 新增 MCP `resources/*` 与 `prompts/*` 发现和工具注册
+  - 增加 MCP 服务器重名检测与 MCP 工具名去重注册
+  - 增加 MCP 入站请求/通知处理（`ping`、progress/logging/cancel 通知）
+  - 新增入站 `sampling/createMessage` 到当前 ACP provider/model 的桥接
+  - 收紧关闭/错误传播行为
 
 ---
 
@@ -743,4 +1075,4 @@
 
 ---
 
-**完整变更日志**: https://github.com/startvibecoding/vibecoding/compare/v0.0.1...v0.0.7
+**完整变更日志**: https://github.com/startvibecoding/vibecoding/compare/v0.1.26...v0.1.27

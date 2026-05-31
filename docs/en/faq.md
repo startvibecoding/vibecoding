@@ -4,7 +4,7 @@
 
 ### Q: What is VibeCoding?
 
-A: VibeCoding is a terminal AI coding assistant that supports DeepSeek (default), OpenAI, Anthropic, and any custom API via OpenAI/Anthropic-compatible protocols, providing code writing, debugging, refactoring, and other features.
+A: VibeCoding is a terminal AI coding assistant that supports DeepSeek (default), OpenAI, Anthropic, vendor adapters for compatible APIs, and generic OpenAI/Anthropic-format custom endpoints. It provides code writing, debugging, refactoring, delegated multi-agent workflows, and other features.
 
 ### Q: What LLMs are supported?
 
@@ -12,8 +12,8 @@ A:
 - DeepSeek (default): deepseek-v4-flash, deepseek-v4-pro (1M context, up to 384K output)
 - OpenAI: GPT-4o, o1, etc.
 - Anthropic: Claude Sonnet, Opus, etc.
-- Xiaomi: MiMo models (via OpenAI-compatible API)
-- Custom: Any OpenAI-Chat or Anthropic-Messages compatible API endpoint
+- Vendor adapters: Xiaomi, Kimi, MiniMax, Seed, Qianfan, Bailian, Gitee, OpenRouter, Together, Groq, Fireworks, and more
+- Custom: Any OpenAI Chat or Anthropic Messages compatible API endpoint through generic fallback
 
 ### Q: How to install?
 
@@ -57,6 +57,7 @@ A: Configure in `settings.json`:
 {
   "providers": {
     "deepseek-openai": {
+      "vendor": "deepseek",
       "baseUrl": "https://api.deepseek.com",
       "api": "openai-chat",
       "apiKey": "sk-..."
@@ -254,7 +255,7 @@ A:
 
 ### Q: What tools are available?
 
-A: VibeCoding has 7 built-in tools:
+A: VibeCoding includes core built-in tools plus optional multi-agent tools:
 - `read`: Read file content (including images)
 - `write`: Create/overwrite files
 - `edit`: Precise text replacement
@@ -262,8 +263,21 @@ A: VibeCoding has 7 built-in tools:
 - `grep`: Regex content search
 - `find`: Filename search
 - `ls`: Directory listing
+- `plan`: Publish visible task plans and status updates
+- `subagent_*`: Delegate work to child agents when started with `--multi-agent`
 
 See the [Tool System](tools.md) documentation for details.
+
+### Q: How do I use multi-agent workflows?
+
+A: Start VibeCoding with `--multi-agent`:
+
+```bash
+vibecoding --multi-agent
+vibecoding acp --multi-agent
+```
+
+This registers `subagent_*` tools for delegated work. Cron command entry points also rely on multi-agent mode.
 
 ### Q: Can VibeCoding read images?
 
@@ -335,4 +349,4 @@ A: MIT License
 
 ### Q: What is the current version?
 
-A: The current version is v0.1.9. See the [Changelog](changelog.md) for version history.
+A: The current version is v0.1.25. See the [Changelog](changelog.md) for version history.

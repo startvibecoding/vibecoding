@@ -12,10 +12,18 @@ NPM_DIR="$PROJECT_ROOT/npm"
 BUILD_DIR="$PROJECT_ROOT/bin"
 PACKAGES_DIR="$NPM_DIR/packages"
 
+ensure_wrapper() {
+  mkdir -p "$NPM_DIR/bin"
+  cp "$SCRIPT_DIR/npm-installer-wrapper.js" "$NPM_DIR/bin/vibecoding"
+  chmod +x "$NPM_DIR/bin/vibecoding"
+}
+
 # Clean packages directory
 rm -rf "$PACKAGES_DIR"
 
 # Check if binaries exist
+ensure_wrapper
+
 if [ ! -d "$BUILD_DIR" ]; then
   echo "Error: Build directory not found. Run 'make build-all' first."
   exit 1

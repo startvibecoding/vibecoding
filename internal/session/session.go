@@ -162,6 +162,10 @@ func (m *Manager) InitWithID(id string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	return m.initWithIDLocked(id)
+}
+
+func (m *Manager) initWithIDLocked(id string) error {
 	now := time.Now()
 	if id == "" {
 		id = GenerateID()
@@ -187,6 +191,13 @@ func (m *Manager) InitWithID(id string) error {
 
 	// Write header
 	return m.writeEntry(m.header)
+}
+
+func (m *Manager) ensureInitializedLocked() error {
+	if m.file != "" {
+		return nil
+	}
+	return m.initWithIDLocked("")
 }
 
 // OpenByID opens the most recent session file for cwd whose session header ID matches sessionID.
@@ -235,6 +246,10 @@ func (m *Manager) AppendMessage(msg provider.Message) (string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	if err := m.ensureInitializedLocked(); err != nil {
+		return "", err
+	}
+
 	id := GenerateID()
 	entry := MessageEntry{
 		EntryBase: EntryBase{
@@ -259,6 +274,10 @@ func (m *Manager) AppendMessage(msg provider.Message) (string, error) {
 func (m *Manager) AppendModelChange(providerName, modelID string) (string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	if err := m.ensureInitializedLocked(); err != nil {
+		return "", err
+	}
 
 	id := GenerateID()
 	entry := ModelChangeEntry{
@@ -286,6 +305,10 @@ func (m *Manager) AppendThinkingLevelChange(level string) (string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	if err := m.ensureInitializedLocked(); err != nil {
+		return "", err
+	}
+
 	id := GenerateID()
 	entry := ThinkingLevelChangeEntry{
 		EntryBase: EntryBase{
@@ -310,6 +333,10 @@ func (m *Manager) AppendThinkingLevelChange(level string) (string, error) {
 func (m *Manager) AppendCompaction(summary, firstKeptEntryID string, tokensBefore int) (string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	if err := m.ensureInitializedLocked(); err != nil {
+		return "", err
+	}
 
 	id := GenerateID()
 	entry := CompactionEntry{
@@ -337,6 +364,10 @@ func (m *Manager) AppendCompaction(summary, firstKeptEntryID string, tokensBefor
 func (m *Manager) AppendSessionInfo(name string) (string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	if err := m.ensureInitializedLocked(); err != nil {
+		return "", err
+	}
 
 	id := GenerateID()
 	entry := SessionInfoEntry{

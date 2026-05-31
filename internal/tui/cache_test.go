@@ -10,6 +10,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/startvibecoding/vibecoding/internal/agent"
 	"github.com/startvibecoding/vibecoding/internal/config"
 	"github.com/startvibecoding/vibecoding/internal/provider"
@@ -21,6 +22,142 @@ import (
 var ansiRe = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 
 func stripANSI(s string) string { return ansiRe.ReplaceAllString(s, "") }
+
+func trimLineRightSpace(s string) string {
+	lines := strings.Split(s, "\n")
+	for i, line := range lines {
+		lines[i] = strings.TrimRight(line, " \t")
+	}
+	return strings.Join(lines, "\n")
+}
+
+func TestRenderEditToolResultShowsCompactDiff(t *testing.T) {
+	app := &App{}
+	result := toolResult{
+		toolName: "edit",
+		toolArgs: map[string]any{"path": "internal/acp/acp.go"},
+		diff: &tools.FileDiff{
+			Path:    "internal/acp/acp.go",
+			Added:   1,
+			Deleted: 1,
+			Unified: strings.Join([]string{
+				"--- internal/acp/acp.go",
+				"+++ internal/acp/acp.go",
+				"@@ -551,3 +551,3 @@",
+				" \tctx, cancel := context.WithCancel(context.Background())",
+				"-\tpromptKey := rawIDKey(req.ID)",
+				"+\tpromptKey := mcp.RawIDKey(req.ID)",
+				" \trt.cancelMu.Lock()",
+				"",
+			}, "\n"),
+		},
+	}
+
+	got := trimLineRightSpace(stripANSI(app.renderToolResult(result)))
+	want := strings.Join([]string{
+		"• Edited internal/acp/acp.go (+1 -1)",
+		"    551       ctx, cancel := context.WithCancel(context.Background())",
+		"    552  -    promptKey := rawIDKey(req.ID)",
+		"    552  +    promptKey := mcp.RawIDKey(req.ID)",
+		"    553       rt.cancelMu.Lock()",
+	}, "\n")
+
+	if got != want {
+		t.Fatalf("renderToolResult(edit) =\n%q\nwant\n%q", got, want)
+	}
+}
+
+func TestAssistantMarkdownRendererUsesViewportWidth(t *testing.T) {
+	app := &App{
+		width:               60,
+		assistantRaw:        map[int]string{0: "请看 https://gitee.com/oschina/platform/pulls/11938 这里"},
+		assistantRendered:   make(map[int]string),
+		assistantDirty:      map[int]bool{0: true},
+		currentAssistantIdx: -1,
+		currentThinkIdx:     -1,
+	}
+	app.configureMarkdownRenderer()
+
+	got := stripANSI(app.renderAssistantMessage(0))
+	flattened := strings.ReplaceAll(strings.ReplaceAll(got, "\n", ""), " ", "")
+	if !strings.Contains(flattened, "https://gitee.com/oschina/platform/pulls/11938") {
+		t.Fatalf("renderAssistantMessage() = %q, want URL order preserved", got)
+	}
+	for _, line := range strings.Split(got, "\n") {
+		if width := lipgloss.Width(line); width > app.width {
+			t.Fatalf("rendered line width = %d, want <= %d: %q", width, app.width, line)
+		}
+	}
+}
+
+func TestWindowResizeMarksAssistantMarkdownDirty(t *testing.T) {
+	app := &App{
+		assistantRaw:        map[int]string{0: "hello"},
+		assistantRendered:   map[int]string{0: "old"},
+		assistantDirty:      make(map[int]bool),
+		currentAssistantIdx: -1,
+		currentThinkIdx:     -1,
+	}
+
+	model, _ := app.Update(tea.WindowSizeMsg{Width: 72, Height: 24})
+	updated := model.(*App)
+
+	if updated.mdRenderer == nil {
+		t.Fatal("mdRenderer is nil after resize")
+	}
+	if !updated.assistantDirty[0] {
+		t.Fatal("assistantDirty[0] = false, want true after resize")
+	}
+}
+
+func TestLiveAssistantMessageDoesNotRenderMarkdown(t *testing.T) {
+	app := &App{
+		width:               50,
+		assistantRaw:        map[int]string{0: strings.Repeat("https://example.com/path/", 8)},
+		assistantRendered:   make(map[int]string),
+		assistantDirty:      map[int]bool{0: true},
+		currentAssistantIdx: 0,
+		currentThinkIdx:     -1,
+	}
+	app.configureMarkdownRenderer()
+
+	app.updateViewportContent()
+	if len(app.assistantRendered) != 0 {
+		t.Fatalf("assistantRendered len = %d, want 0 while streaming", len(app.assistantRendered))
+	}
+	if !strings.Contains(stripANSI(app.liveContent), "Assistant: ") {
+		t.Fatalf("liveContent missing assistant prefix: %q", app.liveContent)
+	}
+}
+
+func TestViewClampsLiveContentToKeepInputVisible(t *testing.T) {
+	app := NewApp(nil, &provider.Model{Name: "test"}, config.DefaultSettings(), nil, nil, "", "", nil, "agent", false, nil, nil, nil)
+	app.ready = true
+	app.width = 80
+	app.height = 8
+	app.input.Width = 76
+	app.liveContent = strings.Join([]string{
+		"line 1",
+		"line 2",
+		"line 3",
+		"line 4",
+		"line 5",
+		"line 6",
+		"line 7",
+		"line 8",
+	}, "\n")
+
+	got := stripANSI(app.View())
+	if strings.Contains(got, "line 1") {
+		t.Fatalf("View() kept oldest live line despite limited height:\n%s", got)
+	}
+	if !strings.Contains(got, app.input.Placeholder) {
+		t.Fatalf("View() missing input placeholder:\n%s", got)
+	}
+	if !strings.Contains(got, "Tab:mode") {
+		t.Fatalf("View() missing footer:\n%s", got)
+	}
+}
 
 // ─── formatCachePercent ───────────────────────────────────────────────────────
 
@@ -318,6 +455,29 @@ func TestHandleAgentEventCommitsStreamBeforeApproval(t *testing.T) {
 	}
 }
 
+func TestFormatApprovalArgsEditShowsPathAndDiff(t *testing.T) {
+	args := map[string]any{
+		"path": "README.md",
+		"edits": []any{
+			map[string]any{
+				"oldText": "Hello\nWorld\n",
+				"newText": "Hello\nGophers\n",
+			},
+		},
+	}
+
+	got := formatApprovalArgs("edit", args)
+	if !strings.Contains(got, "path: README.md") {
+		t.Fatalf("formatApprovalArgs(edit) missing path: %q", got)
+	}
+	if !strings.Contains(got, "@@ -1,2 +1,2 @@") {
+		t.Fatalf("formatApprovalArgs(edit) missing hunk header: %q", got)
+	}
+	if !strings.Contains(got, "-World") || !strings.Contains(got, "+Gophers") {
+		t.Fatalf("formatApprovalArgs(edit) missing line diff: %q", got)
+	}
+}
+
 func TestAbortClearsQueuedInput(t *testing.T) {
 	a := &App{
 		inputQueue: make([]InputEvent, 0, 4),
@@ -399,6 +559,10 @@ func TestInitWithProgramDoesNotBlock(t *testing.T) {
 		"",
 		nil,
 		"agent",
+		false,
+		nil,
+		nil,
+		nil,
 	)
 	a.SetInitialMessage("hello")
 	p := tea.NewProgram(a)
@@ -553,6 +717,10 @@ func TestInitThenProcessInputStillInjectsSessionHistory(t *testing.T) {
 		"",
 		nil,
 		"agent",
+		false,
+		nil,
+		nil,
+		nil,
 	)
 
 	// Simulate real startup flow: Init() loads history into UI and flips historyLoaded.

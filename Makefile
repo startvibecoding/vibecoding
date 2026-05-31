@@ -2,19 +2,32 @@
 .PHONY: build-linux build-linux-musl build-darwin build-windows
 .PHONY: dist dist-linux dist-darwin dist-windows dist-deb dist-tarball dist-zip
 .PHONY: clean-all checksums
-.PHONY: npm-version npm-publish npm-publish-all npm-pack npm-pack-all
+.PHONY: npm-version npm-binaries npm-packages npm-pack npm-publish-all npm-publish-pre npm-publish
 .PHONY: prepare-vendored
 
 # Variables
 BINARY_NAME=vibecoding
 VERSION=$(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
-LDFLAGS=-ldflags "-X main.version=$(VERSION) -X github.com/startvibecoding/vibecoding/internal/ua.Version=$(VERSION)"
+LDFLAGS=-ldflags "-s -w -X main.version=$(VERSION) -X github.com/startvibecoding/vibecoding/internal/ua.Version=$(VERSION)"
+GOBUILD_FLAGS=-trimpath
 DIST_DIR=dist
 CHECKSUM_FILE=$(DIST_DIR)/checksums.txt
 
-# Platforms and architectures
-PLATFORMS=linux darwin windows
-ARCHS=amd64 arm64
+# UPX compression (skip for macOS - not supported)
+USE_UPX ?= true
+ifeq ($(shell which upx 2>/dev/null),)
+USE_UPX = false
+endif
+ifeq ($(USE_UPX),true)
+UPX_CMD = upx -9
+else
+UPX_CMD = @true
+endif
+
+# Platforms and architectures (for reference)
+# linux: amd64 arm64
+# darwin: amd64 arm64
+# windows: amd64 arm64
 
 # Default target
 help:
@@ -40,9 +53,12 @@ help:
 	@echo ""
 	@echo "NPM targets:"
 	@echo "  npm-version       Sync version to npm package"
+	@echo "  npm-packages      Build platform-specific npm packages"
 	@echo "  npm-pack          Pack main + all platform packages"
 	@echo "  npm-publish-all   Publish main + all platform packages"
-	@echo "  npm-publish       Publish main package only (legacy)"
+	@echo "  npm-publish-pre   Publish pre-release packages"
+	@echo "  npm-binaries      [Legacy] Build all binaries into single package"
+	@echo "  npm-publish       [Legacy] Publish main package only"
 	@echo ""
 	@echo "Other targets:"
 	@echo "  install        Install via go install"
@@ -61,31 +77,38 @@ prepare-vendored:
 
 # Build for current platform (requires prepare-vendored first)
 build: prepare-vendored
-	go build $(LDFLAGS) -o bin/$(BINARY_NAME) ./cmd/vibecoding
+	go build $(GOBUILD_FLAGS) $(LDFLAGS) -o bin/$(BINARY_NAME) ./cmd/vibecoding
 
 # Platform builds
-build-linux:
+build-linux: prepare-vendored
 	@echo "Building for Linux..."
 	@mkdir -p bin
-	GOOS=linux GOARCH=amd64 go build $(LDFLAGS) -o bin/$(BINARY_NAME)-linux-amd64 ./cmd/vibecoding
-	GOOS=linux GOARCH=arm64 go build $(LDFLAGS) -o bin/$(BINARY_NAME)-linux-arm64 ./cmd/vibecoding
+	GOOS=linux GOARCH=amd64 go build $(GOBUILD_FLAGS) $(LDFLAGS) -o bin/$(BINARY_NAME)-linux-amd64 ./cmd/vibecoding
+	GOOS=linux GOARCH=arm64 go build $(GOBUILD_FLAGS) $(LDFLAGS) -o bin/$(BINARY_NAME)-linux-arm64 ./cmd/vibecoding
+	@echo "Compressing Linux amd64 binary with UPX..."
+	$(UPX_CMD) bin/$(BINARY_NAME)-linux-amd64
 
-build-linux-musl:
+# musl: static build with CGO_ENABLED=0, arm64 not commonly needed
+build-linux-musl: prepare-vendored
 	@echo "Building for Linux musl..."
 	@mkdir -p bin
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build $(LDFLAGS) -o bin/$(BINARY_NAME)-linux-musl-amd64 ./cmd/vibecoding
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build $(GOBUILD_FLAGS) $(LDFLAGS) -o bin/$(BINARY_NAME)-linux-musl-amd64 ./cmd/vibecoding
+	@echo "Compressing Linux musl binary with UPX..."
+	$(UPX_CMD) bin/$(BINARY_NAME)-linux-musl-amd64
 
-build-darwin:
+build-darwin: prepare-vendored
 	@echo "Building for macOS..."
 	@mkdir -p bin
-	GOOS=darwin GOARCH=amd64 go build $(LDFLAGS) -o bin/$(BINARY_NAME)-darwin-amd64 ./cmd/vibecoding
-	GOOS=darwin GOARCH=arm64 go build $(LDFLAGS) -o bin/$(BINARY_NAME)-darwin-arm64 ./cmd/vibecoding
+	GOOS=darwin GOARCH=amd64 go build $(GOBUILD_FLAGS) $(LDFLAGS) -o bin/$(BINARY_NAME)-darwin-amd64 ./cmd/vibecoding
+	GOOS=darwin GOARCH=arm64 go build $(GOBUILD_FLAGS) $(LDFLAGS) -o bin/$(BINARY_NAME)-darwin-arm64 ./cmd/vibecoding
 
-build-windows:
+build-windows: prepare-vendored
 	@echo "Building for Windows..."
 	@mkdir -p bin
-	GOOS=windows GOARCH=amd64 go build $(LDFLAGS) -o bin/$(BINARY_NAME)-windows-amd64.exe ./cmd/vibecoding
-	GOOS=windows GOARCH=arm64 go build $(LDFLAGS) -o bin/$(BINARY_NAME)-windows-arm64.exe ./cmd/vibecoding
+	GOOS=windows GOARCH=amd64 go build $(GOBUILD_FLAGS) $(LDFLAGS) -o bin/$(BINARY_NAME)-windows-amd64.exe ./cmd/vibecoding
+	GOOS=windows GOARCH=arm64 go build $(GOBUILD_FLAGS) $(LDFLAGS) -o bin/$(BINARY_NAME)-windows-arm64.exe ./cmd/vibecoding
+	@echo "Compressing Windows amd64 binary with UPX..."
+	$(UPX_CMD) bin/$(BINARY_NAME)-windows-amd64.exe
 
 # Build all platforms
 build-all: prepare-vendored build-linux build-linux-musl build-darwin build-windows
@@ -95,7 +118,7 @@ build-all: prepare-vendored build-linux build-linux-musl build-darwin build-wind
 
 # Install
 install:
-	go install $(LDFLAGS) ./cmd/vibecoding
+	go install $(GOBUILD_FLAGS) $(LDFLAGS) ./cmd/vibecoding
 
 # Test
 test: prepare-vendored test-vendored
@@ -129,13 +152,14 @@ clean:
 # Clean all
 clean-all: clean
 	rm -rf $(DIST_DIR)
+	rm -f npm/*.tgz
 
 # Run
 run: build
 	./bin/$(BINARY_NAME)
 
 # Distribution: tar.gz for Linux and macOS
-dist-tarball: prepare-vendored build-linux build-linux-musl build-darwin
+dist-tarball: build-linux build-linux-musl build-darwin
 	@echo ""
 	@echo "Creating tarball packages..."
 	@for os in linux darwin; do \
@@ -148,7 +172,7 @@ dist-tarball: prepare-vendored build-linux build-linux-musl build-darwin
 	./scripts/build-tarball.sh linux-musl amd64 $(VERSION)
 
 # Distribution: deb for Linux
-dist-deb: prepare-vendored build-linux build-linux-musl
+dist-deb: build-linux build-linux-musl
 	@echo ""
 	@echo "Creating Debian packages..."
 	@for arch in amd64 arm64; do \
@@ -159,7 +183,7 @@ dist-deb: prepare-vendored build-linux build-linux-musl
 	./scripts/build-deb.sh amd64-musl $(VERSION)
 
 # Distribution: zip for Windows
-dist-zip: prepare-vendored build-windows
+dist-zip: build-windows
 	@echo ""
 	@echo "Creating Windows zip packages..."
 	@for arch in amd64 arm64; do \
@@ -205,8 +229,9 @@ dist: dist-linux dist-darwin dist-windows checksums
 npm-version:
 	./scripts/sync-npm-version.sh $(VERSION)
 
-# Legacy: build all binaries into single package
+# Legacy: build all binaries into single package (use npm-packages instead)
 npm-binaries: build-all
+	@echo "WARNING: npm-binaries is deprecated, use npm-packages instead" >&2
 	./scripts/build-npm.sh
 
 # Build platform-specific packages
@@ -253,6 +278,7 @@ npm-publish-pre: npm-version npm-packages
 	cd npm && npm publish --tag next
 	@echo "Published all packages (pre-release)!"
 
-# Legacy: publish main package only
+# Legacy: publish main package only (use npm-publish-all instead)
 npm-publish: npm-version npm-binaries
+	@echo "WARNING: npm-publish is deprecated, use npm-publish-all instead" >&2
 	cd npm && npm publish --tag latest

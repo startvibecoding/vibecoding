@@ -1,6 +1,6 @@
 {
   "name": "vibecoding-installer-win32-arm64",
-  "version": "v0.1.20-dirty",
+  "version": "v0.1.26-19-gdc98312-dirty",
   "description": "VibeCoding native binary for win32-arm64",
   "os": ["win32"],
   "cpu": ["arm64"],

@@ -323,6 +323,202 @@ func TestCreateProjectSkillsDir(t *testing.T) {
 	}
 }
 
+func TestParseReferences(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	content := `# API Skill
+
+### 1. 基础 (references/base.md) [已加载]
+### 2. 高级 (references/advanced.md) [待按需加载]
+
+## References
+- [概述](references/overview.md)
+`
+
+	refs := parseReferences(content, tmpDir)
+	if len(refs) != 3 {
+		t.Fatalf("expected 3 references, got %d", len(refs))
+	}
+
+	// Check first ref is auto-load
+	if !refs[0].AutoLoad {
+		t.Error("expected first ref to be auto-loaded")
+	}
+	if refs[0].Path != "references/base.md" {
+		t.Errorf("expected path 'references/base.md', got %q", refs[0].Path)
+	}
+
+	// Check second ref is on-demand
+	if refs[1].AutoLoad {
+		t.Error("expected second ref to be on-demand")
+	}
+
+	// Check third ref from markdown link
+	if refs[2].Path != "references/overview.md" {
+		t.Errorf("expected path 'references/overview.md', got %q", refs[2].Path)
+	}
+	if refs[2].Label != "概述" {
+		t.Errorf("expected label '概述', got %q", refs[2].Label)
+	}
+}
+
+func TestParseReferencesDedup(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Same ref in both header and link - should deduplicate
+	content := `# Skill
+### 1. Base (references/base.md) [已加载]
+- [Base](references/base.md)
+`
+	refs := parseReferences(content, tmpDir)
+	if len(refs) != 1 {
+		t.Errorf("expected 1 reference (deduped), got %d", len(refs))
+	}
+}
+
+func TestParseReferencesEmpty(t *testing.T) {
+	refs := parseReferences("# No references here", "/tmp")
+	if len(refs) != 0 {
+		t.Errorf("expected 0 references, got %d", len(refs))
+	}
+}
+
+func TestLoadReference(t *testing.T) {
+	tmpDir := t.TempDir()
+	skillDir := filepath.Join(tmpDir, "test-skill")
+	refsDir := filepath.Join(skillDir, "references")
+	os.MkdirAll(refsDir, 0755)
+
+	// Create skill with references
+	os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(`# Test
+### 1. Base (references/base.md) [待按需加载]
+`), 0644)
+	os.WriteFile(filepath.Join(refsDir, "base.md"), []byte("# Base Content\nThis is the base."), 0644)
+
+	m := NewManager(tmpDir, "")
+	m.Load()
+
+	// Load a known reference
+	content, ok := m.LoadReference("test-skill", "references/base.md")
+	if !ok {
+		t.Fatal("expected successful load")
+	}
+	if !contains(content, "Base Content") {
+		t.Errorf("expected content to contain 'Base Content', got %q", content)
+	}
+
+	// Load again (should use cached)
+	content2, ok := m.LoadReference("test-skill", "references/base.md")
+	if !ok {
+		t.Fatal("expected successful cached load")
+	}
+	if content != content2 {
+		t.Error("expected same content on cached load")
+	}
+}
+
+func TestLoadReferenceDirectFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	skillDir := filepath.Join(tmpDir, "test-skill")
+	os.MkdirAll(skillDir, 0755)
+
+	os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("# Test Skill"), 0644)
+	os.WriteFile(filepath.Join(skillDir, "extra.md"), []byte("# Extra"), 0644)
+
+	m := NewManager(tmpDir, "")
+	m.Load()
+
+	// Load directly by path (not a parsed reference)
+	content, ok := m.LoadReference("test-skill", "extra.md")
+	if !ok {
+		t.Fatal("expected successful direct load")
+	}
+	if !contains(content, "Extra") {
+		t.Error("expected content to contain 'Extra'")
+	}
+}
+
+func TestLoadReferencePathEscape(t *testing.T) {
+	tmpDir := t.TempDir()
+	skillDir := filepath.Join(tmpDir, "test-skill")
+	os.MkdirAll(skillDir, 0755)
+	os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("# Test"), 0644)
+
+	m := NewManager(tmpDir, "")
+	m.Load()
+
+	// Attempt path traversal
+	_, ok := m.LoadReference("test-skill", "../../etc/passwd")
+	if ok {
+		t.Error("expected path escape to be blocked")
+	}
+}
+
+func TestLoadReferenceNonexistentSkill(t *testing.T) {
+	m := NewManager("", "")
+	m.Load()
+
+	_, ok := m.LoadReference("nonexistent", "file.md")
+	if ok {
+		t.Error("expected false for nonexistent skill")
+	}
+}
+
+func TestListReferences(t *testing.T) {
+	tmpDir := t.TempDir()
+	skillDir := filepath.Join(tmpDir, "test-skill")
+	os.MkdirAll(skillDir, 0755)
+	os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(`# Test
+### 1. Ref (references/ref.md) [待按需加载]
+`), 0644)
+
+	m := NewManager(tmpDir, "")
+	m.Load()
+
+	refs := m.ListReferences("test-skill")
+	if len(refs) != 1 {
+		t.Errorf("expected 1 reference, got %d", len(refs))
+	}
+
+	// Nonexistent skill
+	refs = m.ListReferences("nonexistent")
+	if refs != nil {
+		t.Error("expected nil for nonexistent skill")
+	}
+}
+
+func TestBuildSkillContextWithReferences(t *testing.T) {
+	tmpDir := t.TempDir()
+	skillDir := filepath.Join(tmpDir, "test-skill")
+	refsDir := filepath.Join(skillDir, "references")
+	os.MkdirAll(refsDir, 0755)
+
+	os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(`# Test Skill
+### 1. Auto (references/auto.md) [已加载]
+### 2. OnDemand (references/ondemand.md) [待按需加载]
+`), 0644)
+	os.WriteFile(filepath.Join(refsDir, "auto.md"), []byte("Auto-loaded content"), 0644)
+	os.WriteFile(filepath.Join(refsDir, "ondemand.md"), []byte("On-demand content"), 0644)
+
+	m := NewManager(tmpDir, "")
+	m.Load()
+
+	ctx := m.BuildSkillContext("test-skill")
+
+	if !contains(ctx, "Auto-loaded content") {
+		t.Error("expected auto-loaded content in context")
+	}
+	if contains(ctx, "On-demand content") {
+		t.Error("on-demand content should NOT be auto-loaded")
+	}
+	if !contains(ctx, "On-Demand References") {
+		t.Error("expected on-demand references section")
+	}
+	if !contains(ctx, "skill_ref") {
+		t.Error("expected skill_ref tool mention")
+	}
+}
+
 func TestSkill(t *testing.T) {
 	skill := &Skill{
 		Name:        "test",

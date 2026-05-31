@@ -55,11 +55,19 @@ type BashTool struct {
 	jobManager *JobManager
 }
 
-// NewBashTool creates a new bash tool.
+// NewBashTool creates a new bash tool with a new JobManager.
 func NewBashTool(r *Registry) *BashTool {
 	return &BashTool{
 		registry:   r,
 		jobManager: NewJobManager(),
+	}
+}
+
+// NewBashToolWithJM creates a new bash tool with an existing JobManager.
+func NewBashToolWithJM(r *Registry, jm *JobManager) *BashTool {
+	return &BashTool{
+		registry:   r,
+		jobManager: jm,
 	}
 }
 

@@ -100,11 +100,17 @@ try {
     # Add to PATH if not already present
     $currentPath = [Environment]::GetEnvironmentVariable("Path", "User")
 
-    if ($currentPath -notlike "*$installDir*") {
+    # Use exact matching by splitting PATH into entries
+    $pathEntries = if ($currentPath) { $currentPath -split ';' | Where-Object { $_ -ne '' } } else { @() }
+
+    if ($pathEntries -notcontains $installDir) {
         Write-Info "Adding $installDir to PATH..."
-        [Environment]::SetEnvironmentVariable("Path", "$currentPath;$installDir", "User")
-        $env:Path = "$env:Path;$installDir"
-        Write-Success "Added to PATH (restart terminal to take effect)"
+        # Safely join without leading/trailing semicolons
+        $newPath = if ($currentPath) { "$currentPath;$installDir" } else { $installDir }
+        [Environment]::SetEnvironmentVariable("Path", $newPath, "User")
+        # Update current session PATH so user can use it immediately
+        $env:Path = [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [Environment]::GetEnvironmentVariable("Path", "User")
+        Write-Success "Added to PATH (restart other terminals to take effect)"
     } else {
         Write-Info "$installDir is already in PATH"
     }
@@ -116,16 +122,36 @@ try {
     Write-Host ""
     Write-Success "Installation complete!"
     Write-Host ""
+    Write-Host "  Install directory: $destPath" -ForegroundColor White
+    Write-Host "  Config directory : $configDir" -ForegroundColor White
+    Write-Host "    - Settings file: $settingsPath" -ForegroundColor Gray
+    Write-Host ""
     Write-Host "  Version: $version" -ForegroundColor White
     Write-Host ""
-    Write-Host "  Config directory: $configDir" -ForegroundColor White
-    Write-Host "    - Settings file : $settingsPath" -ForegroundColor Gray
-    Write-Host ""
-    Write-Host "  Get started:" -ForegroundColor White
-    Write-Host "    vibecoding --help" -ForegroundColor Gray
-    Write-Host ""
-    Write-Host "  Note: Restart your terminal to use vibecoding" -ForegroundColor Yellow
-    Write-Host ""
+
+    # Check if vibecoding is available
+    $vibecodingPath = Get-Command vibecoding -ErrorAction SilentlyContinue
+    if ($vibecodingPath) {
+        Write-Host "  Get started:" -ForegroundColor White
+        Write-Host "    vibecoding --help" -ForegroundColor Gray
+        Write-Host ""
+    } else {
+        Write-Warn "'vibecoding' is not found in your current PATH."
+        Write-Host ""
+        Write-Host "  To add it to your PATH manually:" -ForegroundColor White
+        Write-Host ""
+        Write-Host "  # PowerShell (current session):" -ForegroundColor Cyan
+        Write-Host "    \$env:Path += \";$installDir\"" -ForegroundColor Cyan
+        Write-Host ""
+        Write-Host "  # PowerShell (permanent, current user):" -ForegroundColor Cyan
+        Write-Host "    [Environment]::SetEnvironmentVariable('Path', \$env:Path + ';$installDir', 'User')" -ForegroundColor Cyan
+        Write-Host ""
+        Write-Host "  # CMD (permanent, current user):" -ForegroundColor Cyan
+        Write-Host "    setx Path \"%Path%;$installDir\"" -ForegroundColor Cyan
+        Write-Host ""
+        Write-Host "  # Or add via System Settings > Environment Variables > User PATH" -ForegroundColor Cyan
+        Write-Host ""
+    }
 
 } catch {
     Write-Error "Installation failed: $_"

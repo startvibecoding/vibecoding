@@ -5,6 +5,11 @@ set -euo pipefail
 trap 'error "Installation failed at line $LINENO."' ERR
 
 # VibeCoding Installer
+# Progressive and agile vibe-coding tool. No need to re-deploy Claw/Hermes;
+# everything is packed into a single file.
+# 主打渐进式、敏捷开发体验的 VibeCoding 工具，整体打包为单个文件，开箱即用，
+# 无需重复搭建部署 Claude Code、codex、Claw、Hermes 环境。
+#
 # Downloads and installs the latest release from GitHub
 #
 # Supports non-root installation to ~/.vibecoding/bin
@@ -172,13 +177,19 @@ detect_shell_config() {
             fi
             ;;
         bash)
-            # .bashrc is most common; .bash_profile for login shells on macOS
-            if [ -f "${HOME}/.bashrc" ]; then
-                echo "${HOME}/.bashrc"
-            elif [ -f "${HOME}/.bash_profile" ]; then
-                echo "${HOME}/.bash_profile"
+            # macOS uses login shells by default, so .bash_profile takes precedence
+            if [ "$(uname -s)" = "Darwin" ]; then
+                if [ -f "${HOME}/.bash_profile" ]; then
+                    echo "${HOME}/.bash_profile"
+                elif [ -f "${HOME}/.bashrc" ]; then
+                    echo "${HOME}/.bashrc"
+                else
+                    echo "${HOME}/.bash_profile"
+                fi
             else
-                if [ "$(uname -s)" = "Darwin" ]; then
+                if [ -f "${HOME}/.bashrc" ]; then
+                    echo "${HOME}/.bashrc"
+                elif [ -f "${HOME}/.bash_profile" ]; then
                     echo "${HOME}/.bash_profile"
                 else
                     echo "${HOME}/.bashrc"
@@ -222,7 +233,8 @@ add_to_path() {
     local path_line
     case "$shell_name" in
         fish)
-            path_line="set -gx PATH ${INSTALL_DIR} \$PATH"
+            # Single-quote $PATH to prevent bash from expanding it
+            path_line="set -gx PATH ${INSTALL_DIR} "'$PATH'
             ;;
         *)
             path_line="export PATH=\"${INSTALL_DIR}:\$PATH\""
@@ -238,16 +250,27 @@ add_to_path() {
 
 # Check if installed directory is in PATH
 check_path() {
-    # If already in PATH, nothing to do
+    local config_file
+    config_file=$(detect_shell_config)
+
+    # First check if already configured in shell config file
+    if [ -f "$config_file" ] && grep -q "\.vibecoding/bin" "$config_file" 2>/dev/null; then
+        # Already in config, but check if it's in current session too
+        if echo "$PATH" | tr ':' '\n' | grep -qx "$INSTALL_DIR"; then
+            return 0
+        fi
+        info "PATH already configured in ${config_file} but not active in current session"
+        warn "Run: source ${config_file}"
+        return 0
+    fi
+
+    # If already in current PATH, nothing to do
     if echo "$PATH" | tr ':' '\n' | grep -qx "$INSTALL_DIR"; then
         return 0
     fi
     
     # For user-level install, auto-add to shell config
     if [ "$INSTALL_DIR" = "$USER_INSTALL_DIR" ]; then
-        local config_file
-        config_file=$(detect_shell_config)
-        
         echo ""
         info "Detected shell: $(basename "${SHELL:-bash}")"
         info "Shell config: ${config_file}"
@@ -396,31 +419,57 @@ main() {
 
     # Verify installation
     echo ""
+    success "Installation complete!"
+    echo ""
+    echo "  Install directory: ${INSTALL_DIR}/${BINARY_NAME}"
+    echo "  Config directory : ${config_dir}"
+    echo "    - Settings file: ${config_dir}/settings.json"
+    echo ""
+
     if command -v "$BINARY_NAME" &> /dev/null; then
         local installed_version
         installed_version=$("$BINARY_NAME" --version 2>/dev/null || echo "unknown")
-        success "Installation complete!"
-        echo ""
         echo "  Version: ${installed_version}"
-        echo ""
-        echo "  Config directory: ${config_dir}"
-        echo "    - Settings file : ${config_dir}/settings.json"
         echo ""
         echo "  Get started:"
         echo "    ${BINARY_NAME} --help"
         echo ""
     else
-        success "Installation complete!"
+        warn "'${BINARY_NAME}' is not found in your current PATH."
         echo ""
-        echo "  Binary installed to:"
-        echo "    ${INSTALL_DIR}/${BINARY_NAME}"
+        echo "  Add it to your PATH manually:"
         echo ""
-        echo "  Config directory: ${config_dir}"
-        echo "    - Settings file : ${config_dir}/settings.json"
-        echo ""
-        echo "  To use right now:"
-        echo "    export PATH=\"${INSTALL_DIR}:\$PATH\""
-        echo "    ${BINARY_NAME} --help"
+        local shell_name
+        shell_name="$(basename "${SHELL:-bash}")"
+        case "$shell_name" in
+            fish)
+                echo -e "  ${CYAN}# Fish${NC}"
+                echo -e "  ${CYAN}set -gx PATH ${INSTALL_DIR} \$PATH${NC}"
+                echo -e "  ${CYAN}# Or add to ~/.config/fish/config.fish:${NC}"
+                echo -e "  ${CYAN}set -gx PATH ${INSTALL_DIR} \$PATH${NC}"
+                ;;
+            zsh)
+                echo -e "  ${CYAN}# Zsh${NC}"
+                echo -e "  ${CYAN}export PATH=\"${INSTALL_DIR}:\$PATH\"${NC}"
+                echo -e "  ${CYAN}# Or add to ~/.zshenv:${NC}"
+                echo -e "  ${CYAN}echo 'export PATH=\"${INSTALL_DIR}:\$PATH\"' >> ~/.zshenv${NC}"
+                ;;
+            bash)
+                echo -e "  ${CYAN}# Bash${NC}"
+                echo -e "  ${CYAN}export PATH=\"${INSTALL_DIR}:\$PATH\"${NC}"
+                if [ "$(uname -s)" = "Darwin" ]; then
+                    echo -e "  ${CYAN}# Or add to ~/.bash_profile:${NC}"
+                    echo -e "  ${CYAN}echo 'export PATH=\"${INSTALL_DIR}:\$PATH\"' >> ~/.bash_profile${NC}"
+                else
+                    echo -e "  ${CYAN}# Or add to ~/.bashrc:${NC}"
+                    echo -e "  ${CYAN}echo 'export PATH=\"${INSTALL_DIR}:\$PATH\"' >> ~/.bashrc${NC}"
+                fi
+                ;;
+            *)
+                echo -e "  ${CYAN}export PATH=\"${INSTALL_DIR}:\$PATH\"${NC}"
+                echo -e "  ${CYAN}# Add the above line to your shell config file${NC}"
+                ;;
+        esac
         echo ""
     fi
 }

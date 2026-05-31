@@ -1,5 +1,320 @@
 # Changelog
 
+
+## v0.1.27
+
+### ✨ Features
+
+- **Hermes Mode** (`vibecoding hermes`)
+  - New messaging gateway mode for WeChat, Feishu, and WebSocket
+  - Persistent per-user sessions with auto-archiving on `/new`
+  - Default `yolo` mode for unattended operation
+  - Smart approvals with tiered risk classification (low/medium/high)
+  - User whitelist for platform access control
+  - WebSocket streaming: real-time text_delta/think_delta/tool_call/tool_result/tool_diff/usage/done events
+
+- **A2A Protocol** (`vibecoding a2a`)
+  - New Agent-to-Agent protocol server (JSON-RPC 2.0 over HTTP + SSE streaming)
+  - Standalone mode: `vibecoding a2a start` (port 8093)
+  - Integration mode: `hermes.json` `a2a.enabled: true` shares hermes HTTP port
+  - Agent Card at `/.well-known/agent.json`
+  - Task lifecycle: submitted → working → completed/failed/canceled
+  - REST endpoints: `/a2a/send`, `/a2a/task`, `/a2a/task/cancel`, `/a2a/events`
+  - **A2A Client**: `vibecoding a2a send <message>` to send tasks to other A2A servers
+  - **A2A Discovery**: `vibecoding a2a discover <url>` to fetch remote Agent Cards
+  - **A2A Scheduling**: Cron jobs support `--a2a-target` to schedule tasks to A2A servers
+
+- **A2A Master Mode** (`--enable-a2a-master`)
+  - Configure multiple remote A2A agents via `a2a-list.json`
+  - Registers `a2a_dispatch` tool for the LLM to automatically dispatch tasks to remote agents
+  - Supports global (`~/.vibecoding/a2a-list.json`) and project-level (`.vibe/a2a-list.json`) config
+  - `--init-a2a-master-config` generates a sample config file
+  - Disabled by default, requires explicit opt-in
+
+- **A2A Config Initialization**
+  - `vibecoding a2a --init-a2a-config` generates `a2a.json` config template
+  - `vibecoding --init-gateway` generates `gateway.json` config template (existing)
+  - `vibecoding --init-a2a-master-config` generates `a2a-list.json` config template
+  - All `--init-*` flags support `--force` to overwrite existing files
+
+- **Scenarios & Walkthroughs Documentation**
+  - New `docs/scenarios.md` (zh + en) covering 9 practical usage scenarios
+  - Covers: daily coding, CI integration, multi-agent, VS Code ACP, A2A server,
+    A2A Master cross-machine dispatch, Gateway HTTP, Hermes messaging, combined modes
+
+- **Documentation Overhaul**
+  - `architecture.md`: added all missing modules (a2a/acp/gateway/hermes/mcp/memory/messaging/vendored)
+  - `tools.md`: added `a2a_dispatch` and `skill_ref` tool docs
+  - `cli-reference.md`: added `--enable-a2a-master`, `--init-a2a-master-config`,
+    `--init-gateway`, `--force`, `a2a` subcommand docs
+  - `README.md`: updated architecture diagram, added running modes overview
+
+- **Pressure System**
+  - Context Pressure: `EventContextPressure` fired at 55% context usage (configurable via `context_pressure_threshold`)
+  - Budget Pressure: `EventBudgetPressure` fired at 20% remaining iterations (configurable via `budget_pressure_threshold`)
+  - One-shot events: fire once per threshold crossing, not every turn
+  - Messaging platforms receive pressure warnings via progress callback
+
+- **Smart Approvals (Tiered Strategy)**
+  - Low risk: auto-approve
+  - Medium risk: auto-approve + notify user
+  - High risk (WebSocket): send `approval_request`, wait for user `approval_response` (5min timeout)
+  - High risk (messaging): auto-reject + notify user
+  - Command risk classification: low/medium/high based on bash command patterns
+
+- **Provider/Model Configuration**
+  - `default_provider` / `default_model` in `hermes.json` (overrides `settings.json`)
+  - CLI flags `-p`/`--provider` and `-m`/`--model` for `hermes start`
+  - Priority: CLI flags > `hermes.json` > `settings.json`
+
+- **Multi-Agent Mode** (`--multi-agent`)
+  - Enables sub-agent tools (spawn/status/send/destroy) in hermes sessions
+  - Configurable via `hermes.json` `multi_agent` field or `--multi-agent` CLI flag
+
+- **Sandbox Mode** (`--sandbox`)
+  - Optional bwrap sandbox isolation (disabled by default)
+  - Configurable via `hermes.json` `sandbox` field or `--sandbox` CLI flag
+
+- **MCP Integration**
+  - Hermes automatically loads MCP servers from global/project `mcp.json`
+  - MCP tools registered per-session, connections auto-closed on session removal
+
+- **Progress Events for Messaging Platforms**
+  - Real-time tool execution progress sent to WeChat/Feishu during agent runs
+  - Format: `[tool]: args ✅/❌` for tools, `💭 ...` for thinking process
+  - Final summary sent after agent completes
+
+- **Memory Tool**
+  - `memory` tool with read/add/update/delete actions
+  - Section-level operations (User Profile, Working Memory, Lessons Learned)
+  - Defaults to `.vibe/memory.md` (project directory)
+  - Lookup priority: `memory.path` config → `.vibe/memory.md` → `<GLOBAL_DIR>/memory.md`
+  - `/api/memory` HTTP endpoint (GET/PUT) for memory access
+
+- **Hermes CLI Commands**
+  - `hermes start` — start daemon with all CLI flags
+  - `hermes stop` — stop daemon via PID file + SIGTERM
+  - `hermes status` — check daemon status via PID + HTTP health
+  - `hermes client` — WebSocket client with streaming output and slash commands
+  - `hermes config init/show` — configuration management
+  - `hermes wechat login/status` — WeChat iLink management
+  - `hermes feishu setup/status` — Feishu configuration
+  - `hermes webhook list` — webhook route listing
+  - `hermes memory show/clear` — memory management
+  - `hermes sessions list` — active session listing (queries running instance)
+  - `hermes cron list/add/remove/enable/disable` — cron job management
+  - `a2a start/stop/status/card` — A2A server management
+
+### 📝 Changes
+
+- WeChat iLink implementation with zero external dependencies (5 files: types/protocol/auth/crypto/wechat)
+- Feishu bot with official SDK and WebSocket long-connection
+- Shell hooks for pre/post tool call external scripts (JSON stdin/stdout)
+- Webhook inbound routing with HMAC-SHA256 signature verification
+- WebSocket uses `golang.org/x/net/websocket` (stdlib compatible)
+- PID file-based daemon management for hermes stop/status
+
+### 🐛 Bug Fixes
+
+- **NPM Installer Packaging**
+  - Fixed release packaging flow so `vibecoding-installer` always ships executable entry `bin/vibecoding`.
+  - Added `scripts/npm-installer-wrapper.js` as the single source of wrapper logic, reused by both
+    `scripts/build-npm.sh` and `scripts/build-npm-packages.sh` to avoid drift.
+  - Adjusted `npm/.npmignore` and `npm/bin` handling to avoid shipping accidental build artifacts and to keep
+    package manifests (`files`) explicit.
+
+## v0.1.26
+
+### ✨ Features
+
+- **Gateway Mode** (`vibecoding gateway`)
+  - New HTTP server exposing a standard OpenAI Chat Completions API (`/v1/chat/completions`, `/v1/models`, `/health`)
+  - Any OpenAI-compatible client (Cursor, Continue, Open WebUI, Python SDK, etc.) can connect directly
+  - Streaming (SSE) and non-streaming responses fully supported
+  - Backend powered by VibeCoding agent loop with tool execution transparent to the caller
+
+- **Multi-Session Support**
+  - Built-in `SessionPool` for concurrent sessions, each with isolated agent, tools, and message history
+  - Session association via `x_session_id` in request body; auto-created when absent
+  - Configurable idle timeout (`session.idleTimeoutSeconds`) and max session limit (`session.maxSessions`)
+
+- **Sub-Agent Support in Gateway**
+  - Optional `enableSubAgents` config to enable multi-agent orchestration in gateway mode
+  - Reuses existing `AgentFactory` / `AgentManager` / sub-agent tools with no core agent changes
+
+- **Bearer Token Authentication**
+  - Configurable via `gateway.json` with `auth.enabled` and `auth.tokens` list
+  - Disabled by default; `/health` endpoint always unauthenticated
+
+- **Slash Commands via API**
+  - `/clear`, `/mode`, `/model`, `/models`, `/sessions`, `/compact`, `/status`, `/skill`, `/skills`, `/help`
+  - Triggered when the last user message starts with `/`; processed at gateway layer without invoking LLM
+  - Responses use standard OpenAI format with `x_command` extension field
+
+- **Tool Visibility Configuration** (`toolVisibility.mode`)
+  - `"content"` (default): tool status sent as text in `content` field during streaming
+  - `"sse_event"`: tool status sent as extended SSE events for custom clients
+  - `"none"`: fully transparent, client sees only final text
+
+- **System Prompt Handling** (`systemPromptMode`)
+  - `"append"` (default): client system messages appended to built-in system prompt
+  - `"ignore"`: client system messages discarded entirely
+
+- **Security: allowedWorkDirs**
+  - Directory whitelist for `x_working_dir` request-level overrides with path-separator-aware prefix matching
+  - Three-layer security model: L1 auth + L2 directory control + L3 sandbox (bwrap)
+
+- **Sandbox Support in Gateway**
+  - Configurable via `gateway.json` `sandbox.enabled` / `sandbox.level` or `--sandbox` flag
+  - Inherits detailed sandbox settings (allowedRead, deniedPaths, etc.) from `settings.json`
+
+- **Gateway Configuration** (`gateway.json`)
+  - Independent config file at `~/.config/vibecoding/gateway.json`
+  - Covers: listen address, auth, mode, sandbox, workingDir, allowedWorkDirs, session management, CORS, tool visibility, system prompt mode, request timeout, concurrency limit, logging
+  - `vibecoding --init-gateway` to generate template; `--force` to overwrite
+
+- **Request Timeout & Concurrency**
+  - `requestTimeoutSeconds` (default 1800s); streaming keeps alive as long as data flows
+  - `maxConcurrentRequests` (default 0 = unlimited)
+
+### 📝 Docs
+
+- Added `docs/gateway-proposal.md` with full architecture, API design, security model, and implementation plan
+- Updated `AGENTS.md` version note
+
+## v0.1.25
+
+### ✨ Features
+
+- **Multi-Agent Mode**
+  - Added opt-in `--multi-agent` support across CLI, TUI, and ACP mode
+  - Added `AgentManager`, `EventRouter`, and per-agent registries so agents have isolated tools, job managers, sessions, messages, and context
+  - Added `subagent_spawn`, `subagent_status`, `subagent_send`, and `subagent_destroy` tools for delegated background work
+  - Added multi-agent prompt guidance and safeguards that prevent nested sub-agent spawning
+
+- **Cron Task Support**
+  - Added `internal/cron` with persistent cron store and scheduler coverage
+  - Added `/cron` command entry points in multi-agent TUI workflows
+
+- **Provider Vendor Adapter Layer**
+  - Added vendor adapter registration in `internal/provider/vendor*.go`
+  - Centralized provider/model creation in `internal/provider/factory`
+  - Added vendor detection for DeepSeek, Xiaomi, Kimi, MiniMax, Seed, Qianfan, Bailian, Gitee, OpenRouter, Together, Groq, Fireworks, OpenAI, and Anthropic
+  - Preserved existing provider config format while allowing vendor-specific defaults and generic OpenAI/Anthropic-compatible fallback
+  - Added model `compat` handling for thinking formats, reasoning effort support, max token field selection, adaptive Anthropic thinking, and DeepSeek/Xiaomi assistant `reasoning_content`
+
+### 🐛 Bug Fixes
+
+- Auto-initialized sessions on first append so sub-agents can write session entries without requiring explicit prior initialization
+- Fixed sub-agent tests to wait for background runs and clean up spawned agents before temporary directory removal
+- Preserved ACP Anthropic cache-control behavior while moving provider creation to the shared factory
+
+### 📝 Docs
+
+- Updated `AGENTS.md` with provider factory and vendor adapter guidance
+- Replaced the multi-agent implementation checklist with a completed architecture/status document
+- Removed the obsolete root `todo.md`
+
+### 🧪 Testing
+
+- Added coverage for provider vendor resolution, provider factory creation, OpenAI/Anthropic compat behavior, multi-agent manager/router/sub-agent flows, cron storage/scheduler behavior, and session auto-initialization
+- Verified with `make test` (`go test -v -race ./...`)
+
+---
+
+## v0.1.24
+
+### ✨ Features
+
+- **API Retry with Exponential Backoff**
+  - Automatic retry for transient errors (5xx, network failures, rate limits) on initial HTTP connection
+  - Exponential backoff: `baseDelay × 2^attempt`, capped at 30 seconds
+  - Does NOT retry on user abort (`context.Canceled`), 4xx client errors, or mid-stream failures
+  - Configurable via `retry` settings (`maxRetries`, `baseDelay`, `maxDelay`)
+  - Agent forwards retry events as status updates visible in TUI and print mode
+  - ACP mode also receives retry configuration
+
+### 🐛 Bug Fixes
+
+- **Anthropic `cache_control` Now Opt-In**
+  - Changed default `cache_control` behavior to off (was auto-enabled for official API base URL)
+  - Require explicit `cacheControl: true` in provider config to enable prompt caching
+  - ACP provider creation explicitly enables `cache_control` for Anthropic
+
+- **Anthropic Tool Result Grouping**
+  - Fixed consecutive `toolResult` messages to be grouped into a single `user` message
+  - Anthropic API requires all `tool_result` blocks for preceding `tool_use` to appear together before other content
+  - Image blocks from tool results are now appended after all result blocks in the same message
+  
+- **Agent Tool-Only Loop Warning Ordering**
+  - Moved the no-text tool-loop warning to be injected after tool results are appended
+  - Keeps assistant -> toolResult -> warning message ordering valid for provider and session transcripts
+  - Warning messages are now also persisted to session storage
+
+### 📝 Docs
+
+- **Comprehensive Configuration Documentation Rewrite**
+  - Added missing settings: `cacheControl`, idle compression, full sandbox fields (`bwrapPath`, `allowedRead`, `allowedWrite`, `deniedPaths`, `passEnv`, `tmpSize`), `shellPath`, `shellCommandPrefix`, `sessionDir`, `skillsDir`, `theme`, `retry`
+  - Documented shell command `apiKey` format (`!cmd`) for password manager integration
+  - Fixed key resolution order: config `apiKey` first, then derived env var
+  - Fixed macOS config path: `~/Library/Application Support/vibecoding/`
+  - Added top-level fields reference table with all defaults
+  - Added per-platform defaults for sandbox paths and env vars
+  - Improved examples with Claude provider `cacheControl`, idle compression, project-level overrides, and custom sandbox paths
+
+### 🧪 Testing
+
+- Added retry tests covering `IsRetryable`, `RetryDelay`, and `FormatRetryMessage`
+- Added Anthropic provider tests for consecutive tool result grouping
+- Added a regression test covering tool-only warning placement after tool results
+
+
+---
+
+## v0.1.23
+
+### 🛠 Improvements
+
+- **DeepSeek Thinking Format**
+  - Added `thinkingFormat: "deepseek"` for DeepSeek reasoning requests
+  - OpenAI-compatible requests now send `thinking: {type: "enabled"}` with `reasoning_effort`
+  - Anthropic-compatible requests now send `thinking: {type: "enabled"}` with `output_config.effort`
+  - Kept `thinkingFormat: "xiaomi"` as the legacy thinking-only format
+
+### 🧪 Testing
+
+- Added provider tests covering the new `deepseek` thinking format for both OpenAI- and Anthropic-compatible requests
+
+### 📝 Docs
+
+- Updated `anthropic-api` skill and configuration docs for the new `thinkingFormat` option
+
+---
+
+## v0.1.22
+
+### ✨ Features
+
+- **CLI/TUI MCP Auto-Loading**
+  - CLI/TUI startup now loads global and project `mcp.json`, connects configured MCP servers, and registers MCP tools before the agent tool list is frozen
+
+### 🐛 Bug Fixes
+
+- **Markdown Rendering Style**
+  - Switched CLI print mode and TUI markdown rendering from Glamour auto-style detection to the fixed `dark` style for more consistent terminal output
+
+### 🧪 Testing
+
+- Added MCP config loader coverage for placeholder template filtering
+
+### 🛠 Improvements
+
+- **Shared MCP Runtime**
+  - Moved MCP connection/tool registration out of ACP-only code into a shared runtime used by ACP and normal CLI/TUI sessions
+  - Starter-template placeholder MCP servers are ignored during automatic startup loading
+
+---
+
 ## v0.1.21
 
 ### ✨ Features
@@ -14,9 +329,28 @@
   - Enabled write/edit confirmation by default in generated settings
   - TUI approval prompts summarize write content by byte size instead of dumping full file content
 
+- **MCP Config Commands**
+  - Added `/init_mcp` to create project/global `mcp.json` with `basic`/`full` templates and optional `--force`
+  - Added `/mcps` to list MCP servers from global and project `mcp.json` files
+  - MCP config is now maintained in standalone `mcp.json` (separate from `settings.json`)
+
 ### 🧪 Testing
 
 - Added coverage for the `plan` tool and write/edit approval gating
+- Added HTTP-based MCP integration tests for tool/resource/prompt registration and callback paths
+- Added SSE-based MCP integration tests for stream callbacks and message endpoint request/response flow
+
+### 🛠 Improvements
+
+- **ACP MCP Hardening**
+  - Added MCP transport support for `http` and `sse` (alongside existing `stdio`)
+  - Added MCP initialize/tool-discovery timeouts to avoid hanging ACP sessions
+  - Added paginated `tools/list` fetching with upper page bounds
+  - Added MCP `resources/*` and `prompts/*` discovery and tool registration
+  - Added duplicate MCP server-name detection and MCP tool-name de-duplication
+  - Added MCP inbound request/notification handling (`ping`, progress/logging/cancel notifications)
+  - Added bridge for inbound `sampling/createMessage` to the active ACP provider/model
+  - Added stricter close/error propagation
 
 ---
 
@@ -743,4 +1077,4 @@
 
 ---
 
-**Full Changelog**: https://github.com/startvibecoding/vibecoding/compare/v0.0.1...v0.0.7
+**Full Changelog**: https://github.com/startvibecoding/vibecoding/compare/v0.1.26...v0.1.27

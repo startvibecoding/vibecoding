@@ -25,7 +25,10 @@ type Provider struct {
 
 	// Configuration options
 	disableReasoning bool   // Disable reasoning_content support for incompatible APIs
-	thinkingFormat   string // "", "openai", "xiaomi"
+	thinkingFormat   string // "", "openai", "deepseek", "xiaomi"
+
+	// Retry configuration
+	retryConfig *provider.RetryConfig
 }
 
 // DefaultModels returns the default OpenAI model list.
@@ -88,27 +91,34 @@ func (p *Provider) DisableReasoning() {
 	p.disableReasoning = true
 }
 
+// SetRetryConfig sets the retry configuration for this provider.
+func (p *Provider) SetRetryConfig(cfg *provider.RetryConfig) {
+	p.retryConfig = cfg
+}
+
 // IsReasoningDisabled returns whether reasoning support is disabled.
 func (p *Provider) IsReasoningDisabled() bool {
 	return p.disableReasoning
 }
 
 // SetThinkingFormat sets the thinking parameter format.
-// "openai" = reasoning_effort, "xiaomi" = thinking: {type: enabled}
+// "openai" = reasoning_effort, "deepseek" = thinking + reasoning_effort,
+// "xiaomi" = legacy thinking-only format.
 func (p *Provider) SetThinkingFormat(format string) {
 	p.thinkingFormat = format
 }
 
 // openAIRequest represents the request body for OpenAI Chat Completions.
 type openAIRequest struct {
-	Model           string          `json:"model"`
-	Messages        []openAIMessage `json:"messages"`
-	Tools           []openAITool    `json:"tools,omitempty"`
-	MaxTokens       int             `json:"max_tokens,omitempty"`
-	Stream          bool            `json:"stream"`
-	StreamOptions   *streamOptions  `json:"stream_options,omitempty"`
-	ReasoningEffort string          `json:"reasoning_effort,omitempty"`
-	Thinking        *thinkingConfig `json:"thinking,omitempty"`
+	Model               string          `json:"model"`
+	Messages            []openAIMessage `json:"messages"`
+	Tools               []openAITool    `json:"tools,omitempty"`
+	MaxTokens           int             `json:"max_tokens,omitempty"`
+	MaxCompletionTokens int             `json:"max_completion_tokens,omitempty"`
+	Stream              bool            `json:"stream"`
+	StreamOptions       *streamOptions  `json:"stream_options,omitempty"`
+	ReasoningEffort     string          `json:"reasoning_effort,omitempty"`
+	Thinking            *thinkingConfig `json:"thinking,omitempty"`
 }
 
 type thinkingConfig struct {
@@ -122,7 +132,7 @@ type streamOptions struct {
 type openAIMessage struct {
 	Role       string           `json:"role"`
 	Content    interface{}      `json:"content"`
-	Reasoning  string           `json:"reasoning_content,omitempty"`
+	Reasoning  *string          `json:"reasoning_content,omitempty"`
 	ToolCalls  []openAIToolCall `json:"tool_calls,omitempty"`
 	ToolCallID string           `json:"tool_call_id,omitempty"`
 	Name       string           `json:"name,omitempty"`
@@ -202,9 +212,6 @@ func (p *Provider) Chat(ctx context.Context, params provider.ChatParams) <-chan 
 			return
 		}
 
-		messages := p.convertMessages(params)
-		tools := p.convertTools(params.Tools)
-
 		modelID := params.ModelID
 		if modelID == "" {
 			if len(p.Models()) > 0 {
@@ -218,38 +225,42 @@ func (p *Provider) Chat(ctx context.Context, params provider.ChatParams) <-chan 
 		if maxTokens == 0 {
 			maxTokens = 16384
 		}
+		model := p.GetModel(modelID)
+		messages := p.convertMessages(params, p.requiresReasoningContentOnAssistant(model))
+		tools := p.convertTools(params.Tools)
 
 		reqBody := openAIRequest{
 			Model:         modelID,
 			Messages:      messages,
 			Tools:         tools,
-			MaxTokens:     maxTokens,
 			Stream:        true,
 			StreamOptions: &streamOptions{IncludeUsage: true},
 		}
+		if maxTokensField(model) == "max_completion_tokens" {
+			reqBody.MaxCompletionTokens = maxTokens
+		} else {
+			reqBody.MaxTokens = maxTokens
+		}
 
-		model := p.GetModel(modelID)
 		if !p.disableReasoning && params.ThinkingLevel != provider.ThinkingOff && model != nil && model.Reasoning {
 			// Determine thinking format: explicit config > URL auto-detect > default
-			format := p.thinkingFormat
-			if format == "" && strings.Contains(p.baseURL, "xiaomimimo") {
-				format = "xiaomi"
-			}
+			format := p.thinkingFormatForModel(model)
 			switch format {
+			case "deepseek":
+				reqBody.Thinking = &thinkingConfig{Type: "enabled"}
+				if supportsReasoningEffort(model) {
+					reqBody.ReasoningEffort = deepseekReasoningEffort(params.ThinkingLevel)
+				}
 			case "xiaomi":
 				reqBody.Thinking = &thinkingConfig{Type: "enabled"}
 			default: // "openai" or ""
-				switch params.ThinkingLevel {
-				case provider.ThinkingMinimal, provider.ThinkingLow:
-					reqBody.ReasoningEffort = "low"
-				case provider.ThinkingMedium:
-					reqBody.ReasoningEffort = "medium"
-				case provider.ThinkingHigh, provider.ThinkingXHigh:
-					reqBody.ReasoningEffort = "high"
+				if supportsReasoningEffort(model) {
+					reqBody.ReasoningEffort = openAIReasoningEffort(params.ThinkingLevel)
 				}
 			}
 		}
 
+		// Build the request body once (reused across retries)
 		body, err := json.Marshal(reqBody)
 		if err != nil {
 			ch <- provider.StreamEvent{Type: provider.StreamError, Error: fmt.Errorf("marshal request: %w", err)}
@@ -261,30 +272,83 @@ func (p *Provider) Chat(ctx context.Context, params provider.ChatParams) <-chan 
 			fmt.Fprintf(os.Stderr, "[DEBUG] Request body: %s\n", string(body))
 		}
 
-		req, err := http.NewRequestWithContext(ctx, "POST", p.baseURL+"/chat/completions", bytes.NewReader(body))
-		if err != nil {
-			ch <- provider.StreamEvent{Type: provider.StreamError, Error: fmt.Errorf("create request: %w", err)}
-			return
-		}
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Authorization", "Bearer "+p.apiKey)
-		req.Header.Set("Accept", "text/event-stream")
-		req.Header.Set("User-Agent", ua.ProviderUserAgent())
-
-		resp, err := p.client.Do(req)
-		if err != nil {
-			ch <- provider.StreamEvent{Type: provider.StreamError, Error: fmt.Errorf("send request: %w", err)}
-			return
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != http.StatusOK {
-			bodyBytes, _ := io.ReadAll(resp.Body)
-			ch <- provider.StreamEvent{Type: provider.StreamError, Error: fmt.Errorf("API error %d: %s", resp.StatusCode, string(bodyBytes))}
-			return
+		// Retry loop: retries only the initial HTTP connection, not the SSE stream.
+		maxRetries := 0
+		baseDelayMs := 2000
+		if p.retryConfig != nil && p.retryConfig.Enabled {
+			maxRetries = p.retryConfig.MaxRetries
+			baseDelayMs = p.retryConfig.BaseDelayMs
 		}
 
-		p.parseSSE(ctx, resp.Body, ch, params)
+		for attempt := 0; attempt <= maxRetries; attempt++ {
+			if err := ctx.Err(); err != nil {
+				ch <- provider.StreamEvent{Type: provider.StreamError, Error: err, StopReason: "aborted"}
+				return
+			}
+
+			req, err := http.NewRequestWithContext(ctx, "POST", p.baseURL+"/chat/completions", bytes.NewReader(body))
+			if err != nil {
+				ch <- provider.StreamEvent{Type: provider.StreamError, Error: fmt.Errorf("create request: %w", err)}
+				return
+			}
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Authorization", "Bearer "+p.apiKey)
+			req.Header.Set("Accept", "text/event-stream")
+			req.Header.Set("User-Agent", ua.ProviderUserAgent())
+
+			resp, err := p.client.Do(req)
+			if err != nil {
+				if attempt < maxRetries && provider.IsRetryable(err, 0) {
+					delay := provider.RetryDelay(attempt, baseDelayMs)
+					ch <- provider.StreamEvent{
+						Type:         provider.StreamRetry,
+						RetryAttempt: attempt + 1,
+						RetryMax:     maxRetries,
+						Error:        fmt.Errorf("%s", provider.FormatRetryMessage(attempt, maxRetries, delay, err)),
+					}
+					select {
+					case <-ctx.Done():
+						ch <- provider.StreamEvent{Type: provider.StreamError, Error: ctx.Err(), StopReason: "aborted"}
+						return
+					case <-time.After(delay):
+					}
+					continue
+				}
+				ch <- provider.StreamEvent{Type: provider.StreamError, Error: fmt.Errorf("send request: %w", err)}
+				return
+			}
+
+			if resp.StatusCode != http.StatusOK {
+				bodyBytes, _ := io.ReadAll(resp.Body)
+				resp.Body.Close()
+				if attempt < maxRetries && provider.IsRetryable(nil, resp.StatusCode) {
+					delay := provider.RetryDelay(attempt, baseDelayMs)
+					ch <- provider.StreamEvent{
+						Type:         provider.StreamRetry,
+						RetryAttempt: attempt + 1,
+						RetryMax:     maxRetries,
+						Error:        fmt.Errorf("%s", provider.FormatRetryMessage(attempt, maxRetries, delay, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(bodyBytes)))),
+					}
+					select {
+					case <-ctx.Done():
+						ch <- provider.StreamEvent{Type: provider.StreamError, Error: ctx.Err(), StopReason: "aborted"}
+						return
+					case <-time.After(delay):
+					}
+					continue
+				}
+				ch <- provider.StreamEvent{Type: provider.StreamError, Error: fmt.Errorf("API error %d: %s", resp.StatusCode, string(bodyBytes))}
+				return
+			}
+
+			// Success: stream the SSE response. No retry once streaming starts.
+			p.parseSSE(ctx, resp.Body, ch, params)
+			resp.Body.Close()
+			return
+		}
+
+		// All retries exhausted (should not reach here with for..break logic, but safety net)
+		ch <- provider.StreamEvent{Type: provider.StreamError, Error: fmt.Errorf("all %d retry attempts exhausted", maxRetries)}
 	}()
 
 	return ch
@@ -422,7 +486,68 @@ func (p *Provider) parseSSE(ctx context.Context, body io.Reader, ch chan<- provi
 	ch <- provider.StreamEvent{Type: provider.StreamDone, StopReason: stopReason}
 }
 
-func (p *Provider) convertMessages(params provider.ChatParams) []openAIMessage {
+func openAIReasoningEffort(level provider.ThinkingLevel) string {
+	switch level {
+	case provider.ThinkingMinimal, provider.ThinkingLow:
+		return "low"
+	case provider.ThinkingMedium:
+		return "medium"
+	case provider.ThinkingHigh, provider.ThinkingXHigh:
+		return "high"
+	default:
+		return ""
+	}
+}
+
+func deepseekReasoningEffort(level provider.ThinkingLevel) string {
+	switch level {
+	case provider.ThinkingXHigh:
+		return "max"
+	default:
+		return "high"
+	}
+}
+
+func (p *Provider) thinkingFormatForModel(model *provider.Model) string {
+	if p.thinkingFormat != "" {
+		return p.thinkingFormat
+	}
+	if model != nil && model.Compat != nil && model.Compat.ThinkingFormat != "" {
+		return model.Compat.ThinkingFormat
+	}
+	lowerBaseURL := strings.ToLower(p.baseURL)
+	if strings.Contains(lowerBaseURL, "deepseek") {
+		return "deepseek"
+	}
+	if strings.Contains(lowerBaseURL, "xiaomimimo") {
+		return "xiaomi"
+	}
+	return ""
+}
+
+func supportsReasoningEffort(model *provider.Model) bool {
+	if model != nil && model.Compat != nil && model.Compat.SupportsReasoningEffort != nil {
+		return *model.Compat.SupportsReasoningEffort
+	}
+	return true
+}
+
+func maxTokensField(model *provider.Model) string {
+	if model != nil && model.Compat != nil {
+		return model.Compat.MaxTokensField
+	}
+	return ""
+}
+
+func (p *Provider) requiresReasoningContentOnAssistant(model *provider.Model) bool {
+	if model != nil && model.Compat != nil && model.Compat.RequiresReasoningContentOnAssistant {
+		return true
+	}
+	lowerBaseURL := strings.ToLower(p.baseURL)
+	return strings.Contains(lowerBaseURL, "deepseek") || strings.Contains(lowerBaseURL, "xiaomimimo")
+}
+
+func (p *Provider) convertMessages(params provider.ChatParams, forceAssistantReasoning bool) []openAIMessage {
 	var messages []openAIMessage
 
 	// Add system prompt as the first message if provided
@@ -482,7 +607,7 @@ func (p *Provider) convertMessages(params provider.ChatParams) []openAIMessage {
 			// For assistant messages with tool calls, ensure content is not an empty array
 			// Set reasoning content if available
 			if reasoningContent != "" {
-				om.Reasoning = reasoningContent
+				om.Reasoning = &reasoningContent
 			}
 		} else {
 			om.Content = msg.Content
@@ -496,6 +621,10 @@ func (p *Provider) convertMessages(params provider.ChatParams) []openAIMessage {
 					}{Name: c.ToolCall.Name, Arguments: string(c.ToolCall.Arguments)}})
 				}
 			}
+		}
+		if msg.Role == "assistant" && forceAssistantReasoning && om.Reasoning == nil {
+			reasoningContent := ""
+			om.Reasoning = &reasoningContent
 		}
 		messages = append(messages, om)
 	}

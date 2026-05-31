@@ -207,72 +207,46 @@ func TestMyTool_Execute(t *testing.T) {
 }
 ```
 
-## Adding New Providers
+## Adding Provider Support
 
-### Step 1: Create Provider Directory
+Most new services should be added as vendor adapters, not new protocol
+providers. If the service speaks OpenAI Chat Completions or Anthropic Messages,
+reuse the generic provider and register vendor defaults in `internal/provider`.
 
-```bash
-mkdir -p internal/provider/myprovider
-```
+### Add an OpenAI/Anthropic-Compatible Vendor
 
-### Step 2: Implement Provider Interface
-
-```go
-// internal/provider/myprovider/provider.go
-package myprovider
-
-import (
-    "context"
-    "github.com/startvibecoding/vibecoding/internal/provider"
-)
-
-type MyProvider struct {
-    apiKey  string
-    baseURL string
-}
-
-func NewProvider(apiKey, baseURL string) *MyProvider {
-    return &MyProvider{apiKey: apiKey, baseURL: baseURL}
-}
-
-func (p *MyProvider) Name() string {
-    return "myprovider"
-}
-
-func (p *MyProvider) Models() []*provider.Model {
-    return []*provider.Model{
-        {ID: "model-1", Name: "Model 1"},
-    }
-}
-
-func (p *MyProvider) GetModel(id string) *provider.Model {
-    for _, m := range p.Models() {
-        if m.ID == id {
-            return m
-        }
-    }
-    return nil
-}
-
-func (p *MyProvider) Chat(ctx context.Context, params provider.ChatParams) <-chan provider.StreamEvent {
-    ch := make(chan provider.StreamEvent)
-    go func() {
-        defer close(ch)
-        // Implement streaming call
-    }()
-    return ch
-}
-```
-
-### Step 3: Register Provider
-
-In `cmd/vibecoding/main.go`'s `createProvider()` function:
+1. Create `internal/provider/vendor_myvendor.go`.
+2. Register URL detection and defaults with `RegisterVendorAdapter`.
+3. Add model `compat` flags only for behavior that differs from the generic protocol.
+4. Add focused tests in `internal/provider` and, if request formatting changes, in `internal/provider/openai` or `internal/provider/anthropic`.
 
 ```go
-case "myprovider":
-    apiKey := settings.ResolveKey(providerName)
-    p = myprovider.NewProvider(apiKey, pc.BaseURL)
+package provider
+
+func init() {
+    RegisterVendorAdapter(simpleVendorAdapter{
+        name:           "myvendor",
+        domains:        []string{"api.myvendor.example"},
+        thinkingFormat: "deepseek", // optional
+        defaultAPI:     "openai-chat",
+    })
+}
 ```
+
+Provider creation for CLI and ACP goes through `internal/provider/factory`, so
+do not add vendor-specific creation code to `cmd/vibecoding/main.go` or
+`internal/acp/acp.go`.
+
+### Add a New Protocol Provider
+
+Only add a new provider package when the service has a native protocol that is
+not covered by OpenAI Chat Completions or Anthropic Messages.
+
+1. Create `internal/provider/myprotocol`.
+2. Implement `provider.Provider`.
+3. Add construction support in `internal/provider/factory`.
+4. Keep settings JSON compatibility stable.
+5. Add provider and factory tests.
 
 ## Testing
 

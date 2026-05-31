@@ -207,72 +207,41 @@ func TestMyTool_Execute(t *testing.T) {
 }
 ```
 
-## 添加新 Provider
+## 添加 Provider 支持
 
-### 步骤 1: 创建 Provider 目录
+大多数新服务应作为厂商适配器接入，而不是新增协议 provider。如果服务兼容 OpenAI Chat Completions 或 Anthropic Messages，应复用通用 provider，并在 `internal/provider` 中注册厂商默认值。
 
-```bash
-mkdir -p internal/provider/myprovider
-```
+### 添加 OpenAI/Anthropic 兼容厂商
 
-### 步骤 2: 实现 Provider 接口
-
-```go
-// internal/provider/myprovider/provider.go
-package myprovider
-
-import (
-    "context"
-    "github.com/startvibecoding/vibecoding/internal/provider"
-)
-
-type MyProvider struct {
-    apiKey  string
-    baseURL string
-}
-
-func NewProvider(apiKey, baseURL string) *MyProvider {
-    return &MyProvider{apiKey: apiKey, baseURL: baseURL}
-}
-
-func (p *MyProvider) Name() string {
-    return "myprovider"
-}
-
-func (p *MyProvider) Models() []*provider.Model {
-    return []*provider.Model{
-        {ID: "model-1", Name: "Model 1"},
-    }
-}
-
-func (p *MyProvider) GetModel(id string) *provider.Model {
-    for _, m := range p.Models() {
-        if m.ID == id {
-            return m
-        }
-    }
-    return nil
-}
-
-func (p *MyProvider) Chat(ctx context.Context, params provider.ChatParams) <-chan provider.StreamEvent {
-    ch := make(chan provider.StreamEvent)
-    go func() {
-        defer close(ch)
-        // 实现流式调用
-    }()
-    return ch
-}
-```
-
-### 步骤 3: 注册 Provider
-
-在 `cmd/vibecoding/main.go` 的 `createProvider()` 函数中添加:
+1. 创建 `internal/provider/vendor_myvendor.go`。
+2. 使用 `RegisterVendorAdapter` 注册 URL 识别和默认值。
+3. 只有当模型行为与通用协议不一致时，才增加模型 `compat` 标志。
+4. 在 `internal/provider` 添加聚焦测试；如果请求格式变化，再补 `internal/provider/openai` 或 `internal/provider/anthropic` 测试。
 
 ```go
-case "myprovider":
-    apiKey := settings.ResolveKey(providerName)
-    p = myprovider.NewProvider(apiKey, pc.BaseURL)
+package provider
+
+func init() {
+    RegisterVendorAdapter(simpleVendorAdapter{
+        name:           "myvendor",
+        domains:        []string{"api.myvendor.example"},
+        thinkingFormat: "deepseek", // 可选
+        defaultAPI:     "openai-chat",
+    })
+}
 ```
+
+CLI 和 ACP 的 provider 创建统一走 `internal/provider/factory`，不要在 `cmd/vibecoding/main.go` 或 `internal/acp/acp.go` 中添加厂商专用创建逻辑。
+
+### 添加新的协议 Provider
+
+只有当服务使用 OpenAI Chat Completions / Anthropic Messages 之外的原生协议时，才新增 provider 包。
+
+1. 创建 `internal/provider/myprotocol`。
+2. 实现 `provider.Provider`。
+3. 在 `internal/provider/factory` 增加创建逻辑。
+4. 保持 settings JSON 兼容。
+5. 添加 provider 和 factory 测试。
 
 ## 测试
 

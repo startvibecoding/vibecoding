@@ -11,6 +11,7 @@ import (
 
 	"github.com/startvibecoding/vibecoding/internal/provider"
 	"github.com/startvibecoding/vibecoding/internal/sandbox"
+	"github.com/startvibecoding/vibecoding/internal/skills"
 )
 
 // writeFileAtomic writes data to path atomically using a temporary file and rename.
@@ -142,20 +143,55 @@ func ToolDefinition(t Tool) provider.ToolDefinition {
 
 // Registry manages available tools.
 type Registry struct {
-	mu      sync.RWMutex
-	tools   map[string]Tool
-	order   []string
-	sandbox sandbox.Sandbox
-	workDir string
+	mu         sync.RWMutex
+	tools      map[string]Tool
+	order      []string
+	sandbox    sandbox.Sandbox
+	workDir    string
+	jobManager *JobManager
+	skillsMgr  *skills.Manager
 }
 
 // NewRegistry creates a new tool registry.
 func NewRegistry(workDir string, sb sandbox.Sandbox) *Registry {
 	return &Registry{
-		tools:   make(map[string]Tool),
-		workDir: workDir,
-		sandbox: sb,
+		tools:      make(map[string]Tool),
+		workDir:    workDir,
+		sandbox:    sb,
+		jobManager: NewJobManager(),
 	}
+}
+
+// RegistryConfig configures a Registry instance.
+type RegistryConfig struct {
+	WorkDir    string
+	Sandbox    sandbox.Sandbox
+	ToolFilter []string         // optional: only register these tools (empty = all)
+	SkillsMgr  *skills.Manager  // optional: skills manager for skill_ref tool
+}
+
+// NewRegistryWithConfig creates a Registry with the given config.
+func NewRegistryWithConfig(cfg RegistryConfig) *Registry {
+	r := &Registry{
+		tools:      make(map[string]Tool),
+		workDir:    cfg.WorkDir,
+		sandbox:    cfg.Sandbox,
+		jobManager: NewJobManager(),
+		skillsMgr:  cfg.SkillsMgr,
+	}
+	if len(cfg.ToolFilter) == 0 {
+		r.RegisterDefaults()
+	} else {
+		r.RegisterFiltered(cfg.ToolFilter)
+	}
+	return r
+}
+
+// JobManager returns the registry's per-instance job manager.
+func (r *Registry) JobManager() *JobManager {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.jobManager
 }
 
 // Register adds a tool to the registry.
@@ -175,6 +211,22 @@ func (r *Registry) Get(name string) (Tool, bool) {
 	defer r.mu.RUnlock()
 	t, ok := r.tools[name]
 	return t, ok
+}
+
+// Remove removes a tool by name. No-op if not found.
+func (r *Registry) Remove(name string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.tools[name]; ok {
+		delete(r.tools, name)
+		// Also remove from order
+		for i, n := range r.order {
+			if n == name {
+				r.order = append(r.order[:i], r.order[i+1:]...)
+				break
+			}
+		}
+	}
 }
 
 // All returns all registered tools in order.
@@ -264,17 +316,53 @@ func (r *Registry) SetSandbox(sb sandbox.Sandbox) {
 
 // RegisterDefaults registers all default tools.
 func (r *Registry) RegisterDefaults() {
+	r.RegisterDefaultsWithPlanTool(true)
+}
+
+// RegisterDefaultsWithPlanTool registers all default tools, optionally including the plan tool.
+func (r *Registry) RegisterDefaultsWithPlanTool(enablePlanTool bool) {
 	r.Register(NewReadTool(r))
 	r.Register(NewLsTool(r))
 	r.Register(NewGrepTool(r))
 	r.Register(NewFindTool(r))
-	r.Register(NewPlanTool(r))
+	if enablePlanTool {
+		r.Register(NewPlanTool(r))
+	}
 	r.Register(NewWriteTool(r))
 	r.Register(NewEditTool(r))
-	bashTool := NewBashTool(r)
+	bashTool := NewBashToolWithJM(r, r.jobManager)
 	r.Register(bashTool)
 	r.Register(NewJobsTool(r, bashTool))
 	r.Register(NewKillTool(r, bashTool))
+	if r.skillsMgr != nil {
+		r.Register(NewSkillRefTool(r.skillsMgr))
+	}
+}
+
+// RegisterFiltered registers only the specified tools by name.
+func (r *Registry) RegisterFiltered(toolNames []string) {
+	allTools := map[string]func() Tool{
+		"read":  func() Tool { return NewReadTool(r) },
+		"ls":    func() Tool { return NewLsTool(r) },
+		"grep":  func() Tool { return NewGrepTool(r) },
+		"find":  func() Tool { return NewFindTool(r) },
+		"plan":  func() Tool { return NewPlanTool(r) },
+		"write": func() Tool { return NewWriteTool(r) },
+		"edit":  func() Tool { return NewEditTool(r) },
+	}
+	bashTool := NewBashToolWithJM(r, r.jobManager)
+	allTools["bash"] = func() Tool { return bashTool }
+	allTools["jobs"] = func() Tool { return NewJobsTool(r, bashTool) }
+	allTools["kill"] = func() Tool { return NewKillTool(r, bashTool) }
+	if r.skillsMgr != nil {
+		allTools["skill_ref"] = func() Tool { return NewSkillRefTool(r.skillsMgr) }
+	}
+
+	for _, name := range toolNames {
+		if factory, ok := allTools[name]; ok {
+			r.Register(factory())
+		}
+	}
 }
 
 // ModeTools returns tool definitions appropriate for the given mode.

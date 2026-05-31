@@ -56,6 +56,9 @@ vibecoding acp --sandbox
 
 # 指定模式
 vibecoding acp --mode agent
+
+# 启用多 Agent 工具
+vibecoding acp --multi-agent
 ```
 
 ### ACP 命令行参数
@@ -69,6 +72,7 @@ vibecoding acp --mode agent
 | `--sandbox` | - | false | 启用沙箱 |
 | `--verbose` | - | false | 详细输出 |
 | `--debug` | - | false | 调试日志 |
+| `--multi-agent` | - | false | 启用子 Agent 工具和多 Agent 工作流 |
 
 ## 协议细节
 
@@ -90,9 +94,10 @@ ACP 使用 JSON-RPC 2.0 通过 stdio 进行通信。协议支持以下方法：
 VibeCoding 在初始化时声明以下 ACP 能力：
 
 - **加载会话**: 加载和继续之前的会话
-- **提示能力**: 文本提示（图像/音频即将支持）
+- **提示能力**: 文本提示；ACP prompt 不声明图像/音频输入能力
 - **会话能力**: 取消活动中的提示
-- **MCP 能力**: 支持 stdio 传输
+- **MCP 能力**: 支持 stdio / http / sse 传输
+- **多 Agent 工作流**: 使用 `--multi-agent` 启动 ACP 服务器后可用
 
 ### 通知
 
@@ -110,6 +115,8 @@ VibeCoding 在初始化时声明以下 ACP 能力：
 
 VibeCoding 支持在 ACP 会话期间连接 **MCP (Model Context Protocol)** 服务器。这让代理能够访问外部工具和数据源。
 
+ACP 会话与普通 CLI/TUI 会话复用同一套 MCP 连接和工具注册运行时。区别是 ACP 客户端在创建/加载会话时传入 `mcpServers`，普通 CLI/TUI 会话则在进程启动时加载 `mcp.json`。
+
 ### 配置 MCP 服务器
 
 MCP 服务器由 IDE 客户端配置，并在创建或加载会话时传递给 VibeCoding。配置格式：
@@ -119,11 +126,26 @@ MCP 服务器由 IDE 客户端配置，并在创建或加载会话时传递给 V
   "mcpServers": [
     {
       "name": "my-database",
+      "type": "stdio",
       "command": "/absolute/path/to/mcp-server",
       "args": ["--port", "8080"],
       "env": [
         {"name": "DB_URL", "value": "postgres://localhost/mydb"}
       ]
+    },
+    {
+      "name": "remote-tools",
+      "type": "http",
+      "url": "https://mcp.example.com",
+      "headers": [
+        {"name": "Authorization", "value": "Bearer ${TOKEN}"}
+      ]
+    },
+    {
+      "name": "legacy-sse",
+      "type": "sse",
+      "url": "https://legacy.example.com/sse",
+      "messageUrl": "https://legacy.example.com/messages"
     }
   ]
 }
@@ -133,9 +155,27 @@ MCP 服务器由 IDE 客户端配置，并在创建或加载会话时传递给 V
 
 当 MCP 服务器连接后，VibeCoding 自动发现并注册服务器暴露的所有工具。工具按照 `mcp_<server_name>_<tool_name>` 的命名约定注册，代理可以像使用内置工具一样使用它们。
 
+注册发生在 agent 冻结当前会话的 system prompt 和工具定义之前。因此 MCP 服务器变更后，需要用更新后的 `mcpServers` payload 创建或加载新的 ACP 会话。
+
+除 `tools/*` 外，VibeCoding 现在还会发现：
+
+- `resources/*`：注册为 MCP 资源读取工具
+- `prompts/*`：注册为 MCP Prompt 渲染工具
+
 ### MCP 传输支持
 
-目前只支持 MCP 服务器的 `stdio` 传输。服务器命令必须是绝对路径。
+支持的传输类型：
+
+- `stdio`：要求 `command` 为绝对路径
+- `http`：通过 `url` 连接 streamable HTTP 端点
+- `sse`：通过 `url` 连接 legacy SSE 流，并通过 `messageUrl` 发送请求
+
+补充说明：
+
+- 同一会话内 MCP 服务器 `name` 必须唯一
+- `http` / `sse` 传输可通过 `headers` 传鉴权头
+- `sampling/createMessage` 已桥接到当前 ACP provider/model，并返回 assistant 文本内容
+- MCP progress/logging/cancel 通知会以结构化 ACP `tool_call_update` 事件透出
 
 ## 权限系统
 

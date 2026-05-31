@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -9,6 +10,51 @@ import (
 	"github.com/startvibecoding/vibecoding/internal/sandbox"
 	"github.com/startvibecoding/vibecoding/internal/tools"
 )
+
+type loopingToolProvider struct {
+	models    []*provider.Model
+	callCount int
+}
+
+func newLoopingToolProvider() *loopingToolProvider {
+	return &loopingToolProvider{
+		models: []*provider.Model{{ID: "model1", Name: "Model 1"}},
+	}
+}
+
+func (p *loopingToolProvider) Chat(ctx context.Context, params provider.ChatParams) <-chan provider.StreamEvent {
+	ch := make(chan provider.StreamEvent, 3)
+	p.callCount++
+	toolCall := &provider.ToolCallBlock{
+		ID:        fmt.Sprintf("call_%d", p.callCount),
+		Name:      "unknown_tool",
+		Arguments: []byte(`{}`),
+	}
+	go func() {
+		defer close(ch)
+		ch <- provider.StreamEvent{Type: provider.StreamStart}
+		ch <- provider.StreamEvent{Type: provider.StreamToolCall, ToolCall: toolCall}
+		ch <- provider.StreamEvent{Type: provider.StreamDone}
+	}()
+	return ch
+}
+
+func (p *loopingToolProvider) Name() string {
+	return "looping"
+}
+
+func (p *loopingToolProvider) Models() []*provider.Model {
+	return p.models
+}
+
+func (p *loopingToolProvider) GetModel(id string) *provider.Model {
+	for _, m := range p.models {
+		if m.ID == id {
+			return m
+		}
+	}
+	return nil
+}
 
 func TestNewAgent(t *testing.T) {
 	mockProvider := provider.NewMockProvider("mock", []*provider.Model{
@@ -303,6 +349,61 @@ func TestAgentRunWithToolCall(t *testing.T) {
 	}
 }
 
+func TestToolOnlyWarningAppendedAfterToolResults(t *testing.T) {
+	mockProvider := newLoopingToolProvider()
+
+	sb := sandbox.NewNoneSandbox()
+	registry := tools.NewRegistry(t.TempDir(), sb)
+
+	var stopped bool
+	cfg := AgentLoopConfig{
+		Config: Config{
+			Provider: mockProvider,
+			Model:    mockProvider.Models()[0],
+			Mode:     "agent",
+		},
+		ToolExecutionMode: "sequential",
+		MaxIterations:     95,
+		ShouldStopAfterTurn: func(ctx ShouldStopAfterTurnContext) bool {
+			for _, msg := range ctx.NewMessages {
+				if msg.Role == "user" && contains(msg.Content, "You have been making tool calls") {
+					stopped = true
+					return true
+				}
+			}
+			return false
+		},
+	}
+
+	a := NewWithLoopConfig(cfg, registry)
+	ch := a.Run(context.Background(), "keep using tools")
+
+	for range ch {
+	}
+
+	if !stopped {
+		t.Fatal("expected warning-triggered stop")
+	}
+
+	messages := a.GetMessages()
+	warningIndex := -1
+	for i, msg := range messages {
+		if msg.Role == "user" && contains(msg.Content, "You have been making tool calls") {
+			warningIndex = i
+			break
+		}
+	}
+	if warningIndex < 2 {
+		t.Fatalf("warning index = %d, want at least 2", warningIndex)
+	}
+	if messages[warningIndex-1].Role != "toolResult" {
+		t.Fatalf("message before warning role = %q, want toolResult", messages[warningIndex-1].Role)
+	}
+	if messages[warningIndex-2].Role != "assistant" {
+		t.Fatalf("message before tool result role = %q, want assistant", messages[warningIndex-2].Role)
+	}
+}
+
 func TestAgentRunSequential(t *testing.T) {
 	toolCall1 := &provider.ToolCallBlock{
 		ID:        "call_1",
@@ -378,7 +479,7 @@ func TestBuildSystemPrompt(t *testing.T) {
 	}
 	toolGuidelines := []string{"Use read to examine files instead of cat or sed."}
 
-	prompt := BuildSystemPrompt("agent", toolNames, cwd, extraContext, toolSnippets, toolGuidelines)
+	prompt := BuildSystemPrompt("agent", toolNames, cwd, extraContext, toolSnippets, toolGuidelines, false)
 
 	if prompt == "" {
 		t.Fatal("expected non-empty prompt")
@@ -404,7 +505,7 @@ func TestBuildSystemPrompt(t *testing.T) {
 
 func TestBuildSystemPromptModes(t *testing.T) {
 	// Test plan mode
-	planPrompt := BuildSystemPrompt("plan", nil, "/tmp", "", nil, nil)
+	planPrompt := BuildSystemPrompt("plan", nil, "/tmp", "", nil, nil, false)
 	if !contains(planPrompt, "PLAN") {
 		t.Error("expected plan prompt to contain 'PLAN'")
 	}
@@ -414,21 +515,97 @@ func TestBuildSystemPromptModes(t *testing.T) {
 	}
 
 	// Test agent mode
-	agentPrompt := BuildSystemPrompt("agent", nil, "/tmp", "", nil, nil)
+	agentPrompt := BuildSystemPrompt("agent", nil, "/tmp", "", nil, nil, false)
 	if !contains(agentPrompt, "AGENT") {
 		t.Error("expected agent prompt to contain 'AGENT'")
 	}
 
 	// Test yolo mode
-	yoloPrompt := BuildSystemPrompt("yolo", nil, "/tmp", "", nil, nil)
+	yoloPrompt := BuildSystemPrompt("yolo", nil, "/tmp", "", nil, nil, false)
 	if !contains(yoloPrompt, "YOLO") {
 		t.Error("expected yolo prompt to contain 'YOLO'")
 	}
 
 	// Test unknown mode
-	unknownPrompt := BuildSystemPrompt("custom", nil, "/tmp", "", nil, nil)
+	unknownPrompt := BuildSystemPrompt("custom", nil, "/tmp", "", nil, nil, false)
 	if !contains(unknownPrompt, "CUSTOM") {
 		t.Error("expected unknown prompt to contain mode name")
+	}
+}
+
+func TestBuildSystemPromptMultiAgentGated(t *testing.T) {
+	defaultPrompt := BuildSystemPrompt("agent", nil, "/tmp", "", nil, nil, false)
+	if contains(defaultPrompt, "Sub-Agent Tools") {
+		t.Error("expected default prompt to omit sub-agent instructions")
+	}
+
+	multiPrompt := BuildSystemPrompt("agent", []string{"subagent_spawn"}, "/tmp", "", nil, nil, true)
+	if !contains(multiPrompt, "Sub-Agent Tools") {
+		t.Error("expected multi-agent prompt to include sub-agent instructions")
+	}
+	if !contains(multiPrompt, "Act as the orchestrator") {
+		t.Error("expected multi-agent prompt to include orchestration guidance")
+	}
+}
+
+// --- stripImageContent tests ---
+
+func TestStripImageContent(t *testing.T) {
+	messages := []provider.Message{
+		{Role: "user", Content: "hello"},
+		{Role: "toolResult", ToolName: "read", Contents: []provider.ContentBlock{
+			{Type: "text", Text: "[Image file: test.png]"},
+			{Type: "image", Image: &provider.ImageContent{MimeType: "image/png", Data: "base64data"}},
+		}},
+		{Role: "assistant", Contents: []provider.ContentBlock{
+			{Type: "text", Text: "I see the image"},
+		}},
+	}
+
+	result := stripImageContent(messages)
+	if len(result) != 3 {
+		t.Fatalf("expected 3 messages, got %d", len(result))
+	}
+
+	// Second message should have image stripped
+	if len(result[1].Contents) != 1 {
+		t.Errorf("expected 1 content block after stripping, got %d", len(result[1].Contents))
+	}
+	if result[1].Contents[0].Type == "image" {
+		t.Error("image content should have been stripped")
+	}
+}
+
+func TestStripImageContentOnlyImage(t *testing.T) {
+	messages := []provider.Message{
+		{Role: "user", Content: "hello"},
+		{Role: "toolResult", ToolName: "read", Contents: []provider.ContentBlock{
+			{Type: "image", Image: &provider.ImageContent{MimeType: "image/png", Data: "base64data"}},
+		}},
+	}
+
+	result := stripImageContent(messages)
+	// Message with only image and no text should be skipped
+	if len(result) != 1 {
+		t.Fatalf("expected 1 message (image-only skipped), got %d", len(result))
+	}
+}
+
+func TestSupportsImages(t *testing.T) {
+	a := &Agent{config: AgentLoopConfig{}}
+	a.config.Model = &provider.Model{Input: []string{"text"}}
+	if a.supportsImages() {
+		t.Error("expected false for text-only model")
+	}
+
+	a.config.Model = &provider.Model{Input: []string{"text", "image"}}
+	if !a.supportsImages() {
+		t.Error("expected true for text+image model")
+	}
+
+	a.config.Model = nil
+	if a.supportsImages() {
+		t.Error("expected false for nil model")
 	}
 }
 
@@ -528,6 +705,124 @@ func TestBaseProvider(t *testing.T) {
 	}
 }
 
+// --- ContextWithAgentID tests ---
+
+func TestContextWithAgentID(t *testing.T) {
+	ctx := context.Background()
+	ctx = ContextWithAgentID(ctx, "test-agent")
+
+	id, ok := AgentIDFromContext(ctx)
+	if !ok {
+		t.Fatal("expected agent ID in context")
+	}
+	if id != "test-agent" {
+		t.Errorf("agent ID = %q, want 'test-agent'", id)
+	}
+
+	// Missing from context
+	_, ok = AgentIDFromContext(context.Background())
+	if ok {
+		t.Error("expected no agent ID in empty context")
+	}
+}
+
+func TestContextWithEventChan(t *testing.T) {
+	ch := make(chan Event, 1)
+	ctx := ContextWithEventChan(context.Background(), ch)
+
+	got, ok := EventChanFromContext(ctx)
+	if !ok {
+		t.Fatal("expected event chan in context")
+	}
+	if got == nil {
+		t.Fatal("expected non-nil event chan")
+	}
+
+	_, ok = EventChanFromContext(context.Background())
+	if ok {
+		t.Error("expected no event chan in empty context")
+	}
+}
+
+// --- Manager status tests ---
+
+func TestAgentManagerMarkRunning(t *testing.T) {
+	m := NewAgentManager(&AgentFactory{})
+	m.Create(AgentOptions{ID: "a1"})
+	m.MarkRunning("a1")
+	st, ok := m.Status("a1")
+	if !ok {
+		t.Fatal("expected status")
+	}
+	if st.State != "running" {
+		t.Errorf("state = %q, want running", st.State)
+	}
+}
+
+func TestAgentManagerMarkDone(t *testing.T) {
+	m := NewAgentManager(&AgentFactory{})
+	m.Create(AgentOptions{ID: "a1"})
+	m.MarkDone("a1", "completed")
+	st, _ := m.Status("a1")
+	if st.State != "done" {
+		t.Errorf("state = %q, want done", st.State)
+	}
+	if st.Result != "completed" {
+		t.Errorf("result = %q, want completed", st.Result)
+	}
+}
+
+func TestAgentManagerMarkError(t *testing.T) {
+	m := NewAgentManager(&AgentFactory{})
+	m.Create(AgentOptions{ID: "a1"})
+	m.MarkError("a1", fmt.Errorf("test error"))
+	st, _ := m.Status("a1")
+	if st.State != "error" {
+		t.Errorf("state = %q, want error", st.State)
+	}
+	if st.Error != "test error" {
+		t.Errorf("error = %q, want 'test error'", st.Error)
+	}
+}
+
+func TestAgentManagerMarkErrorNil(t *testing.T) {
+	m := NewAgentManager(&AgentFactory{})
+	m.Create(AgentOptions{ID: "a1"})
+	m.MarkError("a1", nil)
+	st, _ := m.Status("a1")
+	if st.Error != "" {
+		t.Errorf("error = %q, want empty", st.Error)
+	}
+}
+
+func TestAgentManagerRegister(t *testing.T) {
+	m := NewAgentManager(&AgentFactory{})
+	// Create an agent through factory to get a valid agentpkg.Agent
+	a, _ := m.Create(AgentOptions{ID: "parent"})
+	m.Destroy("parent")
+	// Re-register
+	m.Register(a)
+	if m.Count() != 1 {
+		t.Errorf("count = %d, want 1", m.Count())
+	}
+}
+
+func TestAgentManagerRegisterNil(t *testing.T) {
+	m := NewAgentManager(&AgentFactory{})
+	m.Register(nil) // Should not panic
+	if m.Count() != 0 {
+		t.Errorf("count = %d, want 0", m.Count())
+	}
+}
+
+func TestAgentManagerStatusNotFound(t *testing.T) {
+	m := NewAgentManager(&AgentFactory{})
+	_, ok := m.Status("nonexistent")
+	if ok {
+		t.Error("expected not found")
+	}
+}
+
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsSubstring(s, substr))
 }
@@ -539,4 +834,96 @@ func containsSubstring(s, substr string) bool {
 		}
 	}
 	return false
+}
+
+// --- ForceCompact tests ---
+
+func TestSetForceCompact_ShouldCompactReturnsTrue(t *testing.T) {
+	mockProvider := provider.NewMockProvider("mock", []*provider.Model{
+		{ID: "model1", Name: "Model 1", ContextWindow: 100000},
+	}, nil)
+
+	sb := sandbox.NewNoneSandbox()
+	registry := tools.NewRegistry(t.TempDir(), sb)
+
+	cfg := Config{
+		Provider: mockProvider,
+		Model:    mockProvider.Models()[0],
+		Mode:     "agent",
+	}
+
+	a := New(cfg, registry)
+
+	// Load some messages so there's something to compact
+	a.LoadHistoryMessages([]provider.Message{
+		provider.NewUserMessage("Hello"),
+		provider.NewAssistantMessage([]provider.ContentBlock{{Type: "text", Text: "Hi there"}}),
+	})
+
+	// Without force, ShouldCompact should be false (context is tiny)
+	if a.ShouldCompact() {
+		t.Fatal("ShouldCompact should be false without force and small context")
+	}
+
+	// Set force flag
+	a.SetForceCompact()
+
+	// Now ShouldCompact should return true (force flag set)
+	if !a.ShouldCompact() {
+		t.Fatal("ShouldCompact should be true after SetForceCompact")
+	}
+
+	// Force flag is consumed — second call should return false
+	if a.ShouldCompact() {
+		t.Fatal("ShouldCompact should be false after force flag was consumed")
+	}
+}
+
+func TestSetForceCompact_NoMessagesDoesNotForce(t *testing.T) {
+	mockProvider := provider.NewMockProvider("mock", []*provider.Model{
+		{ID: "model1", Name: "Model 1", ContextWindow: 100000},
+	}, nil)
+
+	sb := sandbox.NewNoneSandbox()
+	registry := tools.NewRegistry(t.TempDir(), sb)
+
+	cfg := Config{
+		Provider: mockProvider,
+		Model:    mockProvider.Models()[0],
+		Mode:     "agent",
+	}
+
+	a := New(cfg, registry)
+
+	// No messages loaded — force should not trigger (nothing to compact)
+	a.SetForceCompact()
+	if a.ShouldCompact() {
+		t.Fatal("ShouldCompact should be false with force but no messages")
+	}
+}
+
+func TestSetForceCompact_NoModelDoesNotForce(t *testing.T) {
+	mockProvider := provider.NewMockProvider("mock", []*provider.Model{
+		{ID: "model1", Name: "Model 1"},
+	}, nil)
+
+	sb := sandbox.NewNoneSandbox()
+	registry := tools.NewRegistry(t.TempDir(), sb)
+
+	cfg := Config{
+		Provider: mockProvider,
+		Model:    nil, // no model
+		Mode:     "agent",
+	}
+
+	a := New(cfg, registry)
+	a.LoadHistoryMessages([]provider.Message{
+		provider.NewUserMessage("Hello"),
+		provider.NewAssistantMessage([]provider.ContentBlock{{Type: "text", Text: "Hi"}}),
+	})
+
+	a.SetForceCompact()
+	if a.ShouldCompact() {
+		t.Fatal("ShouldCompact should be false with force but no model")
+	}
 }

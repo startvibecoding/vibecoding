@@ -32,6 +32,8 @@ func TestRunPrintFailsWhenApprovalWouldBeRequired(t *testing.T) {
 		registry,
 		(*session.Manager)(nil),
 		"",
+		false,
+		nil,
 	)
 	if err == nil {
 		t.Fatal("expected runPrint to fail when approval is required")

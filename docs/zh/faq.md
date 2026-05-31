@@ -4,7 +4,7 @@
 
 ### Q: VibeCoding 是什么?
 
-A: VibeCoding 是一个终端 AI 编码助手，支持 DeepSeek（默认）、OpenAI、Anthropic 以及任何通过 OpenAI/Anthropic 兼容协议的自定义 API，提供代码编写、调试、重构等功能。
+A: VibeCoding 是一个终端 AI 编码助手，支持 DeepSeek（默认）、OpenAI、Anthropic、面向兼容 API 的厂商适配器，以及通过通用 OpenAI/Anthropic 格式接入的自定义端点，提供代码编写、调试、重构、多 Agent 委托工作流等功能。
 
 ### Q: 支持哪些 LLM?
 
@@ -12,8 +12,8 @@ A:
 - DeepSeek (默认): deepseek-v4-flash, deepseek-v4-pro (1M 上下文，最多 384K 输出)
 - OpenAI: GPT-4o, o1 等
 - Anthropic: Claude Sonnet, Opus 等
-- 小米: MiMo 模型（通过 OpenAI 兼容 API）
-- 自定义: 任何 OpenAI-Chat 或 Anthropic-Messages 兼容 API 端点
+- 厂商适配器: 小米、Kimi、MiniMax、Seed、Qianfan、Bailian、Gitee、OpenRouter、Together、Groq、Fireworks 等
+- 自定义: 任何 OpenAI Chat 或 Anthropic Messages 兼容 API 端点，会回退到通用 provider
 
 ### Q: 如何安装?
 
@@ -57,6 +57,7 @@ A: 在 `settings.json` 中配置:
 {
   "providers": {
     "deepseek-openai": {
+      "vendor": "deepseek",
       "baseUrl": "https://api.deepseek.com",
       "api": "openai-chat",
       "apiKey": "sk-..."
@@ -254,7 +255,7 @@ A:
 
 ### Q: 有哪些可用工具?
 
-A: VibeCoding 有 7 个内置工具：
+A: VibeCoding 包含核心内置工具，以及可选的多 Agent 工具：
 - `read`: 读取文件内容（包括图像）
 - `write`: 创建/覆盖文件
 - `edit`: 精确文本替换
@@ -262,8 +263,21 @@ A: VibeCoding 有 7 个内置工具：
 - `grep`: 正则内容搜索
 - `find`: 文件名搜索
 - `ls`: 目录列表
+- `plan`: 发布可见任务计划和状态更新
+- `subagent_*`: 使用 `--multi-agent` 启动时委托任务给子 Agent
 
 详见 [工具系统](tools.md) 文档。
+
+### Q: 如何使用多 Agent 工作流?
+
+A: 使用 `--multi-agent` 启动 VibeCoding：
+
+```bash
+vibecoding --multi-agent
+vibecoding acp --multi-agent
+```
+
+这会注册 `subagent_*` 工具用于委托工作。Cron 命令入口也依赖多 Agent 模式。
 
 ### Q: VibeCoding 能读取图像吗?
 
@@ -335,4 +349,4 @@ A: MIT License
 
 ### Q: 当前版本是什么?
 
-A: 当前版本是 v0.1.9。详见 [更新日志](changelog.md) 了解版本历史。
+A: 当前版本是 v0.1.25。详见 [更新日志](changelog.md) 了解版本历史。

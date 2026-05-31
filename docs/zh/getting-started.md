@@ -88,12 +88,17 @@ export DEEPSEEK_API_KEY=sk-...
 ```json
 {
   "providers": {
-    "deepseek-openai": { "apiKey": "sk-..." }
+    "deepseek-openai": {
+      "vendor": "deepseek",
+      "api": "openai-chat",
+      "baseUrl": "https://api.deepseek.com",
+      "apiKey": "sk-..."
+    }
   }
 }
 ```
 
-详见 [配置详解](configuration.md)。
+可选的 `vendor` 字段用于选择厂商适配器。未设置时，VibeCoding 会尽量根据 `baseUrl` 自动识别厂商，否则根据 `api` 回退到通用协议 provider。详见 [配置详解](configuration.md)。
 
 ## 首次运行
 
@@ -126,6 +131,30 @@ vibecoding --provider deepseek-openai --model deepseek-v4-flash
 # 使用 DeepSeek-V4-Pro
 vibecoding --provider deepseek-openai --model deepseek-v4-pro
 ```
+
+### 多 Agent 模式
+
+```bash
+# 启用子 Agent 工具和多 Agent 命令
+vibecoding --multi-agent
+
+# ACP 会话也可以启用
+vibecoding acp --multi-agent
+```
+
+多 Agent 模式会注册 `subagent_*` 工具，用于委托边界清晰的任务。TUI 多 Agent 工作流中也提供 cron 命令入口。
+
+### A2A Master 模式
+
+```bash
+# 生成示例配置
+vibecoding --init-a2a-master-config
+
+# 启用 master 模式
+vibecoding --enable-a2a-master
+```
+
+A2A Master 模式让你管理多个远程 A2A Agent，LLM 可自动通过 `a2a_dispatch` tool 分发任务。详见 [A2A 协议](a2a.md)。
 
 ## 选择模式
 
@@ -231,7 +260,7 @@ VibeCoding 可以通过 Agent Client Protocol (ACP) 集成到你的 IDE：
   "acp.agents": {
     "vibecoding": {
       "command": "vibecoding",
-      "args": ["acp", "--mode", "agent"]
+      "args": ["acp", "--mode", "agent", "--multi-agent"]
     }
   }
 }
@@ -250,6 +279,8 @@ VibeCoding 可以通过 Agent Client Protocol (ACP) 集成到你的 IDE：
 
 - 阅读 [配置详解](configuration.md) 自定义设置
 - 查看 [工具参考](tools.md) 了解可用工具
+- 尝试 [多 Agent 模式](cli-reference.md#多-agent-模式) 进行委托调查和 cron 命令入口
 - 了解 [安全模型](security.md) 保护你的系统
 - 探索 [技能系统](skills.md) 创建可复用提示片段
 - 设置 [IDE 集成](acp.md) 在 VS Code 或 JetBrains 中使用
+- 查看 [场景演示](scenarios.md) 了解各模式的实际用法

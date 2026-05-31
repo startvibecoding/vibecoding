@@ -23,8 +23,11 @@ type Provider struct {
 	baseURL string
 	client  *http.Client
 
-	thinkingFormat      string // "", "anthropic", "xiaomi"
-	cacheControlEnabled *bool  // nil=auto (on for official API, off for proxies), true=force on, false=force off
+	thinkingFormat      string // "", "anthropic", "deepseek", "xiaomi"
+	cacheControlEnabled *bool  // nil=off (must be explicitly enabled), true=on, false=off
+
+	// Retry configuration
+	retryConfig *provider.RetryConfig
 }
 
 // DefaultModels returns the default Anthropic model list.
@@ -75,42 +78,52 @@ func NewProviderWithModels(apiKey, baseURL string, models []*provider.Model) *Pr
 }
 
 // SetThinkingFormat sets the thinking parameter format.
-// "anthropic" = thinking with budget_tokens, "xiaomi" = thinking without budget_tokens
+// "anthropic" = thinking with budget_tokens, "deepseek" = thinking with output_config,
+// "xiaomi" = legacy thinking-only format.
 func (p *Provider) SetThinkingFormat(format string) {
 	p.thinkingFormat = format
 }
 
+// SetRetryConfig sets the retry configuration for this provider.
+func (p *Provider) SetRetryConfig(cfg *provider.RetryConfig) {
+	p.retryConfig = cfg
+}
+
 // SetCacheControlEnabled sets whether to use cache_control markers.
-// nil = auto (on for official API, off for proxies)
-// true = force on
-// false = force off
+// nil = off (default), true = on, false = off
 func (p *Provider) SetCacheControlEnabled(enabled *bool) {
 	p.cacheControlEnabled = enabled
 }
 
 // IsCacheControlEnabled returns whether cache_control markers should be used.
-// Auto mode: enabled for official Anthropic API, disabled for proxies.
+// Must be explicitly enabled via SetCacheControlEnabled or provider config "cacheControl": true.
+// Defaults to false when not configured.
 func (p *Provider) IsCacheControlEnabled() bool {
 	if p.cacheControlEnabled != nil {
 		return *p.cacheControlEnabled
 	}
-	// Auto mode: only enable for official Anthropic API
-	return p.baseURL == "https://api.anthropic.com"
+	return false
 }
 
 type anthropicRequest struct {
-	Model     string             `json:"model"`
-	Messages  []anthropicMessage `json:"messages"`
-	System    interface{}        `json:"system,omitempty"` // string or []anthropicContentBlock for cache_control
-	Tools     []anthropicTool    `json:"tools,omitempty"`
-	MaxTokens int                `json:"max_tokens"`
-	Stream    bool               `json:"stream"`
-	Thinking  *anthropicThinking `json:"thinking,omitempty"`
+	Model        string                 `json:"model"`
+	Messages     []anthropicMessage     `json:"messages"`
+	System       interface{}            `json:"system,omitempty"` // string or []anthropicContentBlock for cache_control
+	Tools        []anthropicTool        `json:"tools,omitempty"`
+	MaxTokens    int                    `json:"max_tokens"`
+	Stream       bool                   `json:"stream"`
+	Thinking     *anthropicThinking     `json:"thinking,omitempty"`
+	OutputConfig *anthropicOutputConfig `json:"output_config,omitempty"`
 }
 
 type anthropicThinking struct {
 	Type         string `json:"type"`
 	BudgetTokens *int   `json:"budget_tokens,omitempty"`
+	Display      string `json:"display,omitempty"`
+}
+
+type anthropicOutputConfig struct {
+	Effort string `json:"effort"`
 }
 
 type anthropicMessage struct {
@@ -123,18 +136,18 @@ type anthropicCacheControl struct {
 }
 
 type anthropicContentBlock struct {
-	Type         string                 `json:"type"`
-	Text         string                 `json:"text,omitempty"`
-	Thinking     string                 `json:"thinking,omitempty"`
-	Signature    string                 `json:"signature,omitempty"`
-	Source       *anthropicImage        `json:"source,omitempty"`
-	ID           string                 `json:"id,omitempty"`
-	Name         string                 `json:"name,omitempty"`
+	Type         string                  `json:"type"`
+	Text         string                  `json:"text,omitempty"`
+	Thinking     string                  `json:"thinking,omitempty"`
+	Signature    string                  `json:"signature,omitempty"`
+	Source       *anthropicImage         `json:"source,omitempty"`
+	ID           string                  `json:"id,omitempty"`
+	Name         string                  `json:"name,omitempty"`
 	Input        *map[string]interface{} `json:"input,omitempty"`
-	ToolUseID    string                 `json:"tool_use_id,omitempty"`
-	Content      interface{}            `json:"content,omitempty"`
-	IsError      bool                   `json:"is_error,omitempty"`
-	CacheControl *anthropicCacheControl `json:"cache_control,omitempty"`
+	ToolUseID    string                  `json:"tool_use_id,omitempty"`
+	Content      interface{}             `json:"content,omitempty"`
+	IsError      bool                    `json:"is_error,omitempty"`
+	CacheControl *anthropicCacheControl  `json:"cache_control,omitempty"`
 }
 
 type anthropicImage struct {
@@ -150,13 +163,13 @@ type anthropicTool struct {
 }
 
 type anthropicResponse struct {
-	Type         string                 `json:"type"`
-	Index        int                    `json:"index,omitempty"`
-	Delta        *anthropicDelta        `json:"delta,omitempty"`
-	ContentBlock *contentBlock          `json:"content_block,omitempty"`
-	Message      *anthropicMsg          `json:"message,omitempty"`
-	Usage        *anthropicUsage        `json:"usage,omitempty"`
-	Error        *anthropicStreamError  `json:"error,omitempty"`
+	Type         string                `json:"type"`
+	Index        int                   `json:"index,omitempty"`
+	Delta        *anthropicDelta       `json:"delta,omitempty"`
+	ContentBlock *contentBlock         `json:"content_block,omitempty"`
+	Message      *anthropicMsg         `json:"message,omitempty"`
+	Usage        *anthropicUsage       `json:"usage,omitempty"`
+	Error        *anthropicStreamError `json:"error,omitempty"`
 }
 
 type anthropicStreamError struct {
@@ -211,6 +224,7 @@ func (p *Provider) Chat(ctx context.Context, params provider.ChatParams) <-chan 
 				modelID = "claude-sonnet-4-20250514"
 			}
 		}
+		model := p.GetModel(modelID)
 
 		maxTokens := params.MaxTokens
 		if maxTokens == 0 {
@@ -239,21 +253,30 @@ func (p *Provider) Chat(ctx context.Context, params provider.ChatParams) <-chan 
 			}
 		}
 
-		if params.ThinkingLevel != provider.ThinkingOff {
+		if params.ThinkingLevel != provider.ThinkingOff && model != nil && model.Reasoning {
 			// Determine thinking format: explicit config > URL auto-detect > default
-			format := p.thinkingFormat
-			if format == "" && strings.Contains(p.baseURL, "xiaomimimo") {
-				format = "xiaomi"
-			}
+			format := p.thinkingFormatForModel(model)
 			switch format {
+			case "deepseek":
+				reqBody.Thinking = &anthropicThinking{Type: "enabled"}
+				reqBody.OutputConfig = &anthropicOutputConfig{Effort: deepseekReasoningEffort(params.ThinkingLevel)}
 			case "xiaomi":
 				reqBody.Thinking = &anthropicThinking{Type: "enabled"}
+			case "adaptive":
+				reqBody.Thinking = &anthropicThinking{Type: "adaptive", Display: "summarized"}
+				reqBody.OutputConfig = &anthropicOutputConfig{Effort: anthropicAdaptiveEffort(params.ThinkingLevel)}
 			default: // "anthropic" or ""
-				budget := thinkingBudget(params.ThinkingLevel)
-				reqBody.Thinking = &anthropicThinking{Type: "enabled", BudgetTokens: &budget}
+				if useAdaptiveThinking(model, modelID) {
+					reqBody.Thinking = &anthropicThinking{Type: "adaptive", Display: "summarized"}
+					reqBody.OutputConfig = &anthropicOutputConfig{Effort: anthropicAdaptiveEffort(params.ThinkingLevel)}
+				} else {
+					budget := thinkingBudget(params.ThinkingLevel)
+					reqBody.Thinking = &anthropicThinking{Type: "enabled", BudgetTokens: &budget}
+				}
 			}
 		}
 
+		// Build the request body once (reused across retries)
 		body, err := json.Marshal(reqBody)
 		if err != nil {
 			ch <- provider.StreamEvent{Type: provider.StreamError, Error: fmt.Errorf("marshal: %w", err)}
@@ -265,35 +288,87 @@ func (p *Provider) Chat(ctx context.Context, params provider.ChatParams) <-chan 
 			fmt.Fprintf(os.Stderr, "[DEBUG] Request body: %s\n", string(body))
 		}
 
-		req, err := http.NewRequestWithContext(ctx, "POST", p.baseURL+"/v1/messages", bytes.NewReader(body))
-		if err != nil {
-			ch <- provider.StreamEvent{Type: provider.StreamError, Error: fmt.Errorf("request: %w", err)}
-			return
+		// Retry loop: retries only the initial HTTP connection, not the SSE stream.
+		maxRetries := 0
+		baseDelayMs := 2000
+		if p.retryConfig != nil && p.retryConfig.Enabled {
+			maxRetries = p.retryConfig.MaxRetries
+			baseDelayMs = p.retryConfig.BaseDelayMs
 		}
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("x-api-key", p.apiKey)
-		req.Header.Set("anthropic-version", "2023-06-01")
-		req.Header.Set("Accept", "text/event-stream")
-		req.Header.Set("User-Agent", ua.ProviderUserAgent())
 
-		resp, err := p.client.Do(req)
-		if err != nil {
-			ch <- provider.StreamEvent{Type: provider.StreamError, Error: fmt.Errorf("send: %w", err)}
-			return
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != http.StatusOK {
-			b, _ := io.ReadAll(resp.Body)
-			// Log request body on error for debugging
-			if os.Getenv("VIBECODING_DEBUG") != "" {
-				fmt.Fprintf(os.Stderr, "[DEBUG] API Error %d: %s\n", resp.StatusCode, string(b))
-				fmt.Fprintf(os.Stderr, "[DEBUG] Request body was: %s\n", string(body))
+		for attempt := 0; attempt <= maxRetries; attempt++ {
+			if err := ctx.Err(); err != nil {
+				ch <- provider.StreamEvent{Type: provider.StreamError, Error: err, StopReason: "aborted"}
+				return
 			}
-			ch <- provider.StreamEvent{Type: provider.StreamError, Error: fmt.Errorf("API %d: %s", resp.StatusCode, string(b))}
+
+			req, err := http.NewRequestWithContext(ctx, "POST", p.baseURL+"/v1/messages", bytes.NewReader(body))
+			if err != nil {
+				ch <- provider.StreamEvent{Type: provider.StreamError, Error: fmt.Errorf("request: %w", err)}
+				return
+			}
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("x-api-key", p.apiKey)
+			req.Header.Set("anthropic-version", "2023-06-01")
+			req.Header.Set("Accept", "text/event-stream")
+			req.Header.Set("User-Agent", ua.ProviderUserAgent())
+
+			resp, err := p.client.Do(req)
+			if err != nil {
+				if attempt < maxRetries && provider.IsRetryable(err, 0) {
+					delay := provider.RetryDelay(attempt, baseDelayMs)
+					ch <- provider.StreamEvent{
+						Type:         provider.StreamRetry,
+						RetryAttempt: attempt + 1,
+						RetryMax:     maxRetries,
+						Error:        fmt.Errorf("%s", provider.FormatRetryMessage(attempt, maxRetries, delay, err)),
+					}
+					select {
+					case <-ctx.Done():
+						ch <- provider.StreamEvent{Type: provider.StreamError, Error: ctx.Err(), StopReason: "aborted"}
+						return
+					case <-time.After(delay):
+					}
+					continue
+				}
+				ch <- provider.StreamEvent{Type: provider.StreamError, Error: fmt.Errorf("send: %w", err)}
+				return
+			}
+
+			if resp.StatusCode != http.StatusOK {
+				b, _ := io.ReadAll(resp.Body)
+				resp.Body.Close()
+				if os.Getenv("VIBECODING_DEBUG") != "" {
+					fmt.Fprintf(os.Stderr, "[DEBUG] API Error %d: %s\n", resp.StatusCode, string(b))
+					fmt.Fprintf(os.Stderr, "[DEBUG] Request body was: %s\n", string(body))
+				}
+				if attempt < maxRetries && provider.IsRetryable(nil, resp.StatusCode) {
+					delay := provider.RetryDelay(attempt, baseDelayMs)
+					ch <- provider.StreamEvent{
+						Type:         provider.StreamRetry,
+						RetryAttempt: attempt + 1,
+						RetryMax:     maxRetries,
+						Error:        fmt.Errorf("%s", provider.FormatRetryMessage(attempt, maxRetries, delay, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(b)))),
+					}
+					select {
+					case <-ctx.Done():
+						ch <- provider.StreamEvent{Type: provider.StreamError, Error: ctx.Err(), StopReason: "aborted"}
+						return
+					case <-time.After(delay):
+					}
+					continue
+				}
+				ch <- provider.StreamEvent{Type: provider.StreamError, Error: fmt.Errorf("API %d: %s", resp.StatusCode, string(b))}
+				return
+			}
+
+			// Success: stream the SSE response. No retry once streaming starts.
+			p.parseSSE(ctx, resp.Body, ch, params)
+			resp.Body.Close()
 			return
 		}
-		p.parseSSE(ctx, resp.Body, ch, params)
+
+		ch <- provider.StreamEvent{Type: provider.StreamError, Error: fmt.Errorf("all %d retry attempts exhausted", maxRetries)}
 	}()
 	return ch
 }
@@ -438,49 +513,17 @@ func (p *Provider) parseSSE(ctx context.Context, body io.Reader, ch chan<- provi
 func (p *Provider) convertMessages(params provider.ChatParams) []anthropicMessage {
 	cacheEnabled := p.IsCacheControlEnabled()
 	var messages []anthropicMessage
-	for _, msg := range params.Messages {
+	for i := 0; i < len(params.Messages); i++ {
+		msg := params.Messages[i]
 		am := anthropicMessage{Role: msg.Role}
 		if msg.Role == "toolResult" {
-			am.Role = "user"
-			if len(msg.Contents) > 0 {
-				// Rich tool result: send text as tool_result, images as separate user message.
-				// Many API routing layers only detect images in user messages, not inside tool_result.
-				var imageBlocks []anthropicContentBlock
-				var textContent string
-				var hasCacheControl bool
-				for _, c := range msg.Contents {
-					switch c.Type {
-					case "text":
-						textContent = c.Text
-						if c.CacheControl != nil {
-							hasCacheControl = true
-						}
-					case "image":
-						if c.Image != nil {
-							imageBlocks = append(imageBlocks, anthropicContentBlock{Type: "image", Source: &anthropicImage{Type: "base64", MediaType: c.Image.MimeType, Data: c.Image.Data}})
-						}
-					}
-				}
-				// Send tool_result with text only
-				if textContent != "" {
-					resultBlock := anthropicContentBlock{Type: "tool_result", ToolUseID: msg.ToolCallID, Content: textContent, IsError: msg.IsError}
-					if hasCacheControl && cacheEnabled {
-						resultBlock.CacheControl = &anthropicCacheControl{Type: "ephemeral"}
-					}
-					am.Content = []anthropicContentBlock{resultBlock}
-					messages = append(messages, am)
-				} else {
-					am.Content = []anthropicContentBlock{{Type: "tool_result", ToolUseID: msg.ToolCallID, Content: msg.Content, IsError: msg.IsError}}
-					messages = append(messages, am)
-				}
-				// Send images as a separate user message
-				if len(imageBlocks) > 0 {
-					imageMsg := anthropicMessage{Role: "user", Content: imageBlocks}
-					messages = append(messages, imageMsg)
-				}
-				continue
-			}
-			am.Content = []anthropicContentBlock{{Type: "tool_result", ToolUseID: msg.ToolCallID, Content: msg.Content, IsError: msg.IsError}}
+			// Anthropic requires all tool_result blocks for the preceding assistant
+			// tool_use blocks to be in the next user message, before any other
+			// content. Group consecutive tool results to preserve that shape.
+			blocks, next := p.convertToolResultRun(params.Messages, i, cacheEnabled)
+			messages = append(messages, anthropicMessage{Role: "user", Content: blocks})
+			i = next - 1
+			continue
 		} else if len(msg.Contents) > 0 {
 			var blocks []anthropicContentBlock
 			for _, c := range msg.Contents {
@@ -512,7 +555,7 @@ func (p *Provider) convertMessages(params provider.ChatParams) []anthropicMessag
 				}
 				blocks = append(blocks, block)
 			}
-			if len(blocks) == 1 && blocks[0].Type == "text" {
+			if len(blocks) == 1 && blocks[0].Type == "text" && blocks[0].CacheControl == nil {
 				am.Content = blocks[0].Text
 			} else {
 				am.Content = blocks
@@ -525,12 +568,117 @@ func (p *Provider) convertMessages(params provider.ChatParams) []anthropicMessag
 	return messages
 }
 
+func (p *Provider) convertToolResultRun(messages []provider.Message, start int, cacheEnabled bool) ([]anthropicContentBlock, int) {
+	var resultBlocks []anthropicContentBlock
+	var imageBlocks []anthropicContentBlock
+	i := start
+	for i < len(messages) && messages[i].Role == "toolResult" {
+		resultBlock, images := p.convertToolResultMessage(messages[i], cacheEnabled)
+		resultBlocks = append(resultBlocks, resultBlock)
+		imageBlocks = append(imageBlocks, images...)
+		i++
+	}
+	return append(resultBlocks, imageBlocks...), i
+}
+
+func (p *Provider) convertToolResultMessage(msg provider.Message, cacheEnabled bool) (anthropicContentBlock, []anthropicContentBlock) {
+	textContent := msg.Content
+	var imageBlocks []anthropicContentBlock
+	var hasCacheControl bool
+
+	if len(msg.Contents) > 0 {
+		var textParts []string
+		for _, c := range msg.Contents {
+			switch c.Type {
+			case "text":
+				if c.Text != "" {
+					textParts = append(textParts, c.Text)
+				}
+				if c.CacheControl != nil {
+					hasCacheControl = true
+				}
+			case "image":
+				if c.Image != nil {
+					imageBlocks = append(imageBlocks, anthropicContentBlock{Type: "image", Source: &anthropicImage{Type: "base64", MediaType: c.Image.MimeType, Data: c.Image.Data}})
+				}
+			}
+		}
+		if len(textParts) > 0 {
+			textContent = strings.Join(textParts, "\n")
+		}
+	}
+
+	if strings.TrimSpace(textContent) == "" {
+		textContent = "Tool completed with no output."
+	}
+
+	resultBlock := anthropicContentBlock{Type: "tool_result", ToolUseID: msg.ToolCallID, Content: textContent, IsError: msg.IsError}
+	if hasCacheControl && cacheEnabled {
+		resultBlock.CacheControl = &anthropicCacheControl{Type: "ephemeral"}
+	}
+	return resultBlock, imageBlocks
+}
+
 func (p *Provider) convertTools(tools []provider.ToolDefinition) []anthropicTool {
 	var result []anthropicTool
 	for _, t := range tools {
 		result = append(result, anthropicTool{Name: t.Name, Description: t.Description, InputSchema: t.Parameters})
 	}
 	return result
+}
+
+func deepseekReasoningEffort(level provider.ThinkingLevel) string {
+	switch level {
+	case provider.ThinkingXHigh:
+		return "max"
+	default:
+		return "high"
+	}
+}
+
+func (p *Provider) thinkingFormatForModel(model *provider.Model) string {
+	if p.thinkingFormat != "" {
+		return p.thinkingFormat
+	}
+	if model != nil && model.Compat != nil && model.Compat.ThinkingFormat != "" {
+		return model.Compat.ThinkingFormat
+	}
+	lowerBaseURL := strings.ToLower(p.baseURL)
+	if strings.Contains(lowerBaseURL, "deepseek") {
+		return "deepseek"
+	}
+	if strings.Contains(lowerBaseURL, "xiaomimimo") {
+		return "xiaomi"
+	}
+	return ""
+}
+
+func isAnthropicAdaptiveModel(modelID string) bool {
+	return strings.HasPrefix(modelID, "claude-opus-4-7") ||
+		strings.HasPrefix(modelID, "claude-opus-4-6") ||
+		strings.HasPrefix(modelID, "claude-sonnet-4-6")
+}
+
+func useAdaptiveThinking(model *provider.Model, modelID string) bool {
+	if model != nil && model.Compat != nil && model.Compat.ForceAdaptiveThinking {
+		return true
+	}
+	return isAnthropicAdaptiveModel(modelID)
+}
+
+func anthropicAdaptiveEffort(level provider.ThinkingLevel) string {
+	switch level {
+	case provider.ThinkingMinimal, provider.ThinkingLow:
+		return "low"
+	case provider.ThinkingMedium:
+		return "medium"
+	case provider.ThinkingHigh:
+		return "high"
+	case provider.ThinkingXHigh:
+		return "xhigh"
+	default:
+		return "high"
+	}
 }
 
 func thinkingBudget(level provider.ThinkingLevel) int {

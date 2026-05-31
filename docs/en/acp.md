@@ -56,6 +56,9 @@ vibecoding acp --sandbox
 
 # Specify mode
 vibecoding acp --mode agent
+
+# Enable multi-agent tools
+vibecoding acp --multi-agent
 ```
 
 ### ACP Command Flags
@@ -69,6 +72,7 @@ vibecoding acp --mode agent
 | `--sandbox` | - | false | Enable sandbox |
 | `--verbose` | - | false | Verbose output |
 | `--debug` | - | false | Debug logging |
+| `--multi-agent` | - | false | Enable sub-agent tools and multi-agent workflows |
 
 ## Protocol Details
 
@@ -90,9 +94,10 @@ ACP uses JSON-RPC 2.0 over stdio for communication. The protocol supports:
 VibeCoding advertises the following ACP capabilities during initialization:
 
 - **Load Session**: Load and continue previous sessions
-- **Prompt Capabilities**: Text prompts (image/audio coming soon)
+- **Prompt Capabilities**: Text prompts; ACP prompt image/audio inputs are not advertised
 - **Session Capabilities**: Cancel active prompts
-- **MCP Capabilities**: stdio transport supported
+- **MCP Capabilities**: stdio / http / sse transport supported
+- **Multi-Agent Workflows**: Available when the ACP server is started with `--multi-agent`
 
 ### Notifications
 
@@ -110,6 +115,8 @@ The server sends `session/update` notifications with the following event types:
 
 VibeCoding supports connecting to **MCP (Model Context Protocol)** servers during ACP sessions. This allows the agent to access external tools and data sources.
 
+ACP sessions use the same MCP connection and tool-registration runtime as normal CLI/TUI sessions. The difference is that ACP clients pass `mcpServers` during session creation/loading, while normal CLI/TUI sessions load `mcp.json` at process startup.
+
 ### Configuring MCP Servers
 
 MCP servers are configured by the IDE client and passed to VibeCoding when creating or loading sessions. The configuration format:
@@ -119,11 +126,26 @@ MCP servers are configured by the IDE client and passed to VibeCoding when creat
   "mcpServers": [
     {
       "name": "my-database",
+      "type": "stdio",
       "command": "/absolute/path/to/mcp-server",
       "args": ["--port", "8080"],
       "env": [
         {"name": "DB_URL", "value": "postgres://localhost/mydb"}
       ]
+    },
+    {
+      "name": "remote-tools",
+      "type": "http",
+      "url": "https://mcp.example.com",
+      "headers": [
+        {"name": "Authorization", "value": "Bearer ${TOKEN}"}
+      ]
+    },
+    {
+      "name": "legacy-sse",
+      "type": "sse",
+      "url": "https://legacy.example.com/sse",
+      "messageUrl": "https://legacy.example.com/messages"
     }
   ]
 }
@@ -133,9 +155,27 @@ MCP servers are configured by the IDE client and passed to VibeCoding when creat
 
 When an MCP server is connected, VibeCoding automatically discovers and registers all tools exposed by the server. The tools are registered with the naming convention `mcp_<server_name>_<tool_name>`, allowing the agent to use them alongside built-in tools.
 
+Registration happens before the agent freezes its system prompt and tool definitions for the session. MCP server changes therefore require creating/loading a new ACP session with the updated `mcpServers` payload.
+
+In addition to `tools/*`, VibeCoding now also discovers:
+
+- `resources/*`: exposed as MCP resource read tools
+- `prompts/*`: exposed as MCP prompt rendering tools
+
 ### MCP Transport Support
 
-Currently only `stdio` transport is supported for MCP servers. The server command must be an absolute path.
+Supported transports:
+
+- `stdio`: requires absolute `command` path
+- `http`: streamable HTTP endpoint via `url`
+- `sse`: legacy SSE stream via `url` plus `messageUrl` for client POSTs
+
+Additional notes:
+
+- MCP server names must be unique within one session
+- `headers` can be passed for `http` / `sse` transports
+- `sampling/createMessage` is bridged to the current ACP provider/model and returns assistant text content
+- MCP progress/logging/cancel notifications are surfaced as structured ACP `tool_call_update` events
 
 ## Permission System
 

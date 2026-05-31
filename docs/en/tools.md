@@ -14,6 +14,12 @@ VibeCoding provides a set of built-in tools for file operations, code search, an
 | `find` | Filename search | Read-only |
 | `ls` | List directory contents | Read-only |
 | `plan` | Publish task plan/status | Read-only |
+| `subagent_spawn` | Start a delegated sub-agent task | Multi-agent mode only |
+| `subagent_status` | Query a sub-agent's status/result | Multi-agent mode only |
+| `subagent_send` | Send follow-up instructions to a sub-agent | Multi-agent mode only |
+| `subagent_destroy` | Stop and remove a sub-agent | Multi-agent mode only |
+| `a2a_dispatch` | Send task to remote A2A agent | A2A Master mode only |
+| `skill_ref` | Load skill reference file | When skills available |
 
 ## Tool Details
 
@@ -79,6 +85,103 @@ Publish or update a visible task plan. Steps support `pending`, `running`, `done
 ```
 
 **Returns:** Structured plan metadata for TUI, print mode, and ACP clients.
+
+---
+
+### subagent_* - Delegated Work
+
+The `subagent_*` tools are registered only when VibeCoding runs with
+`--multi-agent`. They let the main agent delegate bounded work to child agents
+that have isolated messages, context, session, registry, and job-manager state.
+
+Child agents cannot spawn further sub-agents.
+
+#### subagent_spawn
+
+Starts a child agent asynchronously and returns a handle.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `task` | string | ✓ | Focused delegated task |
+| `mode` | string | - | `plan`, `agent`, or `yolo`; defaults to `agent` |
+| `work_dir` | string | - | Child working directory |
+| `tools` | array | - | Optional allowed tool names |
+| `max_iterations` | integer | - | Iteration cap |
+| `system_prompt_extra` | string | - | Additional child-agent context |
+
+#### subagent_status
+
+Queries status and last result for a handle:
+
+```json
+{ "handle": "agent-1" }
+```
+
+#### subagent_send
+
+Sends a follow-up message to an existing sub-agent:
+
+```json
+{ "handle": "agent-1", "message": "Focus on provider tests next." }
+```
+
+#### subagent_destroy
+
+Destroys a sub-agent and releases its resources:
+
+```json
+{ "handle": "agent-1" }
+```
+
+---
+
+### a2a_dispatch - A2A Remote Agent Dispatch
+
+Send tasks to remote A2A agents registered in `a2a-list.json`. Only registered when launched with `--enable-a2a-master`.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `agent_name` | string | ✓ | Target agent name (auto-enumerated from config) |
+| `message` | string | ✓ | Task message |
+
+**Example:**
+
+```json
+{
+  "agent_name": "code-reviewer",
+  "message": "Review internal/handler.go for code quality"
+}
+```
+
+**Returns:** Text response from the remote agent
+
+See [A2A Protocol - A2A Master Mode](a2a.md#a2a-master-mode) for details.
+
+---
+
+### skill_ref - Skill Reference Loading
+
+Load reference files from skill directories. Only registered when skills are available.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `skill` | string | ✓ | Skill name (directory name) |
+| `ref` | string | ✓ | Reference file path (relative to skill directory) |
+
+**Example:**
+
+```json
+{
+  "skill": "my-conventions",
+  "ref": "references/api-style.md"
+}
+```
+
+**Returns:** Reference file content
 
 ---
 

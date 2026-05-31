@@ -231,6 +231,62 @@ func TestFormatSandboxInfoNil(t *testing.T) {
 	}
 }
 
+func TestManagerSetLevelNone(t *testing.T) {
+	m := NewManager("/tmp")
+
+	// Set to none should always work
+	err := m.SetLevel(LevelNone)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	sb := m.GetActive()
+	if sb.Level() != LevelNone {
+		t.Errorf("expected level %d, got %d", LevelNone, sb.Level())
+	}
+}
+
+func TestManagerGetForLevelInvalid(t *testing.T) {
+	m := NewManager("/tmp")
+
+	_, err := m.GetForLevel(Level(99))
+	if err == nil {
+		t.Error("expected error for invalid level")
+	}
+}
+
+func TestBwrapWrapCommand(t *testing.T) {
+	sb := NewBwrapSandbox("/tmp", LevelStandard)
+
+	cmd := sb.WrapCommand(context.Background(), "/bin/bash", "echo hello", ExecOpts{
+		WorkDir:       "/tmp",
+		WritablePaths: []string{"/tmp/extra"},
+		ReadOnlyPaths: []string{"/opt/readonly"},
+		NetworkAccess: true,
+		EnvVars:       map[string]string{"FOO": "bar"},
+	})
+
+	if cmd == nil {
+		t.Fatal("expected non-nil command")
+	}
+	// cmd.Args should contain bwrap or fallback to raw command
+	if len(cmd.Args) == 0 {
+		t.Error("expected non-empty args")
+	}
+}
+
+func TestBwrapStrictLevel(t *testing.T) {
+	sb := NewBwrapSandbox("/tmp", LevelStrict)
+
+	cmd := sb.WrapCommand(context.Background(), "/bin/bash", "ls", ExecOpts{
+		WorkDir: "/tmp",
+	})
+
+	if cmd == nil {
+		t.Fatal("expected non-nil command")
+	}
+}
+
 func TestExecOpts(t *testing.T) {
 	opts := ExecOpts{
 		WritablePaths: []string{"/tmp"},

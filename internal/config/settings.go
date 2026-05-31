@@ -21,6 +21,7 @@ type Settings struct {
 	DefaultModel         string                     `json:"defaultModel,omitempty"`
 	DefaultThinkingLevel string                     `json:"defaultThinkingLevel,omitempty"`
 	DefaultMode          string                     `json:"defaultMode,omitempty"`
+	EnablePlanTool       *bool                      `json:"enablePlanTool,omitempty"`
 	MaxContextTokens     int                        `json:"maxContextTokens,omitempty"`
 	MaxOutputTokens      int                        `json:"maxOutputTokens,omitempty"`
 	ContextFiles         ContextFilesSettings       `json:"contextFiles"`
@@ -36,22 +37,24 @@ type Settings struct {
 }
 
 type ProviderConfig struct {
+	Vendor         string        `json:"vendor,omitempty"` // Explicit vendor adapter (Decision 12/13)
 	APIKey         string        `json:"apiKey,omitempty"`
 	BaseURL        string        `json:"baseUrl,omitempty"`
 	API            string        `json:"api,omitempty"`
-	ThinkingFormat string        `json:"thinkingFormat,omitempty"` // "", "openai", "anthropic", "xiaomi"
-	CacheControl   *bool         `json:"cacheControl,omitempty"`   // enable cache_control markers (nil=auto, true=force on, false=force off)
+	ThinkingFormat string        `json:"thinkingFormat,omitempty"` // "", "openai", "anthropic", "deepseek", "xiaomi"
+	CacheControl   *bool         `json:"cacheControl,omitempty"`   // enable Anthropic prompt caching (nil/false=off, true=on; set true for Claude models)
 	Models         []ModelConfig `json:"models"`
 }
 
 type ModelConfig struct {
-	ID            string      `json:"id"`
-	Name          string      `json:"name"`
-	Reasoning     bool        `json:"reasoning,omitempty"`
-	ContextWindow int         `json:"contextWindow,omitempty"`
-	MaxTokens     int         `json:"maxTokens,omitempty"`
-	Cost          *CostConfig `json:"cost,omitempty"`
-	Input         []string    `json:"input,omitempty"`
+	ID            string       `json:"id"`
+	Name          string       `json:"name"`
+	Reasoning     bool         `json:"reasoning,omitempty"`
+	ContextWindow int          `json:"contextWindow,omitempty"`
+	MaxTokens     int          `json:"maxTokens,omitempty"`
+	Cost          *CostConfig  `json:"cost,omitempty"`
+	Input         []string     `json:"input,omitempty"`
+	Compat        *ModelCompat `json:"compat,omitempty"` // Vendor compatibility flags (Decision 14)
 }
 
 type CostConfig struct {
@@ -60,6 +63,34 @@ type CostConfig struct {
 	CacheRead  float64 `json:"cacheRead,omitempty"`
 	CacheWrite float64 `json:"cacheWrite,omitempty"`
 }
+
+// ModelCompat defines per-model compatibility flags (Decision 14).
+// Reference: pi/packages/ai/src/models.generated.ts compat field
+type ModelCompat struct {
+	// Thinking/reasoning
+	ThinkingFormat                              string `json:"thinkingFormat,omitempty"`
+	RequiresReasoningContentOnAssistant         bool   `json:"requiresReasoningContentOnAssistant,omitempty"`
+	RequiresReasoningContentOnAssistantMessages bool   `json:"requiresReasoningContentOnAssistantMessages,omitempty"`
+	ForceAdaptiveThinking                       bool   `json:"forceAdaptiveThinking,omitempty"`
+
+	// API parameter compatibility
+	SupportsDeveloperRole   *bool  `json:"supportsDeveloperRole,omitempty"`
+	SupportsStore           *bool  `json:"supportsStore,omitempty"`
+	SupportsReasoningEffort *bool  `json:"supportsReasoningEffort,omitempty"`
+	SupportsStrictMode      *bool  `json:"supportsStrictMode,omitempty"`
+	MaxTokensField          string `json:"maxTokensField,omitempty"`
+
+	// Cache
+	SupportsCacheControlOnTools *bool `json:"supportsCacheControlOnTools,omitempty"`
+	SupportsLongCacheRetention  *bool `json:"supportsLongCacheRetention,omitempty"`
+	SendSessionAffinityHeaders  bool  `json:"sendSessionAffinityHeaders,omitempty"`
+
+	// Streaming
+	SupportsEagerToolInputStreaming *bool `json:"supportsEagerToolInputStreaming,omitempty"`
+}
+
+// BoolPtr returns a pointer to the given bool value.
+func BoolPtr(v bool) *bool { return &v }
 
 type ContextFilesSettings struct {
 	Enabled    bool     `json:"enabled"`
@@ -130,6 +161,7 @@ func DefaultSettings() *Settings {
 		DefaultModel:         "deepseek-v4-flash",
 		DefaultThinkingLevel: "medium",
 		DefaultMode:          "agent",
+		EnablePlanTool:       boolPtr(true),
 		ContextFiles:         ContextFilesSettings{Enabled: true},
 		SkillsDir:            platform.SkillsDir(),
 		Compaction:           CompactionSettings{Enabled: true, ReserveTokens: 16384, KeepRecentTokens: 20000},
@@ -245,6 +277,9 @@ func mergeSettings(s, proj *Settings) {
 	}
 	if proj.DefaultMode != "" {
 		s.DefaultMode = proj.DefaultMode
+	}
+	if proj.EnablePlanTool != nil {
+		s.EnablePlanTool = boolPtr(*proj.EnablePlanTool)
 	}
 	if proj.MaxContextTokens != 0 {
 		s.MaxContextTokens = proj.MaxContextTokens
@@ -420,6 +455,13 @@ func (s *Settings) GetGlobalSkillsDir() string {
 		return s.SkillsDir
 	}
 	return platform.SkillsDir()
+}
+
+func (s *Settings) IsPlanToolEnabled() bool {
+	if s.EnablePlanTool == nil {
+		return true
+	}
+	return *s.EnablePlanTool
 }
 
 func SaveGlobalSettings(s *Settings) error {

@@ -218,6 +218,26 @@ type Model struct {
 	Cost          ModelPricing `json:"cost"`
 	ContextWindow int          `json:"contextWindow"` // max context tokens
 	MaxTokens     int          `json:"maxTokens"`     // max output tokens
+	Compat        *ModelCompat `json:"compat,omitempty"`
+}
+
+// ModelCompat captures vendor-specific behavior flags for otherwise compatible APIs.
+type ModelCompat struct {
+	ThinkingFormat                      string `json:"thinkingFormat,omitempty"`
+	RequiresReasoningContentOnAssistant bool   `json:"requiresReasoningContentOnAssistant,omitempty"`
+	ForceAdaptiveThinking               bool   `json:"forceAdaptiveThinking,omitempty"`
+
+	SupportsDeveloperRole   *bool  `json:"supportsDeveloperRole,omitempty"`
+	SupportsStore           *bool  `json:"supportsStore,omitempty"`
+	SupportsReasoningEffort *bool  `json:"supportsReasoningEffort,omitempty"`
+	SupportsStrictMode      *bool  `json:"supportsStrictMode,omitempty"`
+	MaxTokensField          string `json:"maxTokensField,omitempty"`
+
+	SupportsCacheControlOnTools *bool `json:"supportsCacheControlOnTools,omitempty"`
+	SupportsLongCacheRetention  *bool `json:"supportsLongCacheRetention,omitempty"`
+	SendSessionAffinityHeaders  bool  `json:"sendSessionAffinityHeaders,omitempty"`
+
+	SupportsEagerToolInputStreaming *bool `json:"supportsEagerToolInputStreaming,omitempty"`
 }
 
 // ThinkingLevel represents the depth of reasoning.
@@ -243,14 +263,15 @@ type ToolDefinition struct {
 type StreamEventType int
 
 const (
-	StreamStart           StreamEventType = iota // Stream started
-	StreamTextDelta                              // Text content delta
-	StreamThinkDelta                             // Thinking content delta
-	StreamThinkSignature                         // Thinking block signature (for multi-turn replay)
-	StreamToolCall                               // Tool call event
-	StreamUsage                                  // Usage statistics
-	StreamDone                                   // Stream completed
-	StreamError                                  // Error occurred
+	StreamStart          StreamEventType = iota // Stream started
+	StreamTextDelta                             // Text content delta
+	StreamThinkDelta                            // Thinking content delta
+	StreamThinkSignature                        // Thinking block signature (for multi-turn replay)
+	StreamToolCall                              // Tool call event
+	StreamUsage                                 // Usage statistics
+	StreamDone                                  // Stream completed
+	StreamError                                 // Error occurred
+	StreamRetry                                 // Retry attempt in progress
 )
 
 // StreamEvent represents a single event from a streaming response.
@@ -263,6 +284,8 @@ type StreamEvent struct {
 	Usage          *Usage         // for StreamUsage
 	Error          error          // for StreamError
 	StopReason     string         // for StreamDone: "stop", "length", "toolUse", "error", "aborted"
+	RetryAttempt   int            // for StreamRetry: current attempt number
+	RetryMax       int            // for StreamRetry: max attempts
 }
 
 // ChatParams contains all parameters for a chat request.
