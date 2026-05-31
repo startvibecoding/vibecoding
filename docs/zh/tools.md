@@ -18,6 +18,8 @@ VibeCoding 提供了一组内置工具，用于文件操作、代码搜索和命
 | `subagent_status` | 查询子 Agent 状态/结果 | 仅多 Agent 模式 |
 | `subagent_send` | 向子 Agent 发送后续指令 | 仅多 Agent 模式 |
 | `subagent_destroy` | 停止并移除子 Agent | 仅多 Agent 模式 |
+| `a2a_dispatch` | 向远程 A2A Agent 发送任务 | 仅 A2A Master 模式 |
+| `skill_ref` | 加载技能引用文件 | 技能可用时 |
 
 ## 工具详解
 
@@ -128,6 +130,56 @@ VibeCoding 提供了一组内置工具，用于文件操作、代码搜索和命
 ```json
 { "handle": "agent-1" }
 ```
+
+---
+
+### a2a_dispatch - A2A 远程 Agent 调度
+
+向 `a2a-list.json` 中注册的远程 A2A Agent 发送任务。仅在使用 `--enable-a2a-master` 启动时注册。
+
+**参数:**
+
+| 参数 | 类型 | 必填 | 描述 |
+|------|------|------|------|
+| `agent_name` | string | ✓ | 目标 agent 名称（从配置自动枚举） |
+| `message` | string | ✓ | 任务消息 |
+
+**示例:**
+
+```json
+{
+  "agent_name": "code-reviewer",
+  "message": "审查 internal/handler.go 的代码质量"
+}
+```
+
+**返回:** 远程 agent 的文本响应
+
+详见 [A2A 协议 - A2A Master 模式](a2a.md#a2a-master-模式)。
+
+---
+
+### skill_ref - 技能引用加载
+
+加载技能目录中的引用文件。仅在有可用技能时注册。
+
+**参数:**
+
+| 参数 | 类型 | 必填 | 描述 |
+|------|------|------|------|
+| `skill` | string | ✓ | 技能名称（目录名） |
+| `ref` | string | ✓ | 引用文件路径（相对于技能目录） |
+
+**示例:**
+
+```json
+{
+  "skill": "my-conventions",
+  "ref": "references/api-style.md"
+}
+```
+
+**返回:** 引用文件内容
 
 ---
 

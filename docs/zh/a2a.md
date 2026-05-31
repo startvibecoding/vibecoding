@@ -291,3 +291,74 @@ vibecoding hermes cron add "ci-check" "run CI tests" \
 ```
 
 调度器会将 prompt 发送到 A2A 服务器，而不是启动本地 Agent。
+
+## A2A Master 模式
+
+A2A Master 模式让你可以在一个 VibeCoding 实例中管理多个远程 A2A Agent，通过 `a2a_dispatch` tool 向它们分发任务。
+
+### 快速开始
+
+```bash
+# 1. 生成示例配置
+vibecoding --init-a2a-master-config
+
+# 2. 编辑 a2a-list.json，填入实际的远程 agent 信息
+#    位置：~/.vibecoding/a2a-list.json 或 .vibe/a2a-list.json
+
+# 3. 启用 master 模式
+vibecoding --enable-a2a-master
+```
+
+### 配置文件
+
+`a2a-list.json` 结构如下：
+
+```json
+{
+  "agents": [
+    {
+      "name": "code-reviewer",
+      "url": "http://localhost:8093"
+    },
+    {
+      "name": "ci-agent",
+      "url": "http://ci-server:8093",
+      "auth_token": "your-secret-token"
+    }
+  ]
+}
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `name` | string | Agent 名称（唯一标识，用于 tool 调用） |
+| `url` | string | A2A 服务器地址 |
+| `auth_token` | string | Bearer Token（可选） |
+
+配置文件位置（优先级从低到高）：
+- `~/.vibecoding/a2a-list.json`（全局）
+- `.vibe/a2a-list.json`（项目级，覆盖全局）
+
+### a2a_dispatch Tool
+
+启用后，LLM 会多出一个 `a2a_dispatch` tool，可以向注册的远程 agent 发送任务：
+
+**参数：**
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `agent_name` | string | 目标 agent 名称（从配置中自动枚举） |
+| `message` | string | 任务消息 |
+
+**示例：**
+```
+a2a_dispatch(agent_name="code-reviewer", message="review main.go for bugs")
+a2a_dispatch(agent_name="ci-agent", message="run all unit tests")
+```
+
+### CLI 参数
+
+| 参数 | 说明 |
+|------|------|
+| `--enable-a2a-master` | 启用 A2A Master 模式（默认关闭） |
+| `--init-a2a-master-config` | 生成示例 `a2a-list.json` |
+| `--force` | 覆盖已存在的配置文件 |

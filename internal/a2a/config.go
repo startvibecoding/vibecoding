@@ -4,6 +4,7 @@
 package a2a
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -62,4 +63,43 @@ func (c *Config) GetWorkDir() string {
 		return "."
 	}
 	return cwd
+}
+
+// SaveConfig writes the config to a JSON file.
+func SaveConfig(path string, cfg *Config) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		return fmt.Errorf("create config directory: %w", err)
+	}
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal a2a config: %w", err)
+	}
+	return os.WriteFile(path, data, 0600)
+}
+
+// InitA2AConfig creates the a2a.json template at the default location.
+// Returns the file path. If force is false and the file already exists, returns an error.
+func InitA2AConfig(force bool) (string, error) {
+	path := ConfigPath()
+	if !force {
+		if _, err := os.Stat(path); err == nil {
+			return path, fmt.Errorf("a2a.json already exists: %s", path)
+		}
+	}
+	cfg := DefaultConfig()
+	cfg.AuthToken = "change-me-to-a-random-secret"
+	home, _ := os.UserHomeDir()
+	if home == "" {
+		home = "/home/user"
+	}
+	cfg.WorkDir = filepath.Join(home, "projects")
+	cfg.AgentCard = &AgentCardCfg{
+		Name:        "My A2A Agent",
+		Description: "An AI coding agent accessible via A2A protocol",
+	}
+
+	if err := SaveConfig(path, cfg); err != nil {
+		return "", err
+	}
+	return path, nil
 }

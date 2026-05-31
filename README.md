@@ -27,6 +27,7 @@
 - **SSE Streaming**: Real-time token streaming for fast response delivery
 - **Think Mode**: Extended thinking/reasoning support (DeepSeek reasoning)
 - **Multi-Agent Workflows**: Optional `--multi-agent` mode with delegated sub-agents and cron command entry points
+- **A2A Master Mode**: Optional `--enable-a2a-master` mode to manage multiple remote A2A agents via `a2a-list.json`, registers `a2a_dispatch` tool for automatic task dispatch
 - **Three Modes**:
   - 🗒️ **Plan** — Read-only analysis and planning. Sandboxed, no file writes
   - 🔧 **Agent** (default) — Controlled read/write access to the project. Bash requires approval (configurable whitelist). Sandboxed, no network
@@ -250,6 +251,7 @@ Flags:
   -M, --mode string        Mode (plan, agent, yolo)
   -t, --thinking string    Thinking level (off, minimal, low, medium, high, xhigh)
       --multi-agent        Enable multi-agent tools and commands
+      --enable-a2a-master   Enable A2A master mode (remote agent dispatch)
   -c, --continue           Continue most recent session
   -r, --resume string      Resume session by ID or path
       --session string     Use specific session file or ID
@@ -300,24 +302,44 @@ make dist       # Build distribution packages (.deb, .tar.gz)
 vibecoding/
 ├── cmd/vibecoding/        # CLI entry point
 ├── internal/
+│   ├── a2a/               # A2A protocol server and master mode
+│   ├── acp/               # ACP / MCP integration
 │   ├── agent/             # Core agent loop
 │   ├── config/            # Configuration system
 │   ├── context/           # Context management and token estimation
 │   ├── contextfiles/      # Context file discovery (AGENTS.md, CLAUDE.md, etc.)
+│   ├── cron/              # Scheduled tasks for multi-agent workflows
+│   ├── gateway/           # OpenAI-compatible HTTP gateway
+│   ├── hermes/            # Messaging gateway (WeChat/Feishu/WebSocket)
+│   ├── mcp/               # MCP server integration
+│   ├── memory/            # Persistent memory (memory.md)
+│   ├── messaging/         # Messaging platform abstraction
 │   ├── platform/          # Cross-platform compatibility utilities
 │   ├── provider/          # LLM provider abstraction
 │   │   ├── factory/       # Shared provider/model construction
 │   │   ├── openai/        # OpenAI Chat Completions API
 │   │   ├── anthropic/     # Anthropic Messages API
 │   │   └── vendor*.go     # Vendor adapter registry and defaults
-│   ├── cron/              # Scheduled tasks for multi-agent workflows
 │   ├── sandbox/           # Sandbox (bwrap) implementation
 │   ├── session/           # Session management (JSONL)
 │   ├── skills/            # Skills system
 │   ├── tools/             # Tool implementations
 │   ├── tui/               # Terminal UI (BubbleTea)
-│   └── ua/                # User-Agent string generation
+│   ├── ua/                # User-Agent string generation
+│   └── vendored/          # Embedded binaries (rg, fd)
 └── pkg/sdk/               # Public SDK interface
+```
+
+### Running Modes
+
+```
+vibecoding                    # Interactive terminal (TUI)
+vibecoding -p "..."           # Non-interactive print mode
+vibecoding acp                # ACP stdio agent (editor integration)
+vibecoding gateway            # OpenAI-compatible HTTP gateway
+vibecoding hermes             # Messaging gateway (WeChat/Feishu/WebSocket)
+vibecoding a2a start          # A2A protocol server (standalone)
+vibecoding --enable-a2a-master  # A2A master mode (remote agent dispatch)
 ```
 
 ## License

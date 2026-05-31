@@ -291,3 +291,74 @@ vibecoding hermes cron add "ci-check" "run CI tests" \
 ```
 
 The cron scheduler will send the prompt to the A2A server instead of spawning a local agent.
+
+## A2A Master Mode
+
+A2A Master mode lets you manage multiple remote A2A agents from a single VibeCoding instance and dispatch tasks to them via the `a2a_dispatch` tool.
+
+### Quick Start
+
+```bash
+# 1. Generate sample config
+vibecoding --init-a2a-master-config
+
+# 2. Edit a2a-list.json with your remote agent details
+#    Location: ~/.vibecoding/a2a-list.json or .vibe/a2a-list.json
+
+# 3. Enable master mode
+vibecoding --enable-a2a-master
+```
+
+### Configuration
+
+`a2a-list.json` structure:
+
+```json
+{
+  "agents": [
+    {
+      "name": "code-reviewer",
+      "url": "http://localhost:8093"
+    },
+    {
+      "name": "ci-agent",
+      "url": "http://ci-server:8093",
+      "auth_token": "your-secret-token"
+    }
+  ]
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | string | Agent name (unique identifier, used in tool calls) |
+| `url` | string | A2A server URL |
+| `auth_token` | string | Bearer token (optional) |
+
+Config file locations (low to high priority):
+- `~/.vibecoding/a2a-list.json` (global)
+- `.vibe/a2a-list.json` (project-level, overrides global)
+
+### a2a_dispatch Tool
+
+When enabled, the LLM gets an `a2a_dispatch` tool to send tasks to registered remote agents:
+
+**Parameters:**
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `agent_name` | string | Target agent name (auto-enumerated from config) |
+| `message` | string | Task message |
+
+**Examples:**
+```
+a2a_dispatch(agent_name="code-reviewer", message="review main.go for bugs")
+a2a_dispatch(agent_name="ci-agent", message="run all unit tests")
+```
+
+### CLI Flags
+
+| Flag | Description |
+|------|-------------|
+| `--enable-a2a-master` | Enable A2A Master mode (off by default) |
+| `--init-a2a-master-config` | Generate sample `a2a-list.json` |
+| `--force` | Overwrite existing config file |

@@ -24,6 +24,31 @@
   - **A2A 发现**：`vibecoding a2a discover <url>` 获取远程 Agent Card
   - **A2A 调度**：Cron 任务支持 `--a2a-target` 参数，定时向 A2A Server 发送任务
 
+- **A2A Master 模式** (`--enable-a2a-master`)
+  - 通过 `a2a-list.json` 配置多个远程 A2A Agent
+  - 注册 `a2a_dispatch` tool，LLM 可自动向远程 agent 分发任务
+  - 支持全局（`~/.vibecoding/a2a-list.json`）和项目级（`.vibe/a2a-list.json`）配置
+  - `--init-a2a-master-config` 生成示例配置文件
+  - 默认关闭，需显式启用
+
+- **A2A 配置初始化**
+  - `vibecoding a2a --init-a2a-config` 生成 `a2a.json` 配置模板
+  - `vibecoding --init-gateway` 生成 `gateway.json` 配置模板（已有）
+  - `vibecoding --init-a2a-master-config` 生成 `a2a-list.json` 配置模板
+  - 所有 `--init-*` 支持 `--force` 覆盖已存在的文件
+
+- **场景演示文档**
+  - 新增 `docs/scenarios.md`（中英文），覆盖 9 种实际使用场景
+  - 涵盖：日常编码、CI 集成、多 Agent、VS Code ACP、A2A 服务器、
+    A2A Master 跨机器调度、Gateway HTTP 网关、Hermes 消息平台、组合模式
+
+- **文档全面更新**
+  - `architecture.md`：补全全部模块（a2a/acp/gateway/hermes/mcp/memory/messaging/vendored）
+  - `tools.md`：新增 `a2a_dispatch` 和 `skill_ref` 工具文档
+  - `cli-reference.md`：新增 `--enable-a2a-master`、`--init-a2a-master-config`、
+    `--init-gateway`、`--force`、`a2a` 子命令文档
+  - `README.md`：架构图补全、新增运行模式总览
+
 - **压力系统**
   - Context Pressure：55% context 使用率时触发 `EventContextPressure`（可通过 `context_pressure_threshold` 配置）
   - Budget Pressure：剩余 20% 迭代时触发 `EventBudgetPressure`（可通过 `budget_pressure_threshold` 配置）

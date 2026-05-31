@@ -48,7 +48,7 @@ Welcome to the VibeCoding Documentation Center!
 - [System Architecture](architecture.md) — Project structure, core components, data flow
 - [Tool System](tools.md) — Built-in tools usage guide
 - [Skills System](skills.md) — Reusable prompt snippets
-- [Online Skill Marketplace](skillhub.md) — SkillHub / ClawHub integration and cron foundation
+- [Online Skill Marketplace](skillhub.md) — Compatible with SkillHub / ClawHub, skill installation & cron foundation
 - [Session Management](sessions.md) — Session storage and management
 - [SDK Integration](sdk.md) — Embed VibeCoding agent in your Go applications
 
@@ -57,6 +57,14 @@ Welcome to the VibeCoding Documentation Center!
 
 ### IDE Integration
 - [ACP Protocol](acp.md) — Agent Client Protocol for VS Code and JetBrains
+
+### Gateway Modes
+- [Gateway Mode](gateway.md) — OpenAI-compatible HTTP gateway
+- [Hermes Mode](hermes.md) — Messaging gateway (WeChat/Feishu/WebSocket)
+- [A2A Protocol](a2a.md) — Agent-to-Agent protocol server and Master mode
+
+### Scenarios
+- [Scenarios & Walkthroughs](scenarios.md) — Practical usage examples for all modes
 
 ### Development
 - [Development Guide](development.md) — Contributing code, testing, building
@@ -78,6 +86,7 @@ Welcome to the VibeCoding Documentation Center!
 | [Skills System](skills.md) | Create reusable prompt snippets |
 | [Online Skill Marketplace](skillhub.md) | SkillHub / ClawHub integration and cron foundation |
 | [SDK Integration](sdk.md) | Embed VibeCoding agent in your Go applications |
+| [Scenarios & Walkthroughs](scenarios.md) | Practical usage examples for all modes |
 | [Changelog](changelog.md) | See what's new in each release |
 
 ## Supported LLMs

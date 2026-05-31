@@ -27,6 +27,7 @@
 - **SSE 流式传输**：实时令牌流式传输，快速响应
 - **思考模式**：扩展思考/推理支持（DeepSeek 推理）
 - **多 Agent 工作流**：可选 `--multi-agent` 模式，支持委托子 Agent 和 cron 命令入口
+- **A2A Master 模式**：可选 `--enable-a2a-master` 模式，通过 `a2a-list.json` 管理多个远程 A2A Agent，注册 `a2a_dispatch` tool 自动分发任务
 - **三种模式**：
   - 🗒️ **计划** — 只读分析和规划。沙箱化，无文件写入
   - 🔧 **代理**（默认）— 对项目的受控读写访问。Bash 需要批准（可配置白名单）。沙箱化，无网络
@@ -245,6 +246,7 @@ vibecoding [标志] [消息...]
   -M, --mode string        模式 (plan, agent, yolo)
   -t, --thinking string    思考级别 (off, minimal, low, medium, high, xhigh)
       --multi-agent        启用多 Agent 工具和命令
+      --enable-a2a-master   启用 A2A Master 模式（远程 agent 调度）
   -c, --continue           继续最近会话
   -r, --resume string      通过 ID 或路径恢复会话
       --session string     使用特定会话文件或 ID
@@ -295,24 +297,44 @@ make dist       # 构建分发包 (.deb, .tar.gz)
 vibecoding/
 ├── cmd/vibecoding/        # CLI 入口点
 ├── internal/
-│   ├── agent/             # 核心代理循环
+│   ├── a2a/               # A2A 协议服务器与 Master 模式
+│   ├── acp/               # ACP / MCP 集成
+│   ├── agent/             # 核心 Agent 循环
 │   ├── config/            # 配置系统
 │   ├── context/           # 上下文管理和令牌估算
 │   ├── contextfiles/      # 上下文文件发现 (AGENTS.md, CLAUDE.md 等)
+│   ├── cron/              # 多 Agent 工作流的定时任务
+│   ├── gateway/           # OpenAI 兼容 HTTP 网关
+│   ├── hermes/            # 消息平台网关 (微信/飞书/WebSocket)
+│   ├── mcp/               # MCP 服务器集成
+│   ├── memory/            # 持久化记忆 (memory.md)
+│   ├── messaging/         # 消息平台抽象
 │   ├── platform/          # 跨平台兼容性工具
 │   ├── provider/          # LLM 提供商抽象
 │   │   ├── factory/       # 共享 provider/model 创建逻辑
 │   │   ├── openai/        # OpenAI Chat Completions API
 │   │   ├── anthropic/     # Anthropic Messages API
 │   │   └── vendor*.go     # 厂商适配注册和默认值
-│   ├── cron/              # 多 Agent 工作流的定时任务
 │   ├── sandbox/           # 沙箱 (bwrap) 实现
 │   ├── session/           # 会话管理 (JSONL)
 │   ├── skills/            # 技能系统
 │   ├── tools/             # 工具实现
 │   ├── tui/               # 终端界面 (BubbleTea)
-│   └── ua/                # 用户代理字符串生成
+│   ├── ua/                # 用户代理字符串生成
+│   └── vendored/          # 内嵌二进制 (rg, fd)
 └── pkg/sdk/               # 公共 SDK 接口
+```
+
+### 运行模式
+
+```
+vibecoding                    # 交互式终端 (TUI)
+vibecoding -p "..."           # 非交互打印模式
+vibecoding acp                # ACP stdio 代理 (编辑器集成)
+vibecoding gateway            # OpenAI 兼容 HTTP 网关
+vibecoding hermes             # 消息平台网关 (微信/飞书/WebSocket)
+vibecoding a2a start          # A2A 协议服务器 (独立模式)
+vibecoding --enable-a2a-master  # A2A Master 模式 (远程 agent 调度)
 ```
 
 ## 许可证

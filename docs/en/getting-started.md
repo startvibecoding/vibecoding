@@ -144,6 +144,18 @@ vibecoding acp --multi-agent
 
 Multi-agent mode registers `subagent_*` tools for delegated work. Cron command entry points are available in TUI multi-agent workflows.
 
+### A2A Master Mode
+
+```bash
+# Generate sample config
+vibecoding --init-a2a-master-config
+
+# Enable master mode
+vibecoding --enable-a2a-master
+```
+
+A2A Master mode lets you manage multiple remote A2A agents, with the LLM automatically dispatching tasks via the `a2a_dispatch` tool. See [A2A Protocol](a2a.md) for details.
+
 ## Choose Mode
 
 VibeCoding provides three modes:
@@ -271,3 +283,4 @@ See the [ACP Protocol](acp.md) documentation for details.
 - Understand the [Security Model](security.md) to protect your system
 - Explore the [Skills System](skills.md) to create reusable prompt snippets
 - Set up [IDE Integration](acp.md) with VS Code or JetBrains
+- Check out [Scenarios & Walkthroughs](scenarios.md) for practical usage examples

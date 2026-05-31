@@ -29,6 +29,7 @@ This file is for AI agents working in this repository. Keep changes aligned with
 - `internal/tools/` — built-in tools
 - `internal/tui/` — terminal UI
 - `internal/acp/` — ACP / MCP related integration
+- `internal/a2a/` — A2A (Agent-to-Agent) protocol server and master mode
 - `internal/gateway/` — OpenAI-compatible HTTP gateway mode
 - `internal/vendored/` — embedded `rg` / `fd`
 - `docs/` — documentation

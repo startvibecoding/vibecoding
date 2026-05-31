@@ -144,6 +144,18 @@ vibecoding acp --multi-agent
 
 多 Agent 模式会注册 `subagent_*` 工具，用于委托边界清晰的任务。TUI 多 Agent 工作流中也提供 cron 命令入口。
 
+### A2A Master 模式
+
+```bash
+# 生成示例配置
+vibecoding --init-a2a-master-config
+
+# 启用 master 模式
+vibecoding --enable-a2a-master
+```
+
+A2A Master 模式让你管理多个远程 A2A Agent，LLM 可自动通过 `a2a_dispatch` tool 分发任务。详见 [A2A 协议](a2a.md)。
+
 ## 选择模式
 
 VibeCoding 提供三种模式:
@@ -271,3 +283,4 @@ VibeCoding 可以通过 Agent Client Protocol (ACP) 集成到你的 IDE：
 - 了解 [安全模型](security.md) 保护你的系统
 - 探索 [技能系统](skills.md) 创建可复用提示片段
 - 设置 [IDE 集成](acp.md) 在 VS Code 或 JetBrains 中使用
+- 查看 [场景演示](scenarios.md) 了解各模式的实际用法

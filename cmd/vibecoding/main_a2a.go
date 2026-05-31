@@ -22,19 +22,36 @@ import (
 // newA2ACommand builds the "a2a" command tree.
 func newA2ACommand() *cobra.Command {
 	var (
-		flagPort       int
-		flagWorkDir    string
-		flagProvider   string
-		flagModel      string
-		flagSandbox    bool
-		flagAuthToken  string
+		flagPort          int
+		flagWorkDir       string
+		flagProvider      string
+		flagModel         string
+		flagSandbox       bool
+		flagAuthToken     string
+		flagInitA2AConfig bool
+		flagForce         bool
 	)
 
 	a2aCmd := &cobra.Command{
 		Use:   "a2a",
 		Short: "Run the A2A (Agent-to-Agent) server",
 		Long:  "Start VibeCoding A2A Server — a JSON-RPC 2.0 endpoint for other agents to send tasks.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if flagInitA2AConfig {
+				path, err := a2a.InitA2AConfig(flagForce)
+				if err != nil {
+					return err
+				}
+				fmt.Fprintf(os.Stderr, "Created a2a config: %s\n", path)
+				return nil
+			}
+			return cmd.Help()
+		},
 	}
+
+	a2aFlags := a2aCmd.Flags()
+	a2aFlags.BoolVar(&flagInitA2AConfig, "init-a2a-config", false, "Create a2a.json config template")
+	a2aFlags.BoolVar(&flagForce, "force", false, "Force overwrite existing files (used with --init-a2a-config)")
 
 	// --- start ---
 

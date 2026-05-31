@@ -1,52 +1,106 @@
 # Online Skill Marketplace Integration
 
-VibeCoding (project Hermas / Claw) plans to support installing skills from online skill marketplaces. **SkillHub** will serve China and **ClawHub** will serve international users.
+VibeCoding is compatible with existing skill marketplaces (SkillHub / ClawHub). Skill packages published on these platforms can be used directly in VibeCoding.
 
 | Platform | URL | Region |
 |----------|-----|--------|
 | **SkillHub** | [https://skillhub.cn](https://skillhub.cn/) | China |
 | **ClawHub** | [https://clawhub.ai](https://clawhub.ai/) | International |
 
-> **Note:** Hub integration is not yet implemented. Currently VibeCoding supports local skills only. This document describes the existing local skill system and the cron foundation.
+> **Note:** VibeCoding does not have a built-in skill marketplace, but uses the standard
+> skill directory format (`SKILL.md`) that is fully compatible with SkillHub / ClawHub
+> packages. Skills downloaded from these platforms work out of the box — just drop them
+> into your skills directory.
 
 This guide covers:
 
-1. [Current Skill System](#current-skill-system) — what works today
-2. [Cron Foundation](#cron-foundation) — existing scheduled task infrastructure
+1. [Installing Skills from Marketplaces](#installing-skills-from-marketplaces) — three steps
+2. [Skill Format Compatibility](#skill-format-compatibility) — standard format details
+3. [Local Skill System](#local-skill-system) — built-in features
+4. [Cron Foundation](#cron-foundation) — scheduled task infrastructure
 
 ---
 
-## Current Skill System
+## Installing Skills from Marketplaces
 
-The local skills system is fully implemented and ready to use.
+Installing skills from SkillHub / ClawHub takes three steps:
 
-### How Skills Work
+### 1. Download the Skill Package
 
-Skills are reusable prompt snippets stored as `SKILL.md` files. They are loaded at startup and injected into the system prompt.
+Download the skill package from the marketplace (typically a directory or archive containing `SKILL.md`).
+
+### 2. Extract to Skills Directory
+
+```bash
+# Global install (available to all projects)
+# Linux/macOS:
+unzip go-expert.zip -d ~/.vibecoding/skills/
+# Windows:
+Expand-Archive go-expert.zip -DestinationPath "$env:APPDATA\vibecoding\skills\"
+
+# Project-level install (current project only)
+unzip go-expert.zip -d .skills/
+```
+
+### 3. Verify Installation
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                     Skills System                            │
-├─────────────────────────────────────────────────────────────┤
-│                                                              │
-│  Global Skills                 Project Skills                │
-│  ~/.vibecoding/skills/         .skills/                      │
-│  ┌─────────────────────┐      ┌─────────────────────┐       │
-│  │ coding-standards/   │      │ project-specific/   │       │
-│  │   SKILL.md          │      │   SKILL.md          │       │
-│  │                     │      │                     │       │
-│  │ git-workflow/       │      │ testing-rules/      │       │
-│  │   SKILL.md          │      │   SKILL.md          │       │
-│  └─────────────────────┘      └─────────────────────┘       │
-│            │                            │                    │
-│            └──────────┬─────────────────┘                    │
-│                       ▼                                      │
-│              ┌─────────────────┐                             │
-│              │  System Prompt  │                             │
-│              └─────────────────┘                             │
-│                                                              │
-└─────────────────────────────────────────────────────────────┘
+> /skills
+Loaded 3 skills:
+  - go-expert (global)        ← just installed
+  - coding-standards (global)
+  - project-conventions (project)
 ```
+
+That's it. The skill is automatically loaded and injected into the system prompt.
+
+---
+
+## Skill Format Compatibility
+
+VibeCoding's skill format is fully compatible with the SkillHub / ClawHub standard:
+
+```
+skill-name/
+├── SKILL.md              # Required: skill definition
+└── references/           # Optional: on-demand reference files
+    ├── api-guide.md
+    └── examples.md
+```
+
+### SKILL.md Standard Format
+
+```markdown
+# Skill Name
+
+Short description.
+
+## Rules
+
+- Rule 1
+- Rule 2
+
+## Examples
+
+...
+```
+
+### Reference Files
+
+Skills can include reference files under a `references/` directory, loaded on demand via the `skill_ref` tool:
+
+```
+> skill_ref(skill="go-expert", ref="references/api-guide.md")
+→ Returns the content of api-guide.md
+```
+
+This allows skills to include extensive reference material without consuming system prompt space.
+
+---
+
+## Local Skill System
+
+In addition to marketplace downloads, you can create local skills directly.
 
 ### Skill Directories
 
@@ -56,8 +110,6 @@ Skills are reusable prompt snippets stored as `SKILL.md` files. They are loaded 
 | Project | `.skills/` (project root) | Current project, overrides global |
 
 ### Creating a Skill
-
-Create a directory with a `SKILL.md` file:
 
 ```bash
 mkdir -p ~/.vibecoding/skills/go-expert
@@ -93,12 +145,6 @@ Loaded 2 skills:
 Loaded skill: go-expert
 ```
 
-Skills can include reference files loadable on demand via the `skill_ref` tool:
-
-```
-### 1. API Guide (references/api-guide.md) [待按需加载]
-```
-
 ### Configuration
 
 Configure the global skills directory in `settings.json`:
@@ -117,8 +163,6 @@ Project skills load automatically from `.skills/` without extra configuration.
 
 VibeCoding has an internal cron infrastructure (`internal/cron` package) and TUI command entry points. The cron store persists jobs to `~/.vibecoding/cron.json` and the scheduler checks for due jobs on a 30-second interval.
 
-> **Note:** Full cron integration (natural-language schedule parsing, actual sub-agent execution wiring in TUI) is still in progress. The `/cron` TUI commands exist as entry points but are not yet fully connected to the cron store and scheduler.
-
 ### `/cron` TUI Commands
 
 Requires multi-agent mode (`--multi-agent` or Ctrl+P to toggle):
@@ -133,8 +177,6 @@ Requires multi-agent mode (`--multi-agent` or Ctrl+P to toggle):
 ```
 
 ### Cron Job Data Model
-
-Each cron job record stores:
 
 | Field | Description |
 |-------|-------------|

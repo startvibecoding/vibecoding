@@ -47,6 +47,10 @@ vibecoding [flags] [message...]
 
 | 参数 | 简写 | 描述 |
 |------|------|------|
+| `--init-gateway` | - | 生成 `gateway.json` 配置模板 |
+| `--init-a2a-master-config` | - | 生成 `a2a-list.json` 配置模板 |
+| `--enable-a2a-master` | - | 启用 A2A Master 模式（远程 agent 调度） |
+| `--force` | - | 覆盖已存在的配置文件（配合 `--init-*` 使用） |
 | `--version` | `-v` | 显示版本 |
 | `--help` | `-h` | 显示帮助 |
 
@@ -74,6 +78,27 @@ vibecoding acp [flags]
 | `--multi-agent` | - | false | 为 ACP 会话启用多 Agent 工具 |
 
 详见 [ACP 协议](acp.md) 文档了解 IDE 集成细节。
+
+### `a2a` - A2A 协议服务器
+
+运行 A2A (Agent-to-Agent) 协议服务器，支持独立模式和集成模式。
+
+```
+vibecoding a2a [command]
+```
+
+| 子命令 | 描述 |
+|--------|------|
+| `start` | 启动 A2A 服务器 |
+| `stop` | 停止 A2A 服务器 |
+| `status` | 查看服务器状态 |
+| `card` | 显示/生成 Agent Card |
+| `send <message>` | 向远程 A2A 服务器发送任务 |
+| `discover <url>` | 发现远程 Agent Card |
+| `--init-a2a-config` | 生成 `a2a.json` 配置模板 |
+| `--force` | 覆盖已存在的配置文件 |
+
+详见 [A2A 协议](a2a.md) 文档。
 
 ## 使用示例
 
@@ -127,6 +152,37 @@ vibecoding acp --multi-agent
 ```
 
 启用后，VibeCoding 会注册 `subagent_*` 工具，并支持后台委托调查等多 Agent 工作流。Cron 命令入口也依赖多 Agent 模式。
+
+### A2A Master 模式
+
+```bash
+# 生成示例配置
+vibecoding --init-a2a-master-config
+
+# 启用 master 模式
+vibecoding --enable-a2a-master
+
+# 启用 master 模式 + 详细日志
+vibecoding --enable-a2a-master --verbose
+```
+
+启用后，VibeCoding 会加载 `a2a-list.json` 中的远程 agent 列表，注册 `a2a_dispatch` tool，LLM 可自动向远程 agent 分发任务。
+
+### 初始化配置
+
+```bash
+# 生成 gateway.json 模板
+vibecoding --init-gateway
+
+# 生成 a2a.json 模板
+vibecoding a2a --init-a2a-config
+
+# 生成 a2a-list.json 模板
+vibecoding --init-a2a-master-config
+
+# 强制覆盖已存在的文件
+vibecoding --init-gateway --force
+```
 
 ### 思考级别
 

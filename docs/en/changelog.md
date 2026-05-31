@@ -24,6 +24,31 @@
   - **A2A Discovery**: `vibecoding a2a discover <url>` to fetch remote Agent Cards
   - **A2A Scheduling**: Cron jobs support `--a2a-target` to schedule tasks to A2A servers
 
+- **A2A Master Mode** (`--enable-a2a-master`)
+  - Configure multiple remote A2A agents via `a2a-list.json`
+  - Registers `a2a_dispatch` tool for the LLM to automatically dispatch tasks to remote agents
+  - Supports global (`~/.vibecoding/a2a-list.json`) and project-level (`.vibe/a2a-list.json`) config
+  - `--init-a2a-master-config` generates a sample config file
+  - Disabled by default, requires explicit opt-in
+
+- **A2A Config Initialization**
+  - `vibecoding a2a --init-a2a-config` generates `a2a.json` config template
+  - `vibecoding --init-gateway` generates `gateway.json` config template (existing)
+  - `vibecoding --init-a2a-master-config` generates `a2a-list.json` config template
+  - All `--init-*` flags support `--force` to overwrite existing files
+
+- **Scenarios & Walkthroughs Documentation**
+  - New `docs/scenarios.md` (zh + en) covering 9 practical usage scenarios
+  - Covers: daily coding, CI integration, multi-agent, VS Code ACP, A2A server,
+    A2A Master cross-machine dispatch, Gateway HTTP, Hermes messaging, combined modes
+
+- **Documentation Overhaul**
+  - `architecture.md`: added all missing modules (a2a/acp/gateway/hermes/mcp/memory/messaging/vendored)
+  - `tools.md`: added `a2a_dispatch` and `skill_ref` tool docs
+  - `cli-reference.md`: added `--enable-a2a-master`, `--init-a2a-master-config`,
+    `--init-gateway`, `--force`, `a2a` subcommand docs
+  - `README.md`: updated architecture diagram, added running modes overview
+
 - **Pressure System**
   - Context Pressure: `EventContextPressure` fired at 55% context usage (configurable via `context_pressure_threshold`)
   - Budget Pressure: `EventBudgetPressure` fired at 20% remaining iterations (configurable via `budget_pressure_threshold`)

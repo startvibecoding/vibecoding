@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/startvibecoding/vibecoding/internal/acp"
+	"github.com/startvibecoding/vibecoding/internal/a2a"
 	"github.com/startvibecoding/vibecoding/internal/agent"
 	"github.com/startvibecoding/vibecoding/internal/config"
 	ctxpkg "github.com/startvibecoding/vibecoding/internal/context"
@@ -38,20 +39,22 @@ func main() {
 
 func newRootCommand(runFn func([]string, runOptions) error, acpRunFn func(acp.RunOptions) error) *cobra.Command {
 	var (
-		flagProvider    string
-		flagModel       string
-		flagMode        string
-		flagThinking    string
-		flagContinue    bool
-		flagResume      string
-		flagSession     string
-		flagSandbox     bool
-		flagPrint       bool
-		flagVerbose     bool
-		flagDebug       bool
-		flagMultiAgent  bool
-		flagInitGateway bool
-		flagForce       bool
+		flagProvider          string
+		flagModel             string
+		flagMode              string
+		flagThinking          string
+		flagContinue          bool
+		flagResume            string
+		flagSession           string
+		flagSandbox           bool
+		flagPrint             bool
+		flagVerbose           bool
+		flagDebug             bool
+		flagMultiAgent        bool
+		flagInitGateway       bool
+		flagForce             bool
+		flagEnableA2AMaster   bool
+		flagInitA2AMaster     bool
 	)
 
 	rootCmd := &cobra.Command{
@@ -62,6 +65,14 @@ func newRootCommand(runFn func([]string, runOptions) error, acpRunFn func(acp.Ru
 		Version: version,
 		Args:    cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if flagInitA2AMaster {
+				path, err := a2a.InitA2AMasterConfig(flagForce)
+				if err != nil {
+					return err
+				}
+				fmt.Fprintf(os.Stderr, "Created a2a master config: %s\n", path)
+				return nil
+			}
 			if flagInitGateway {
 				path, err := gateway.InitGatewayConfig(flagForce)
 				if err != nil {
@@ -71,18 +82,19 @@ func newRootCommand(runFn func([]string, runOptions) error, acpRunFn func(acp.Ru
 				return nil
 			}
 			return runFn(args, runOptions{
-				provider:   flagProvider,
-				model:      flagModel,
-				mode:       flagMode,
-				thinking:   flagThinking,
-				continue_:  flagContinue,
-				resume:     flagResume,
-				session:    flagSession,
-				sandbox:    flagSandbox,
-				print:      flagPrint,
-				verbose:    flagVerbose,
-				debug:      flagDebug,
-				multiAgent: flagMultiAgent,
+				provider:        flagProvider,
+				model:           flagModel,
+				mode:            flagMode,
+				thinking:        flagThinking,
+				continue_:       flagContinue,
+				resume:          flagResume,
+				session:         flagSession,
+				sandbox:         flagSandbox,
+				print:           flagPrint,
+				verbose:         flagVerbose,
+				debug:           flagDebug,
+				multiAgent:      flagMultiAgent,
+				enableA2AMaster: flagEnableA2AMaster,
 			})
 		},
 	}
@@ -119,7 +131,9 @@ func newRootCommand(runFn func([]string, runOptions) error, acpRunFn func(acp.Ru
 	flags.BoolVar(&flagDebug, "debug", false, "Enable debug logging")
 	flags.BoolVar(&flagMultiAgent, "multi-agent", false, "Enable multi-agent mode (sub-agent tools)")
 	flags.BoolVar(&flagInitGateway, "init-gateway", false, "Create gateway.json config template")
-	flags.BoolVar(&flagForce, "force", false, "Force overwrite existing files (used with --init-gateway)")
+	flags.BoolVar(&flagForce, "force", false, "Force overwrite existing files (used with --init-*)")
+	flags.BoolVar(&flagEnableA2AMaster, "enable-a2a-master", false, "Enable A2A master mode (dispatch tasks to remote agents)")
+	flags.BoolVar(&flagInitA2AMaster, "init-a2a-master-config", false, "Create a2a-list.json config template")
 
 	acpFlags := acpCmd.Flags()
 	acpFlags.StringVarP(&flagProvider, "provider", "p", "", "Provider (openai, anthropic, or custom provider name)")
@@ -175,18 +189,19 @@ func newRootCommand(runFn func([]string, runOptions) error, acpRunFn func(acp.Ru
 }
 
 type runOptions struct {
-	provider   string
-	model      string
-	mode       string
-	thinking   string
-	continue_  bool
-	resume     string
-	session    string
-	sandbox    bool
-	print      bool
-	verbose    bool
-	debug      bool
-	multiAgent bool
+	provider        string
+	model           string
+	mode            string
+	thinking        string
+	continue_       bool
+	resume          string
+	session         string
+	sandbox         bool
+	print           bool
+	verbose         bool
+	debug           bool
+	multiAgent      bool
+	enableA2AMaster bool
 }
 
 func run(args []string, opts runOptions) error {
@@ -375,6 +390,24 @@ func run(args []string, opts runOptions) error {
 	// Build extra system context
 	extraContext := contextStr + skillsContext
 
+	// A2A master mode: load agent list and register dispatch tool
+	if opts.enableA2AMaster {
+		// Try project-level first, then global
+		a2aListPath := a2a.ProjectAgentListConfigPath()
+		if _, err := os.Stat(a2aListPath); err != nil {
+			a2aListPath = a2a.AgentListConfigPath()
+		}
+		a2aListCfg, err := a2a.LoadAgentList(a2aListPath)
+		if err != nil {
+			return fmt.Errorf("load a2a-list.json: %w", err)
+		}
+		a2aMgr := a2a.NewA2AManager(a2aListCfg)
+		registry.Register(tools.NewA2ADispatchTool(&a2aDispatcherAdapter{mgr: a2aMgr}))
+		if opts.verbose {
+			fmt.Fprintf(os.Stderr, "A2A master mode enabled: %d agents loaded from %s\n", len(a2aMgr.List()), a2aListPath)
+		}
+	}
+
 	// Multi-agent mode: create AgentFactory and AgentManager, register subagent tools
 	var agentMgr *agent.AgentManager
 	var cronStore cron.CronStore
@@ -445,4 +478,22 @@ func run(args []string, opts runOptions) error {
 	}
 
 	return nil
+}
+
+// a2aDispatcherAdapter adapts a2a.A2AManager to tools.A2ADispatcher.
+type a2aDispatcherAdapter struct {
+	mgr *a2a.A2AManager
+}
+
+func (a *a2aDispatcherAdapter) List() []tools.AgentEntry {
+	entries := a.mgr.List()
+	result := make([]tools.AgentEntry, len(entries))
+	for i, e := range entries {
+		result[i] = tools.AgentEntry{Name: e.Name, URL: e.URL}
+	}
+	return result
+}
+
+func (a *a2aDispatcherAdapter) Dispatch(ctx context.Context, name, message string) (string, error) {
+	return a.mgr.Dispatch(ctx, name, message)
 }
