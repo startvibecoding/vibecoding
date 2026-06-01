@@ -1,6 +1,21 @@
 # Changelog
 
 
+## v0.1.28
+
+### ✨ Features
+
+- **Per-Model Temperature/Top-P Configuration**
+  - Added `temperature` and `top_p` fields to `ModelConfig` and `Model` for per-model parameter tuning
+  - Wired through OpenAI and Anthropic providers with `omitempty` — `nil` means use API default
+  - Wired through provider factory, agent loop, and ACP mode
+  - Gateway supports per-request `temperature`/`top_p` override via `ChatParams`
+  - When not configured, parameters are omitted entirely (no zero-value sent to API)
+
+### 📝 Docs
+
+- Updated `AGENTS.md` version to v0.1.28
+
 ## v0.1.27
 
 ### ✨ Features

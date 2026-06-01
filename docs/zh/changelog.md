@@ -1,6 +1,21 @@
 # 更新日志
 
 
+## v0.1.28
+
+### ✨ 新功能
+
+- **Per-Model 温度/Top-P 配置**
+  - 为 `ModelConfig` 和 `Model` 新增 `temperature` 和 `top_p` 字段，支持逐模型参数调优
+  - 在 OpenAI 和 Anthropic 提供商中打通，使用 `omitempty` — `nil` 表示使用 API 默认值
+  - 在 provider factory、agent loop、ACP 模式中打通
+  - Gateway 模式支持请求级 `temperature`/`top_p` 覆盖（通过 `ChatParams`）
+  - 未配置时完全省略参数（不会向 API 发送零值）
+
+### 📝 文档
+
+- 更新 `AGENTS.md` 版本至 v0.1.28
+
 ## v0.1.27
 
 ### ✨ 新功能
