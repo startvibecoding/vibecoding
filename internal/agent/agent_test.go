@@ -496,6 +496,33 @@ func TestWebSearchToolDefinitionCarriesModelMetadata(t *testing.T) {
 	}
 }
 
+func TestWebSearchToolDefinitionResolvesProviderReference(t *testing.T) {
+	settings := &config.Settings{
+		DefaultProvider: "gpt",
+		WebSearch: config.WebSearchSettings{
+			Enabled:      config.BoolPtr(true),
+			Provider:     "gpt",
+			ProviderType: "responses",
+		},
+		Providers: map[string]*config.ProviderConfig{
+			"gpt": {
+				BaseURL: "https://co.yes.vg/v1",
+				API:     "openai-responses",
+			},
+		},
+	}
+	def, ok := webSearchToolDefinition(settings)
+	if !ok {
+		t.Fatal("expected web search tool definition")
+	}
+	if def.Provider != "openai" {
+		t.Fatalf("provider = %q, want openai", def.Provider)
+	}
+	if def.ProviderType != "responses" {
+		t.Fatalf("providerType = %q, want responses", def.ProviderType)
+	}
+}
+
 func TestBuildSystemPrompt(t *testing.T) {
 	toolNames := []string{"read", "write", "bash"}
 	cwd := "/home/user/project"

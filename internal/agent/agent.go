@@ -230,22 +230,52 @@ func webSearchToolDefinition(settings *config.Settings) (provider.ToolDefinition
 		return provider.ToolDefinition{}, false
 	}
 	cfg := settings.WebSearch
-	if cfg.Provider == "" {
-		cfg.Provider = "openai"
+	providerName := cfg.Provider
+	if providerName == "" {
+		providerName = settings.DefaultProvider
 	}
-	if cfg.ProviderType == "" {
-		switch cfg.Provider {
+	if providerName == "" {
+		providerName = "openai"
+	}
+
+	resolved := provider.AdapterConfig{}
+	if pc := settings.GetProviderConfig(providerName); pc != nil {
+		resolved = provider.ResolveAdapterConfig(pc)
+	} else {
+		resolved = provider.ResolveAdapterConfig(&config.ProviderConfig{API: "openai-chat"})
+		switch providerName {
 		case "anthropic":
-			cfg.ProviderType = "messages"
-		default:
-			cfg.ProviderType = "responses"
+			resolved.API = "anthropic-messages"
+		case "openai":
+			resolved.API = "openai-responses"
 		}
 	}
+
+	providerType := cfg.ProviderType
+	if providerType == "" {
+		switch resolved.API {
+		case "anthropic-messages":
+			providerType = "messages"
+		default:
+			providerType = "responses"
+		}
+	}
+
+	hostedProvider := resolved.Vendor
+	if hostedProvider == "" {
+		switch resolved.API {
+		case "anthropic-messages":
+			hostedProvider = "anthropic"
+		default:
+			hostedProvider = "openai"
+		}
+	}
+
 	return provider.ToolDefinition{
 		Name:         "web_search",
 		Kind:         "hosted",
-		Provider:     cfg.Provider,
-		ProviderType: cfg.ProviderType,
+		Provider:     hostedProvider,
+		ProviderType: providerType,
 		Model:        cfg.Model,
 	}, true
 }
