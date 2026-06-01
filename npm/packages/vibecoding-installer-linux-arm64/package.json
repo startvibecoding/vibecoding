@@ -1,6 +1,6 @@
 {
   "name": "vibecoding-installer-linux-arm64",
-  "version": "v0.1.26-19-gdc98312-dirty",
+  "version": "v0.1.29-dirty",
   "description": "VibeCoding native binary for linux-arm64",
   "os": ["linux"],
   "cpu": ["arm64"],
