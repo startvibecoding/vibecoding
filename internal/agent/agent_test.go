@@ -521,6 +521,9 @@ func TestWebSearchToolDefinitionResolvesProviderReference(t *testing.T) {
 	if def.ProviderType != "responses" {
 		t.Fatalf("providerType = %q, want responses", def.ProviderType)
 	}
+	if def.Provider == "" {
+		t.Fatal("expected hosted provider to be resolved")
+	}
 }
 
 func TestBuildSystemPrompt(t *testing.T) {

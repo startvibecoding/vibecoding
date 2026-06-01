@@ -338,7 +338,7 @@ func TestOpenAIResponsesAPIHostedWebSearchTool(t *testing.T) {
 		ModelID:  "responses-test",
 		Messages: []provider.Message{provider.NewUserMessage("latest news?")},
 		Tools: []provider.ToolDefinition{
-			{Name: "web_search", Kind: "hosted", Provider: "openai", ProviderType: "responses"},
+			{Name: "web_search", Kind: "hosted", Provider: "gpt", ProviderType: "responses"},
 		},
 		Abort: make(chan struct{}),
 	}
@@ -362,8 +362,8 @@ func TestOpenAIResponsesAPIHostedWebSearchTool(t *testing.T) {
 	if !ok {
 		t.Fatalf("tool = %#v, want object", tools[0])
 	}
-	if tool["type"] != "web_search_preview" {
-		t.Fatalf("tool.type = %#v, want web_search_preview", tool["type"])
+	if tool["type"] != "web_search" {
+		t.Fatalf("tool.type = %#v, want web_search", tool["type"])
 	}
 	if _, ok := tool["name"]; ok {
 		t.Fatalf("hosted web search should not include function name: %#v", tool)

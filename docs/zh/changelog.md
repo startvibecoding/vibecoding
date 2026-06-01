@@ -9,7 +9,8 @@
   - 为 CLI 和 ACP 运行新增 `--web-search`
   - 新增顶层 `webSearch` 配置，包含 `enabled`、`provider`、`providerType` 和 `model`
   - 仅在启用时注册 hosted `web_search`，并与本地 function tools 保持隔离
-  - 新增 OpenAI Responses API 映射到 `web_search_preview`
+  - 新增 OpenAI Responses API 映射到 `web_search`
+  - 将 Responses web search 映射改为 provider-neutral 的 `web_search`，兼容 provider 不必命名为 `openai`
   - 新增 Anthropic Messages API 映射到 `web_search_20250305`
   - 将 `webSearch.model` 保留为 provider-neutral metadata，用于后续路由和成本展示扩展
 

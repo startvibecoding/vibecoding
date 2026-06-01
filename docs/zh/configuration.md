@@ -143,6 +143,7 @@ VibeCoding 使用两个配置文件:
 | `theme` | string | `"dark"` | UI 主题: `"dark"` 或 `"light"` |
 | `retry` | object | *(见下文)* | API 调用重试设置 |
 | `approval` | object | *(见下文)* | Bash 命令审批设置 |
+| `webSearch` | object | *(见下文)* | Hosted web search 设置 |
 
 ---
 
@@ -189,6 +190,30 @@ VibeCoding 使用两个配置文件:
   }
 }
 ```
+
+### webSearch
+
+Hosted web search 设置。默认关闭。
+
+| 字段 | 类型 | 必填 | 默认值 | 描述 |
+|------|------|------|--------|------|
+| `enabled` | bool | — | `false` | 启用 hosted web search 注册 |
+| `provider` | string | — | `defaultProvider` | 用于 web search 的 provider 配置名称 |
+| `providerType` | string | — | 自动 | Hosted tool 类型，通常是 `responses` 或 `messages` |
+| `model` | string | — | `""` | 可选 metadata，用于路由、展示或未来 provider-specific 处理 |
+
+```json
+{
+  "webSearch": {
+    "enabled": true,
+    "provider": "gpt",
+    "providerType": "responses",
+    "model": "gpt-5.4"
+  }
+}
+```
+
+当 `provider` 指向一个已配置的 provider 名称时，VibeCoding 会先解析该 provider 的 `baseUrl`、`api` 和 vendor 行为，再注册 hosted search tool。
 
 #### api 字段
 

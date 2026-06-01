@@ -143,6 +143,7 @@ Project-level configuration overrides global configuration. When both exist, sca
 | `theme` | string | `"dark"` | UI theme: `"dark"` or `"light"` |
 | `retry` | object | *(see below)* | API call retry settings |
 | `approval` | object | *(see below)* | Bash command approval settings |
+| `webSearch` | object | *(see below)* | Hosted web search settings |
 
 ---
 
@@ -189,6 +190,30 @@ Built-in vendor adapters include `openai`, `anthropic`, `claude`, `deepseek`, `x
   }
 }
 ```
+
+### webSearch
+
+Hosted web search settings. This is disabled by default.
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `enabled` | bool | — | `false` | Enable hosted web search registration |
+| `provider` | string | — | `defaultProvider` | Provider configuration name to use for hosted web search |
+| `providerType` | string | — | auto | Hosted tool type, usually `responses` or `messages` |
+| `model` | string | — | `""` | Optional metadata for routing, display, or future provider-specific handling |
+
+```json
+{
+  "webSearch": {
+    "enabled": true,
+    "provider": "gpt",
+    "providerType": "responses",
+    "model": "gpt-5.4"
+  }
+}
+```
+
+When `provider` points to a configured provider name, VibeCoding resolves that provider's `baseUrl`, `api`, and vendor behavior before registering the hosted search tool.
 
 #### api field
 

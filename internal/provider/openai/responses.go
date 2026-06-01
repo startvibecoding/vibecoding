@@ -312,8 +312,8 @@ func (p *Provider) convertResponsesTools(tools []provider.ToolDefinition) []resp
 
 func hostedResponsesToolType(t provider.ToolDefinition) string {
 	switch {
-	case t.Provider == "openai" && t.ProviderType == "responses" && t.Name == "web_search":
-		return "web_search_preview"
+	case t.ProviderType == "responses" && t.Name == "web_search":
+		return "web_search"
 	default:
 		return ""
 	}

@@ -9,7 +9,8 @@
   - Added `--web-search` for CLI and ACP runs
   - Added top-level `webSearch` settings with `enabled`, `provider`, `providerType`, and `model`
   - Registered hosted `web_search` tools only when enabled, keeping them separate from local function tools
-  - Added OpenAI Responses API mapping to `web_search_preview`
+  - Added OpenAI Responses API mapping to `web_search`
+  - Updated Responses web search mapping to provider-neutral `web_search`, so compatible custom providers are not required to be named `openai`
   - Added Anthropic Messages API mapping to `web_search_20250305`
   - Preserved `webSearch.model` as provider-neutral metadata for future routing and cost display
 
