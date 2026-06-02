@@ -1,6 +1,6 @@
 {
   "name": "vibecoding-installer-win32-x64",
-  "version": "v0.1.29-dirty",
+  "version": "0.1.30",
   "description": "VibeCoding native binary for win32-x64",
   "os": ["win32"],
   "cpu": ["x64"],

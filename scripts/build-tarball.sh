@@ -11,10 +11,11 @@ PACKAGE_NAME="vibecoding"
 # Parse arguments
 OS="${1:-linux}"
 ARCH="${2:-amd64}"
-VERSION="${3:-$(git describe --tags --always --dirty 2>/dev/null || echo "0.0.1")}"
+VERSION="${3:-$(git describe --tags --always 2>/dev/null || echo "0.0.1")}"
 
 # Remove leading 'v' if present
 VERSION="${VERSION#v}"
+VERSION="${VERSION%-dirty}"
 
 BUILD_DIR="dist/tarball"
 TARBALL_NAME="${PACKAGE_NAME}-${VERSION}-${OS}-${ARCH}"

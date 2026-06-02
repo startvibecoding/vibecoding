@@ -10,10 +10,11 @@ PACKAGE_NAME="vibecoding"
 
 # Parse arguments
 ARCH="${1:-amd64}"
-VERSION="${2:-$(git describe --tags --always --dirty 2>/dev/null || echo "0.0.1")}"
+VERSION="${2:-$(git describe --tags --always 2>/dev/null || echo "0.0.1")}"
 
 # Remove leading 'v' if present
 VERSION="${VERSION#v}"
+VERSION="${VERSION%-dirty}"
 
 BUILD_DIR="dist/zip"
 ZIP_NAME="${PACKAGE_NAME}-${VERSION}-windows-${ARCH}"

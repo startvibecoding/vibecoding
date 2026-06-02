@@ -40,6 +40,10 @@
 - **macOS 配置目录**
   - 将 macOS 默认全局配置目录与 Linux 统一为 `~/.vibecoding`
 
+- **发布版本号**
+  - npm 和发行包版本检测默认不再附加 `dirty` 后缀
+  - 将 npm package metadata 规范化为 `0.1.30`
+
 ## v0.1.29
 
 ### 🐛 Bug 修复

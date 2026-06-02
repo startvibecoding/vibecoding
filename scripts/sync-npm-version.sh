@@ -13,12 +13,14 @@ PACKAGE_JSON="$NPM_DIR/package.json"
 if [ -n "$1" ]; then
   VERSION="$1"
 else
-  VERSION=$(git describe --tags --always --dirty 2>/dev/null | sed 's/^v//')
+  VERSION=$(git describe --tags --always 2>/dev/null)
   if [ -z "$VERSION" ]; then
     echo "Error: Could not determine version"
     exit 1
   fi
 fi
+VERSION="${VERSION#v}"
+VERSION="${VERSION%-dirty}"
 
 echo "Syncing npm version to: $VERSION"
 

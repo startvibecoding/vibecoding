@@ -40,6 +40,10 @@
 - **macOS Config Directory**
   - Unified the default macOS global config directory with Linux at `~/.vibecoding`
 
+- **Release Versioning**
+  - Removed the default `dirty` suffix from npm and distribution package version detection
+  - Normalized npm package metadata to `0.1.30`
+
 ## v0.1.29
 
 ### 🐛 Bug Fixes
