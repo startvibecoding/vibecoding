@@ -259,6 +259,26 @@ func minInt(a, b int) int {
 	return b
 }
 
+// compactBashOutput compresses bash tool output for summary display by removing blank lines.
+func compactBashOutput(s string) string {
+	var sb strings.Builder
+	prevBlank := false
+	for _, line := range strings.Split(s, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			if !prevBlank {
+				sb.WriteString("\n")
+			}
+			prevBlank = true
+			continue
+		}
+		prevBlank = false
+		sb.WriteString(line)
+		sb.WriteString("\n")
+	}
+	return strings.TrimSpace(sb.String())
+}
+
 func truncate(s string, maxLen int) string {
 	return util.TruncateWithSuffix(s, maxLen, "...")
 }

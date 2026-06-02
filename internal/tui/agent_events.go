@@ -70,7 +70,7 @@ func (a *App) handleAgentEvent(event agent.Event) tea.Cmd {
 				// Create summary based on tool type
 				switch event.ToolName {
 				case "bash":
-					a.toolResults[j].summary = event.ToolResult
+					a.toolResults[j].summary = compactBashOutput(event.ToolResult)
 				case "read":
 					lines := strings.Split(event.ToolResult, "\n")
 					a.toolResults[j].summary = fmt.Sprintf("%d lines", len(lines))
