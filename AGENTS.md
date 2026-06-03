@@ -102,7 +102,7 @@ Built-in tools include:
 - `grep`, `find`, `ls`
 - `skill_ref`
 
-`grep` and `find` are backed by embedded `rg` and `fd` binaries in `internal/vendored/`.
+`grep` and `find` are backed by embedded `rg` and `fd` binaries in `internal/vendored/`. On unsupported architectures (e.g., loong64), they automatically fall back to system `grep` / `find`.
 
 ## Modes and Safety
 
@@ -144,5 +144,5 @@ Common commands:
 
 ## Versioning Note
 
-Current version: `v0.1.29`
-Next version: `v0.1.30`
+Current version: `v0.1.31`
+Next version: `v0.1.32`
