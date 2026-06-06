@@ -35,17 +35,17 @@ func writeFileAtomic(path string, data []byte) error {
 	}
 	tmpPath := tmp.Name()
 
-	// Clean up temp file on any error
-	defer os.Remove(tmpPath)
-
 	if _, err := tmp.Write(data); err != nil {
 		tmp.Close()
+		os.Remove(tmpPath)
 		return err
 	}
 	if err := tmp.Close(); err != nil {
+		os.Remove(tmpPath)
 		return err
 	}
 	if err := os.Chmod(tmpPath, perm); err != nil {
+		os.Remove(tmpPath)
 		return err
 	}
 	return os.Rename(tmpPath, path)

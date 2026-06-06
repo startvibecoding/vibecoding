@@ -235,15 +235,18 @@ func (t *BashTool) Execute(ctx context.Context, params map[string]any) (ToolResu
 		return NewTextToolResult(fmt.Sprintf("Started background job [%d] (PID: %d): %s\nUse 'jobs' tool to check status or 'kill' to stop.", job.ID, job.PID, command)), nil
 	}
 
-	// Synchronous mode
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	// Synchronous mode (1 GB output limit per stream)
+	const maxSyncOutput = 1 << 30 // 1 GB
+	stdout := newLimitedBuffer(maxSyncOutput)
+	stderr := newLimitedBuffer(maxSyncOutput)
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
 
 	err := cmd.Run()
 
-	stdoutStr := strings.TrimRight(stdout.String(), "\n")
-	stderrStr := strings.TrimRight(stderr.String(), "\n")
+	stdoutStr := strings.TrimRight(string(stdout.Bytes()), "\n")
+	stderrStr := string(stderr.Bytes())
+	stderrStr = strings.TrimRight(stderrStr, "\n")
 	if stdoutStr == "" {
 		stdoutStr = "(no output)"
 	}

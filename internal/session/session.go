@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -517,7 +518,7 @@ func (m *Manager) load() error {
 		return err
 	}
 	if corruptLines > 0 {
-		return fmt.Errorf("session file has %d corrupt line(s)", corruptLines)
+		log.Printf("[session] warning: skipped %d corrupt line(s) in %s", corruptLines, m.file)
 	}
 	return nil
 }
@@ -613,6 +614,12 @@ func (m *Manager) writeEntry(entry interface{}) error {
 	}
 
 	data = append(data, '\n')
-	_, err = f.Write(data)
-	return err
+	if _, err := f.Write(data); err != nil {
+		return fmt.Errorf("write session entry: %w", err)
+	}
+	// fsync to guarantee durability on crash/power loss.
+	if err := f.Sync(); err != nil {
+		return fmt.Errorf("sync session file: %w", err)
+	}
+	return nil
 }

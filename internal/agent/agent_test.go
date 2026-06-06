@@ -1036,3 +1036,44 @@ func TestSetForceCompact_NoModelDoesNotForce(t *testing.T) {
 		t.Fatal("ShouldCompact should be false with force but no model")
 	}
 }
+
+// --- MaxConsecutiveNoText tests ---
+
+func TestMaxConsecutiveNoText_Default(t *testing.T) {
+	mockProvider := provider.NewMockProvider("mock", []*provider.Model{{ID: "m1", Name: "M1"}}, nil)
+	sb := sandbox.NewNoneSandbox()
+	registry := tools.NewRegistry(t.TempDir(), sb)
+
+	a := NewWithLoopConfig(AgentLoopConfig{
+		Config: Config{
+			Provider: mockProvider,
+			Model:    mockProvider.Models()[0],
+			Mode:     "agent",
+		},
+	}, registry)
+
+	// Default MaxConsecutiveNoText should be 200 (MaxIterations default)
+	// but the threshold is 95. Verify the config field is 0 (uses default).
+	if a.config.MaxConsecutiveNoText != 0 {
+		t.Fatalf("expected default MaxConsecutiveNoText=0, got %d", a.config.MaxConsecutiveNoText)
+	}
+}
+
+func TestMaxConsecutiveNoText_Custom(t *testing.T) {
+	mockProvider := provider.NewMockProvider("mock", []*provider.Model{{ID: "m1", Name: "M1"}}, nil)
+	sb := sandbox.NewNoneSandbox()
+	registry := tools.NewRegistry(t.TempDir(), sb)
+
+	a := NewWithLoopConfig(AgentLoopConfig{
+		Config: Config{
+			Provider: mockProvider,
+			Model:    mockProvider.Models()[0],
+			Mode:     "agent",
+		},
+		MaxConsecutiveNoText: 10,
+	}, registry)
+
+	if a.config.MaxConsecutiveNoText != 10 {
+		t.Fatalf("expected MaxConsecutiveNoText=10, got %d", a.config.MaxConsecutiveNoText)
+	}
+}

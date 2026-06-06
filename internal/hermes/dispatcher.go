@@ -74,6 +74,8 @@ type HermesSession struct {
 	Mode       string
 	LastUsed   time.Time
 	mu         sync.Mutex // serializes requests within this session
+	// ForceCompact is set by /compact command and consumed by the next agent run.
+	ForceCompact bool
 }
 
 // Lock acquires the session lock.
@@ -467,6 +469,12 @@ func (d *Dispatcher) runAgent(ctx context.Context, sess *HermesSession, userInpu
 		}()
 	}
 
+	// Apply force compact flag from /compact command
+	if sess.ForceCompact {
+		a.SetForceCompact()
+		sess.ForceCompact = false
+	}
+
 	// Load session history so the agent has conversation context
 	if history := sess.Manager.GetMessages(); len(history) > 0 {
 		a.LoadHistoryMessages(history)
@@ -699,6 +707,12 @@ func (d *Dispatcher) runAgentStreaming(ctx context.Context, sess *HermesSession,
 		}()
 	}
 
+	// Apply force compact flag from /compact command
+	if sess.ForceCompact {
+		a.SetForceCompact()
+		sess.ForceCompact = false
+	}
+
 	// Load session history so the agent has conversation context
 	if history := sess.Manager.GetMessages(); len(history) > 0 {
 		a.LoadHistoryMessages(history)
@@ -821,7 +835,17 @@ func (d *Dispatcher) handleCommand(msg messaging.InboundMessage) (string, error)
 			return "Invalid mode. Use: plan, agent, yolo", nil
 		}
 	case "/compact":
-		return "Compaction triggered.", nil // TODO: implement
+		sess, err := d.resolveSession(msg.Platform, msg.UserID)
+		if err != nil {
+			return "❌ No active session.", nil
+		}
+		sess.Lock()
+		defer sess.Unlock()
+		if sess.Manager != nil && len(sess.Manager.GetMessages()) < 2 {
+			return "Nothing to compact: conversation is too short.", nil
+		}
+		sess.ForceCompact = true
+		return "✅ Context compaction will be triggered on the next message.", nil
 	default:
 		return fmt.Sprintf("Unknown command: %s\nAvailable: /new /clear /status /sessions /mode /compact", cmd), nil
 	}
@@ -893,7 +917,12 @@ func (d *Dispatcher) ResolveApproval(approvalID string, approved bool) bool {
 	d.approvalMu.Unlock()
 
 	if ok {
-		ch <- approved
+		// Use select to avoid blocking if the channel was already consumed
+		// (e.g., timeout raced with this call).
+		select {
+		case ch <- approved:
+		default:
+		}
 		return true
 	}
 	return false

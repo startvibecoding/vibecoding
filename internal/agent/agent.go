@@ -118,6 +118,10 @@ type AgentLoopConfig struct {
 	// BudgetPressureThreshold is the remaining iteration ratio (0-1) that triggers EventBudgetPressure.
 	// 0 means disabled. Default: 0.20 (remaining 20%).
 	BudgetPressureThreshold float64
+
+	// MaxConsecutiveNoText is the max tool-only turns before a stuck-detection warning.
+	// 0 means default (95).
+	MaxConsecutiveNoText int
 }
 
 // ShouldStopAfterTurnContext is passed to ShouldStopAfterTurn.
@@ -632,7 +636,10 @@ func (a *Agent) loop(ctx context.Context, ch chan<- Event) {
 
 	// Track consecutive iterations without text output for loop detection
 	consecutiveNoText := 0
-	const maxConsecutiveNoText = 95            // Threshold to trigger stuck detection
+	maxConsecutiveNoText := a.config.MaxConsecutiveNoText
+	if maxConsecutiveNoText <= 0 {
+		maxConsecutiveNoText = 95 // default threshold
+	}
 	const maxConsecutiveNoTextAfterWarning = 5 // After warning, allow 5 more turns before stopping
 	warningIssued := false
 
@@ -895,7 +902,7 @@ func (a *Agent) loop(ctx context.Context, ch chan<- Event) {
 				} else {
 					// Already warned, now truly stuck. Tool results have already been
 					// appended, so the saved transcript remains provider-valid.
-					ch <- Event{Type: EventError, Error: fmt.Errorf("agent appears stuck: %d consecutive turns without text output after warning", consecutiveNoText+maxConsecutiveNoText), StopReason: "stuck"}
+					ch <- Event{Type: EventError, Error: fmt.Errorf("agent appears stuck: %d consecutive turns without text output after warning", consecutiveNoText), StopReason: "stuck"}
 					ch <- Event{Type: EventAgentEnd, Messages: func() []provider.Message {
 						a.mu.RLock()
 						defer a.mu.RUnlock()

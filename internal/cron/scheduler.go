@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"sync"
 	"time"
@@ -93,6 +94,7 @@ func (s *Scheduler) loop() {
 func (s *Scheduler) checkAndRun() {
 	jobs, err := s.store.List()
 	if err != nil {
+		log.Printf("[cron] failed to list jobs: %v", err)
 		return
 	}
 

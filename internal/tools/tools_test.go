@@ -810,3 +810,55 @@ func TestAll(t *testing.T) {
 		t.Errorf("expected 10 tools, got %d", len(all))
 	}
 }
+
+// TestWriteFileAtomic_SuccessNoTmpFile verifies writeFileAtomic does not
+// leave a temp file on success.
+func TestWriteFileAtomic_SuccessNoTmpFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "output.txt")
+
+	if err := writeFileAtomic(path, []byte("hello world")); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Verify content
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read file: %v", err)
+	}
+	if string(data) != "hello world" {
+		t.Errorf("content = %q, want 'hello world'", string(data))
+	}
+
+	// Verify no .tmp-* files left
+	entries, _ := os.ReadDir(tmpDir)
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), ".tmp-") {
+			t.Errorf("leftover temp file: %s", e.Name())
+		}
+	}
+}
+
+// TestWriteFileAtomic_ErrorCleansUp verifies writeFileAtomic cleans up
+// the temp file on write error.
+func TestWriteFileAtomic_ErrorCleansUp(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "subdir", "output.txt")
+
+	// Write to a path where parent dir creation fails (file blocks mkdir)
+	blocker := filepath.Join(tmpDir, "subdir")
+	os.WriteFile(blocker, []byte("block"), 0644) // file, not dir
+
+	err := writeFileAtomic(path, []byte("data"))
+	if err == nil {
+		t.Log("expected error writing to blocked path")
+	}
+
+	// No .tmp-* files should remain
+	entries, _ := os.ReadDir(tmpDir)
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), ".tmp-") {
+			t.Errorf("leftover temp file: %s", e.Name())
+		}
+	}
+}

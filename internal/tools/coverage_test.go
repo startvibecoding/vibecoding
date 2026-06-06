@@ -1,7 +1,9 @@
 package tools
 
 import (
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/startvibecoding/vibecoding/internal/sandbox"
 )
@@ -177,5 +179,85 @@ func TestSetSandbox(t *testing.T) {
 
 	if r.GetSandbox() != newSb {
 		t.Error("expected updated sandbox")
+	}
+}
+
+// TestLimitedBuffer_Truncate verifies that limitedBuffer truncates output at maxSize.
+func TestLimitedBuffer_Truncate(t *testing.T) {
+	lb := newLimitedBuffer(100)
+
+	// Write less than max — no truncation
+	lb.Write([]byte("hello"))
+	out := lb.Bytes()
+	if string(out) != "hello" {
+		t.Fatalf("expected 'hello', got %q", string(out))
+	}
+
+	// Write more than max — should truncate
+	lb2 := newLimitedBuffer(100)
+	bigData := make([]byte, 200)
+	for i := range bigData {
+		bigData[i] = 'A'
+	}
+	lb2.Write(bigData)
+	out2 := lb2.Bytes()
+	if len(out2) != 100+len("\n... (truncated 100 bytes)") {
+		t.Errorf("expected truncated output of length %d, got %d: %q",
+			100+len("\n... (truncated 100 bytes)"), len(out2), string(out2))
+	}
+	if !strings.Contains(string(out2), "truncated") {
+		t.Error("expected truncation suffix")
+	}
+}
+
+// TestJobManager_GCStaleJobs verifies stale finished jobs are cleaned up.
+func TestJobManager_GCStaleJobs(t *testing.T) {
+	jm := NewJobManager()
+
+	// Simulate jobs by directly inserting them.
+	// Running job should survive GC.
+	runningJob := &BackgroundJob{ID: 1, Command: "running", StartTime: time.Now().Add(-1 * time.Hour)}
+	jm.jobs[1] = runningJob
+
+	// Finished job that's young — should survive GC.
+	youngDone := &BackgroundJob{ID: 2, Command: "young-done", StartTime: time.Now(), done: true}
+	jm.jobs[2] = youngDone
+
+	// Finished job that's stale (finished >30min ago) — should be cleaned.
+	staleDone := &BackgroundJob{ID: 3, Command: "stale-done", StartTime: time.Now().Add(-1 * time.Hour), done: true}
+	jm.jobs[3] = staleDone
+
+	// Trigger GC via AddJob (we need a real exec.Cmd for AddJob, so call gcStaleJobsLocked directly).
+	jm.mu.Lock()
+	jm.lastGC = time.Time{} // force GC
+	jm.gcStaleJobsLocked()
+	jm.mu.Unlock()
+
+	if _, ok := jm.jobs[1]; !ok {
+		t.Error("running job should not be removed")
+	}
+	if _, ok := jm.jobs[2]; !ok {
+		t.Error("young done job should not be removed")
+	}
+	if _, ok := jm.jobs[3]; ok {
+		t.Error("stale done job should have been removed")
+	}
+}
+
+// TestJobManager_GCSkipIfRecent verifies GC is skipped if last GC was recent.
+func TestJobManager_GCSkipIfRecent(t *testing.T) {
+	jm := NewJobManager()
+
+	staleDone := &BackgroundJob{ID: 1, Command: "stale", StartTime: time.Now().Add(-1 * time.Hour), done: true}
+	jm.jobs[1] = staleDone
+
+	jm.lastGC = time.Now() // recent GC — should skip
+
+	jm.mu.Lock()
+	jm.gcStaleJobsLocked()
+	jm.mu.Unlock()
+
+	if _, ok := jm.jobs[1]; !ok {
+		t.Error("stale job should NOT be removed when GC was recent")
 	}
 }

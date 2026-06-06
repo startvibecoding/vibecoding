@@ -490,12 +490,20 @@ func TestLoadRejectsCorruptSessionLine(t *testing.T) {
 		t.Fatalf("write session: %v", err)
 	}
 
-	_, err := Open(path)
-	if err == nil {
-		t.Fatal("expected corrupt session error")
+	// Corrupt lines are now tolerated (logged as warning) rather than rejected.
+	m, err := Open(path)
+	if err != nil {
+		t.Fatalf("expected session to load despite corrupt line, got error: %v", err)
 	}
-	if !strings.Contains(err.Error(), "corrupt line") {
-		t.Fatalf("err = %q, want corrupt line", err)
+	if m == nil {
+		t.Fatal("expected non-nil session manager")
+	}
+	hdr := m.GetHeader()
+	if hdr == nil {
+		t.Fatal("expected header to be loaded")
+	}
+	if hdr.ID != "session-id" {
+		t.Fatalf("header ID = %q, want %q", hdr.ID, "session-id")
 	}
 }
 
@@ -834,5 +842,41 @@ func TestSessionRoundTrip(t *testing.T) {
 	msgs := m2.GetMessages()
 	if len(msgs) != 2 {
 		t.Errorf("expected 2 messages, got %d", len(msgs))
+	}
+}
+
+// TestWriteEntryDurable verifies that entries are fsynced and survive reopen.
+func TestWriteEntryDurable(t *testing.T) {
+	tmpDir := t.TempDir()
+	sessionDir := filepath.Join(tmpDir, "sessions")
+
+	m := New("/tmp/test", sessionDir)
+	if err := m.Init(); err != nil {
+		t.Fatalf("init: %v", err)
+	}
+
+	// Append several messages
+	for i := 0; i < 5; i++ {
+		msg := provider.NewUserMessage(fmt.Sprintf("message %d", i))
+		if _, err := m.AppendMessage(msg); err != nil {
+			t.Fatalf("append message %d: %v", i, err)
+		}
+	}
+
+	// Re-open from disk — all 5 messages + 1 header should be present
+	reopened, err := Open(m.GetFile())
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+
+	loadedMsgs := reopened.GetMessages()
+	if len(loadedMsgs) != 5 {
+		t.Errorf("expected 5 messages after reopen, got %d", len(loadedMsgs))
+	}
+
+	// Verify content of last message
+	last := loadedMsgs[4]
+	if last.Content != "message 4" {
+		t.Errorf("last message content = %q, want 'message 4'", last.Content)
 	}
 }

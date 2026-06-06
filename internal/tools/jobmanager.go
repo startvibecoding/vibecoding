@@ -26,9 +26,10 @@ type BackgroundJob struct {
 
 // JobManager manages background processes.
 type JobManager struct {
-	jobs   map[int]*BackgroundJob
-	nextID int
-	mu     sync.RWMutex
+	jobs     map[int]*BackgroundJob
+	nextID   int
+	mu       sync.RWMutex
+	lastGC   time.Time // last time stale jobs were cleaned up
 }
 
 // NewJobManager creates a new job manager.
@@ -42,6 +43,8 @@ func NewJobManager() *JobManager {
 func (jm *JobManager) AddJob(cmd *exec.Cmd, command string, cancel context.CancelFunc) *BackgroundJob {
 	jm.mu.Lock()
 	defer jm.mu.Unlock()
+
+	jm.gcStaleJobsLocked()
 
 	jm.nextID++
 	job := &BackgroundJob{
@@ -142,4 +145,23 @@ func (job *BackgroundJob) Status() string {
 		return fmt.Sprintf("[%d] %s (PID: %d, %s, elapsed: %s)", job.ID, status, job.PID, job.Command, elapsed)
 	}
 	return fmt.Sprintf("[%d] running (PID: %d, %s, elapsed: %s)", job.ID, job.PID, job.Command, elapsed)
+}
+
+const staleJobTTL = 30 * time.Minute
+
+// gcStaleJobsLocked removes finished jobs older than staleJobTTL.
+// Caller must hold jm.mu.
+func (jm *JobManager) gcStaleJobsLocked() {
+	if time.Since(jm.lastGC) < 5*time.Minute {
+		return
+	}
+	jm.lastGC = time.Now()
+	for id, job := range jm.jobs {
+		job.mu.Lock()
+		stale := job.done && time.Since(job.StartTime) > staleJobTTL
+		job.mu.Unlock()
+		if stale {
+			delete(jm.jobs, id)
+		}
+	}
 }

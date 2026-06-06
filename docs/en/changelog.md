@@ -5,6 +5,36 @@
 
 ### 🐛 Bug Fixes
 
+- **Bash Tool Output Safety**
+  - Synchronous bash mode now enforces a 1 GB output limit using `limitedBuffer`, preventing OOM from unbounded `bytes.Buffer` growth
+
+- **Hermes `/compact` Command**
+  - Implemented the `/compact` slash command for Hermes messaging mode (previously a TODO stub)
+  - Sets a `ForceCompact` flag on the session, consumed by the next agent run to trigger context compaction
+
+- **Session Durability**
+  - `writeEntry` now calls `f.Sync()` after writing, guaranteeing data survives crash or power loss
+  - Corrupt session lines are now logged as warnings and skipped instead of blocking session load
+
+- **Hermes Approval Race Condition**
+  - `ResolveApproval` now uses `select` to avoid writing to an already-consumed channel when timeout and approval race
+
+- **Agent Sub-agent Panic Logging**
+  - `sendParentEvent` now logs the panic value before recovering, aiding diagnosis of closed-channel races
+
+- **Atomic File Write Cleanup**
+  - `writeFileAtomic` no longer uses `defer os.Remove(tmpPath)` which would attempt to delete an already-renamed file; cleanup is now explicit on each error path
+
+- **Agent Loop Detection Configurability**
+  - `MaxConsecutiveNoText` (stuck-detection threshold) is now configurable via `AgentLoopConfig` (default 95)
+  - Fixed incorrect error message that added pre- and post-warning counters together
+
+- **Job Manager Auto-cleanup**
+  - `AddJob` now garbage-collects finished jobs older than 30 minutes (checked every 5 minutes)
+
+- **Cron Scheduler Error Logging**
+  - `checkAndRun` now logs store errors instead of silently swallowing them
+
 - **TUI Bash Output Display**
   - Compressed bash tool output summary by removing blank lines to prevent excessive vertical height in the TUI collapsed view
 
@@ -14,6 +44,10 @@
 ### 📦 Distribution
 
 - Added Linux LoongArch64 (`loong64`) build and packaging targets, including tarball, Debian, and npm package metadata
+
+### ✅ Tests
+
+- Added unit tests for `limitedBuffer` truncation, `JobManager` GC, `writeFileAtomic` cleanup, `sendParentEvent` panic recovery, `MaxConsecutiveNoText` configurability, session fsync durability, and corrupt-line tolerance
 
 
 ## v0.1.31

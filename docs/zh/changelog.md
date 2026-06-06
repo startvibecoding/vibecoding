@@ -5,6 +5,36 @@
 
 ### 🐛 Bug 修复
 
+- **Bash 工具输出安全**
+  - 同步 bash 模式新增 1GB 输出限制，使用 `limitedBuffer` 防止无界 `bytes.Buffer` 导致 OOM
+
+- **Hermes `/compact` 命令**
+  - 实现 Hermes 消息模式下的 `/compact` 斜杠命令（之前是 TODO 桩）
+  - 在 session 上设置 `ForceCompact` 标志，下次 agent 运行时消费以触发上下文压缩
+
+- **Session 持久性**
+  - `writeEntry` 写入后调用 `f.Sync()`，保证崩溃或断电后数据不丢失
+  - 损坏的 session 行现在记录为 warning 并跳过，不再阻止 session 加载
+
+- **Hermes 审批竞态修复**
+  - `ResolveApproval` 使用 `select` 发送，避免超时与审批竞态时写入已消费的 channel
+
+- **子代理 Panic 日志**
+  - `sendParentEvent` 在 recover 前记录 panic 值，便于诊断关闭 channel 的竞态
+
+- **原子文件写入清理**
+  - `writeFileAtomic` 移除 `defer os.Remove(tmpPath)`，改为各错误路径显式清理，避免成功后尝试删除已重命名的文件
+
+- **Agent 循环检测可配置化**
+  - `MaxConsecutiveNoText`（卡住检测阈值）可通过 `AgentLoopConfig` 配置（默认 95）
+  - 修复错误消息中错误地将前后警告计数器相加的问题
+
+- **Job Manager 自动清理**
+  - `AddJob` 时自动 GC 30 分钟前完成的 job（每 5 分钟检查一次）
+
+- **Cron 调度器错误日志**
+  - `checkAndRun` 现在记录 store 错误，不再静默吞掉
+
 - **TUI Bash 输出显示**
   - 压缩 bash 工具输出摘要，去除空行，避免 TUI 折叠视图中占用过高垂直空间
 
@@ -14,6 +44,10 @@
 ### 📦 分发
 
 - 新增 Linux LoongArch64 (`loong64`) 构建与打包目标，包括 tarball、Debian 和 npm 包元数据
+
+### ✅ 测试
+
+- 新增 `limitedBuffer` 截断、`JobManager` GC、`writeFileAtomic` 清理、`sendParentEvent` panic 恢复、`MaxConsecutiveNoText` 可配置性、session fsync 持久性和损坏行容忍的单元测试
 
 
 ## v0.1.31

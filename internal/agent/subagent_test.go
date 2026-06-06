@@ -404,3 +404,44 @@ func TestSubAgentToolsDescriptions(t *testing.T) {
 		}
 	}
 }
+
+// TestSendParentEvent_ClosedChannel verifies sendParentEvent does not panic
+// when the channel is closed (recover logs and returns false).
+func TestSendParentEvent_ClosedChannel(t *testing.T) {
+	ch := make(chan Event, 1)
+	close(ch)
+
+	ev := Event{Type: EventStatus, StatusMessage: "test"}
+	ok := sendParentEvent(context.Background(), ch, ev)
+	if ok {
+		t.Error("expected sendParentEvent to return false on closed channel")
+	}
+}
+
+// TestSendParentEvent_ContextCanceled verifies sendParentEvent returns false
+// when the context is canceled and the channel is full (unbuffered, never read).
+func TestSendParentEvent_ContextCanceled(t *testing.T) {
+	ch := make(chan Event) // unbuffered — will block until context cancels
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancel immediately
+
+	ev := Event{Type: EventStatus, StatusMessage: "test"}
+	ok := sendParentEvent(ctx, ch, ev)
+	if ok {
+		t.Error("expected sendParentEvent to return false on canceled context")
+	}
+}
+
+// TestSendParentEvent_Success verifies sendParentEvent succeeds normally.
+func TestSendParentEvent_Success(t *testing.T) {
+	ch := make(chan Event, 1)
+	ev := Event{Type: EventStatus, StatusMessage: "test"}
+	ok := sendParentEvent(context.Background(), ch, ev)
+	if !ok {
+		t.Error("expected sendParentEvent to return true on success")
+	}
+	received := <-ch
+	if received.StatusMessage != "test" {
+		t.Errorf("expected 'test', got %q", received.StatusMessage)
+	}
+}

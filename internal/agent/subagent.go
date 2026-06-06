@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
 	"sync"
 	"time"
@@ -206,7 +207,8 @@ func newApprovalForwarder(ctx context.Context, parentID agentpkg.AgentID, parent
 
 func sendParentEvent(ctx context.Context, ch chan<- Event, ev Event) (ok bool) {
 	defer func() {
-		if recover() != nil {
+		if r := recover(); r != nil {
+			log.Printf("[agent] sendParentEvent recovered from panic: %v (event type=%d)", r, ev.Type)
 			ok = false
 		}
 	}()
