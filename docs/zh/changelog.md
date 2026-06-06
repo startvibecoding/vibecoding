@@ -5,6 +5,15 @@
 
 ### ✨ 新功能
 
+- **工具系统完整性**
+  - 补充所有已注册工具的完整文档：`jobs`、`kill`、`question`、`memory`、`cron` 及 MCP 动态工具
+  - `jobs` 工具：列出并查看通过 `bash async=true` 启动的后台任务，支持清理已完成任务
+  - `kill` 工具：通过 Job ID 终止正在运行的后台任务
+  - `question` 工具：Plan 模式下 AI 可向用户提出多选问题以澄清需求
+  - `memory` 工具（Hermes）：通过 `memory.md` 实现跨会话持久记忆，支持 read/add/update/delete 操作
+  - `cron` 工具（Hermes/多 Agent）：通过子 Agent 执行定时后台任务，支持 `@daily`、`@weekly`、`@every N` 调度及单次执行
+  - MCP 动态工具：来自 MCP 服务器的 tools/resources/prompts 在会话中自动发现和注册
+
 - **Plan 模式提问工具**
   - 新增 `question` 工具，仅在 TUI + plan 模式下注册
   - AI 可向用户提出多选问题，用户选择预设选项或输入自定义答案

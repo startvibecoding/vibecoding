@@ -14,6 +14,11 @@ VibeCoding provides a set of built-in tools for file operations, code search, an
 | `find` | Filename search | Read-only |
 | `ls` | List directory contents | Read-only |
 | `plan` | Publish task plan/status | Read-only |
+| `jobs` | List and manage background jobs | Read-only |
+| `kill` | Stop a running background job | Only standard/yolo |
+| `question` | Ask user multiple-choice questions | Plan mode (TUI only) |
+| `memory` | Read/write persistent memory | Hermes mode |
+| `cron` | Manage scheduled background tasks | Hermes/multi-agent mode |
 | `subagent_spawn` | Start a delegated sub-agent task | Multi-agent mode only |
 | `subagent_status` | Query a sub-agent's status/result | Multi-agent mode only |
 | `subagent_send` | Send follow-up instructions to a sub-agent | Multi-agent mode only |
@@ -358,6 +363,139 @@ List directory contents.
 ```
 
 **Returns:** Directory contents list with file types and sizes
+
+---
+
+### jobs - Background Job Management
+
+List and check status of background jobs started with `bash async=true`.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `jobId` | int | - | Get detailed status of a specific job by ID |
+| `cleanup` | bool | - | Remove finished jobs from the list |
+
+**Example:**
+
+```json
+{}
+```
+
+**Returns:** List of background jobs with status (running/finished), or detailed info for a specific job including PID, elapsed time, stdout, and stderr.
+
+---
+
+### kill - Stop Background Job
+
+Stop a running background job started with `bash async=true`.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `jobId` | int | ✓ | The job ID to kill |
+
+**Example:**
+
+```json
+{ "jobId": 3 }
+```
+
+**Returns:** Confirmation message with job ID and PID.
+
+---
+
+### question - User Clarification (Plan Mode)
+
+Ask the user a multiple-choice question during plan mode to clarify requirements.
+Only registered in TUI + plan mode. Uses `QuestionHandler` optional interface (type assertion); not exposed in Gateway/Hermes/ACP.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `question` | string | ✓ | The question text |
+| `options` | array | ✓ | List of option strings |
+
+**Example:**
+
+```json
+{
+  "question": "Which database should we use?",
+  "options": ["PostgreSQL", "SQLite", "MongoDB"]
+}
+```
+
+**Returns:** User's selected option or custom answer.
+
+---
+
+### memory - Persistent Memory (Hermes)
+
+Read and write persistent memory stored in `memory.md`. Memory persists across sessions. Only available in Hermes mode.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `action` | string | ✓ | Action: `read`, `add`, `update`, `delete` |
+| `section` | string | - | Section name (e.g., `User Profile`, `Working Memory`, `Lessons Learned`). Required for add/update/delete; optional for read. |
+| `content` | string | - | Content for add/delete actions |
+| `old` | string | - | Old text for update action |
+| `new` | string | - | New replacement text for update action |
+
+**Example:**
+
+```json
+{
+  "action": "add",
+  "section": "User Profile",
+  "content": "Prefers Go over Python for backend work."
+}
+```
+
+**Returns:** Action confirmation or section content.
+
+---
+
+### cron - Scheduled Tasks (Hermes / Multi-Agent)
+
+Manage scheduled background tasks that run via sub-agents. Available in Hermes mode and CLI multi-agent mode.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `action` | string | ✓ | Action: `list`, `create`, `enable`, `disable`, `remove`, `run` |
+| `id` | string | - | Job ID (required for enable/disable/remove/run) |
+| `name` | string | - | Short task name (required for create) |
+| `prompt` | string | - | Task prompt for the sub-agent (required for create) |
+| `schedule` | string | - | Schedule: `@daily`, `@weekly`, `@monthly`, `@hourly`, `@every 30m`, `@every 2h`, or empty for one-shot |
+| `oneshot` | bool | - | If true, run once then auto-disable |
+| `mode` | string | - | Agent mode: `agent` or `yolo` (default: `yolo`) |
+
+**Example:**
+
+```json
+{
+  "action": "create",
+  "name": "daily-check",
+  "prompt": "Check for outdated dependencies and report.",
+  "schedule": "@daily"
+}
+```
+
+**Returns:** Job list, creation confirmation, or action result.
+
+---
+
+### MCP Dynamic Tools
+
+Tools, resources, and prompts from MCP (Model Context Protocol) servers are auto-discovered and registered per session. Tool names and parameters are defined by the MCP server, not VibeCoding. MCP tools appear in the tool list alongside built-in tools.
+
+See [Skills](skills.md) and [Configuration](configuration.md) for MCP server setup.
 
 ---
 

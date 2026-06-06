@@ -14,6 +14,11 @@ VibeCoding 提供了一组内置工具，用于文件操作、代码搜索和命
 | `find` | 文件名搜索 | 只读 |
 | `ls` | 列出目录内容 | 只读 |
 | `plan` | 发布任务计划/状态 | 只读 |
+| `jobs` | 列出和管理后台任务 | 只读 |
+| `kill` | 终止正在运行的后台任务 | 仅 standard/yolo |
+| `question` | 向用户提出多选问题 | 仅 Plan 模式 (TUI) |
+| `memory` | 读写持久记忆 | 仅 Hermes 模式 |
+| `cron` | 管理定时后台任务 | 仅 Hermes/多 Agent 模式 |
 | `subagent_spawn` | 启动委托子 Agent 任务 | 仅多 Agent 模式 |
 | `subagent_status` | 查询子 Agent 状态/结果 | 仅多 Agent 模式 |
 | `subagent_send` | 向子 Agent 发送后续指令 | 仅多 Agent 模式 |
@@ -356,6 +361,138 @@ VibeCoding 提供了一组内置工具，用于文件操作、代码搜索和命
 ```
 
 **返回:** 目录内容列表，包含文件类型和大小
+
+---
+
+### jobs - 后台任务管理
+
+列出并查看通过 `bash async=true` 启动的后台任务。
+
+**参数:**
+
+| 参数 | 类型 | 必填 | 描述 |
+|------|------|------|------|
+| `jobId` | int | - | 按 ID 获取特定任务的详细状态 |
+| `cleanup` | bool | - | 清理已完成的任务 |
+
+**示例:**
+
+```json
+{}
+```
+
+**返回:** 后台任务列表及状态（运行中/已完成），或特定任务的详细信息（PID、运行时间、stdout、stderr）。
+
+---
+
+### kill - 终止后台任务
+
+终止通过 `bash async=true` 启动的正在运行的后台任务。
+
+**参数:**
+
+| 参数 | 类型 | 必填 | 描述 |
+|------|------|------|------|
+| `jobId` | int | ✓ | 要终止的任务 ID |
+
+**示例:**
+
+```json
+{ "jobId": 3 }
+```
+
+**返回:** 确认消息，包含任务 ID 和 PID。
+
+---
+
+### question - 用户澄清（Plan 模式）
+
+在 Plan 模式下向用户提出多选问题以澄清需求。仅在 TUI + plan 模式下注册。通过 `QuestionHandler` 可选接口（类型断言）暴露；不在 Gateway/Hermes/ACP 中注册。
+
+**参数:**
+
+| 参数 | 类型 | 必填 | 描述 |
+|------|------|------|------|
+| `question` | string | ✓ | 问题文本 |
+| `options` | array | ✓ | 选项列表 |
+
+**示例:**
+
+```json
+{
+  "question": "我们应该使用哪个数据库？",
+  "options": ["PostgreSQL", "SQLite", "MongoDB"]
+}
+```
+
+**返回:** 用户选择的选项或自定义答案。
+
+---
+
+### memory - 持久记忆（Hermes）
+
+读写存储在 `memory.md` 中的持久记忆。记忆跨会话持久保存。仅在 Hermes 模式下可用。
+
+**参数:**
+
+| 参数 | 类型 | 必填 | 描述 |
+|------|------|------|------|
+| `action` | string | ✓ | 操作：`read`、`add`、`update`、`delete` |
+| `section` | string | - | 节名称（如 `User Profile`、`Working Memory`、`Lessons Learned`）。add/update/delete 必填；read 时可选。 |
+| `content` | string | - | add/delete 操作的内容 |
+| `old` | string | - | update 操作的旧文本 |
+| `new` | string | - | update 操作的新替换文本 |
+
+**示例:**
+
+```json
+{
+  "action": "add",
+  "section": "User Profile",
+  "content": "后端开发偏好 Go 而非 Python。"
+}
+```
+
+**返回:** 操作确认或节内容。
+
+---
+
+### cron - 定时任务（Hermes / 多 Agent）
+
+管理通过子 Agent 执行的定时后台任务。在 Hermes 模式和 CLI 多 Agent 模式下可用。
+
+**参数:**
+
+| 参数 | 类型 | 必填 | 描述 |
+|------|------|------|------|
+| `action` | string | ✓ | 操作：`list`、`create`、`enable`、`disable`、`remove`、`run` |
+| `id` | string | - | 任务 ID（enable/disable/remove/run 必填） |
+| `name` | string | - | 任务简短名称（create 必填） |
+| `prompt` | string | - | 子 Agent 任务提示（create 必填） |
+| `schedule` | string | - | 调度：`@daily`、`@weekly`、`@monthly`、`@hourly`、`@every 30m`、`@every 2h`，或为空表示单次执行 |
+| `oneshot` | bool | - | 为 true 时执行一次后自动禁用 |
+| `mode` | string | - | Agent 模式：`agent` 或 `yolo`（默认 `yolo`） |
+
+**示例:**
+
+```json
+{
+  "action": "create",
+  "name": "daily-check",
+  "prompt": "检查过时的依赖并报告。",
+  "schedule": "@daily"
+}
+```
+
+**返回:** 任务列表、创建确认或操作结果。
+
+---
+
+### MCP 动态工具
+
+来自 MCP（Model Context Protocol）服务器的工具、资源和提示在每个会话中自动发现和注册。工具名称和参数由 MCP 服务器定义，而非 VibeCoding。MCP 工具会与内置工具一起出现在工具列表中。
+
+详见 [技能](skills.md) 和 [配置](configuration.md) 了解 MCP 服务器设置。
 
 ---
 

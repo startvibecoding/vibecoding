@@ -5,6 +5,15 @@
 
 ### ✨ Features
 
+- **Tool System Completeness**
+  - Added full documentation for all registered tools: `jobs`, `kill`, `question`, `memory`, `cron`, and MCP dynamic tools
+  - `jobs` tool: list and inspect background jobs started with `bash async=true`, with optional cleanup
+  - `kill` tool: terminate a running background job by ID
+  - `question` tool: AI can ask users multiple-choice questions during plan mode to clarify requirements
+  - `memory` tool (Hermes): persistent memory via `memory.md` with read/add/update/delete actions across sessions
+  - `cron` tool (Hermes/multi-agent): scheduled background tasks via sub-agents with `@daily`, `@weekly`, `@every N` schedules and one-shot support
+  - MCP dynamic tools: tools/resources/prompts from MCP servers are auto-discovered and registered per session
+
 - **Plan Mode Question Tool**
   - Added `question` tool, registered only in TUI + plan mode
   - AI can ask users multiple-choice questions; users select a preset option or type a custom answer
