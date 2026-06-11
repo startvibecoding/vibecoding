@@ -33,7 +33,11 @@ func (a *App) renderToolResult(result toolResult) string {
 	if summary == "" {
 		summary = "..."
 	}
-	return toolStyle.Render(fmt.Sprintf("%s %s", formatToolHeader(result), summary))
+	sep := " "
+	if strings.Contains(summary, "\n") {
+		sep = "\n"
+	}
+	return toolStyle.Render(fmt.Sprintf("%s%s%s", formatToolHeader(result), sep, summary))
 }
 
 func (a *App) renderAssistantMessage(idx int) string {

@@ -23,9 +23,24 @@ func (a *App) printHistory(msg string) {
 	if strings.TrimSpace(msg) == "" {
 		return
 	}
-	if a.program != nil {
-		go a.program.Println(msg)
-		return
+	// Route through the single drain goroutine set up in SetProgram so that
+	// program.Println calls reach Bubble Tea's message channel in the order
+	// printHistory was invoked. Sending from many ad-hoc goroutines races and
+	// can interleave messages — visually that looks like a missing line break
+	// between two log lines.
+	if a.printCh != nil {
+		select {
+		case a.printCh <- msg:
+			return
+		default:
+			// Channel saturated; fall through and call Println directly. We
+			// still spawn a goroutine because Println blocks on Bubble Tea's
+			// unbuffered msg channel and we may be running inside Update.
+			if a.program != nil {
+				go a.program.Println(msg)
+				return
+			}
+		}
 	}
 	a.pendingPrints = append(a.pendingPrints, msg)
 }
@@ -65,7 +80,10 @@ func (a *App) flushPendingPrints() tea.Cmd {
 	for _, msg := range prints {
 		cmds = append(cmds, tea.Println(msg))
 	}
-	return tea.Batch(cmds...)
+	// Sequence (not Batch) keeps prints in their queued order — Batch runs each
+	// cmd in its own goroutine, which would re-introduce the very interleaving
+	// issue we're trying to avoid here.
+	return tea.Sequence(cmds...)
 }
 
 func (a *App) finishRequestTimer() {

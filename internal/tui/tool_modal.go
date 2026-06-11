@@ -3,6 +3,8 @@ package tui
 import (
 	"fmt"
 	"strings"
+
+	"github.com/charmbracelet/lipgloss"
 )
 
 func (a *App) openLatestToolModal() {
@@ -105,7 +107,7 @@ func (a *App) renderToolModal() string {
 		position = "lines 0-0/0"
 	}
 	title := fmt.Sprintf("Expanded transcript  %s  PgUp/PgDn Up/Down Esc", position)
-	content := title + "\n" + strings.Repeat("─", minInt(width-2, len(title))) + "\n" + visible
+	content := title + "\n" + strings.Repeat("─", minInt(width-2, lipgloss.Width(title))) + "\n" + visible
 	return toolModalStyle.Width(width).Height(height + 3).Render(content)
 }
 

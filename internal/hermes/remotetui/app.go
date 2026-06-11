@@ -183,6 +183,12 @@ type App struct {
 
 	// Bubble Tea program used to marshal deferred renders back onto the UI goroutine.
 	program *tea.Program
+	// printCh feeds a single drain goroutine that calls program.Println in FIFO
+	// order. Using one goroutine instead of `go program.Println(...)` per call
+	// prevents racing sends on Bubble Tea's unbuffered message channel, which
+	// would reorder messages and visually drop newlines between them.
+	printCh   chan string
+	printOnce sync.Once
 }
 
 // pendingApproval holds a queued approval request.
@@ -250,9 +256,21 @@ func (a *App) SetInitialMessage(msg string) {
 	a.initialMessage = msg
 }
 
-// SetProgram stores the Bubble Tea program used for deferred UI updates.
+// SetProgram stores the Bubble Tea program used for deferred UI updates and
+// starts the single drain goroutine that serializes program.Println calls.
 func (a *App) SetProgram(p *tea.Program) {
 	a.program = p
+	if p == nil {
+		return
+	}
+	a.printOnce.Do(func() {
+		a.printCh = make(chan string, 1024)
+		go func(ch <-chan string, prog *tea.Program) {
+			for msg := range ch {
+				prog.Println(msg)
+			}
+		}(a.printCh, p)
+	})
 }
 
 // LoadHistoryMessages loads messages from session history into TUI display.

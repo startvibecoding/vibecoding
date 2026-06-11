@@ -74,6 +74,8 @@ func (a *App) handleAgentEvent(event agent.Event) tea.Cmd {
 				case "read":
 					lines := strings.Split(event.ToolResult, "\n")
 					a.toolResults[j].summary = fmt.Sprintf("%d lines", len(lines))
+				case "ls":
+					a.toolResults[j].summary = compactBashOutput(event.ToolResult)
 				case "write":
 					if summary := summarizeFileDiff(event.ToolDiff); summary != "" {
 						a.toolResults[j].summary = summary

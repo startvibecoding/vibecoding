@@ -7,8 +7,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/lipgloss"
+
 	"github.com/startvibecoding/vibecoding/internal/tools"
-	"github.com/startvibecoding/vibecoding/internal/util"
 )
 
 func planStatusMarker(status string) string {
@@ -279,8 +280,33 @@ func compactBashOutput(s string) string {
 	return strings.TrimSpace(sb.String())
 }
 
-func truncate(s string, maxLen int) string {
-	return util.TruncateWithSuffix(s, maxLen, "...")
+// truncate shortens s so its terminal display width does not exceed maxWidth,
+// appending "..." when truncation occurs. Width is measured in display cells
+// (CJK runes count as 2, ANSI escape sequences as 0) so the result lines up
+// correctly in the TUI grid.
+func truncate(s string, maxWidth int) string {
+	if maxWidth <= 0 {
+		return ""
+	}
+	if lipgloss.Width(s) <= maxWidth {
+		return s
+	}
+	const suffix = "..."
+	target := maxWidth - lipgloss.Width(suffix)
+	if target <= 0 {
+		return suffix
+	}
+	var b strings.Builder
+	w := 0
+	for _, r := range s {
+		rw := lipgloss.Width(string(r))
+		if w+rw > target {
+			break
+		}
+		b.WriteRune(r)
+		w += rw
+	}
+	return b.String() + suffix
 }
 
 func formatDuration(d time.Duration) string {
