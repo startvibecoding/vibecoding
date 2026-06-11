@@ -83,6 +83,7 @@ func CreateWithOptions(settings *config.Settings, providerName, modelID string, 
 			return nil, nil, fmt.Errorf("unsupported API type: %s (use 'openai-chat', 'openai-responses', 'anthropic-messages', 'google-gemini', or 'google-vertex')", resolved.API)
 		}
 
+		ConfigureHeaders(p, settings, providerName)
 		model := p.GetModel(modelID)
 		if model == nil {
 			if len(models) > 0 {
@@ -129,6 +130,10 @@ type retryConfigurable interface {
 	SetRetryConfig(cfg *provider.RetryConfig)
 }
 
+type headersConfigurable interface {
+	SetHeaders(headers map[string]string)
+}
+
 // ConfigureRetry sets retry config on a provider if it supports it.
 func ConfigureRetry(p provider.Provider, settings *config.Settings) {
 	if rc, ok := p.(retryConfigurable); ok {
@@ -137,6 +142,13 @@ func ConfigureRetry(p provider.Provider, settings *config.Settings) {
 			MaxRetries:  settings.Retry.MaxRetries,
 			BaseDelayMs: settings.Retry.BaseDelayMs,
 		})
+	}
+}
+
+// ConfigureHeaders sets custom provider headers if the provider supports it.
+func ConfigureHeaders(p provider.Provider, settings *config.Settings, providerName string) {
+	if hc, ok := p.(headersConfigurable); ok {
+		hc.SetHeaders(settings.ResolveProviderHeaders(providerName))
 	}
 }
 

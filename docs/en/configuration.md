@@ -159,6 +159,7 @@ Multi-provider configuration. Each provider is an object keyed by a user-chosen 
 | `apiKey` | string | — | `""` | API key (see [Authentication](#authentication-configuration) below) |
 | `api` | string | — | auto-detect | API protocol: `"openai-chat"`, `"openai-responses"`, `"anthropic-messages"`, `"google-gemini"`, or `"google-vertex"` |
 | `httpProxy` | string | — | `""` | Optional per-provider HTTP proxy URL, e.g. `"http://127.0.0.1:7890"` |
+| `headers` | object | — | `{}` | Optional custom HTTP headers applied to every provider request; values support the same `${ENV}` and `!cmd` resolution as `apiKey` |
 | `thinkingFormat` | string | — | auto-detect | Thinking parameter format (see below) |
 | `cacheControl` | bool | — | `false` | Enable Anthropic prompt caching; set `true` when using Claude models |
 | `models` | array | — | `[]` | List of available models |
@@ -183,6 +184,10 @@ Built-in vendor adapters include `openai`, `anthropic`, `claude`, `deepseek`, `g
       "baseUrl": "https://api.deepseek.com",
       "apiKey": "${DEEPSEEK_API_KEY}",
       "api": "openai-chat",
+      "headers": {
+        "X-Request-Source": "vibecoding",
+        "X-Gateway-Token": "${MY_GATEWAY_TOKEN}"
+      },
       "models": [
         { "id": "deepseek-v4-flash", "name": "DeepSeek-V4-Flash", "contextWindow": 1000000 }
       ]
@@ -1061,9 +1066,11 @@ Switch between providers at runtime using `/provider` or `--provider`:
 }
 ```
 
-### Custom API Endpoint / HTTP Proxy
+### Custom API Endpoint / HTTP Proxy / Headers
 
 `baseUrl` points to an API endpoint or API gateway. `httpProxy` configures the network proxy used only by that provider's HTTP client. When `httpProxy` is empty, the provider keeps Go's default `HTTP_PROXY` / `HTTPS_PROXY` environment behavior.
+
+Use `headers` to attach custom HTTP headers to every request for a provider. Header values support the same resolution rules as `apiKey`, including `${ENV_VAR}` and opt-in `!cmd` shell commands. Custom headers are applied after VibeCoding's default provider headers, so they can also override defaults such as `Authorization`, `x-api-key`, or gateway-specific headers when needed.
 
 ```json
 {
@@ -1073,6 +1080,10 @@ Switch between providers at runtime using `/provider` or `--provider`:
       "api": "openai-chat",
       "apiKey": "${MY_PROXY_API_KEY}",
       "httpProxy": "http://127.0.0.1:7890",
+      "headers": {
+        "X-Gateway-Token": "${MY_GATEWAY_TOKEN}",
+        "X-Request-Source": "vibecoding"
+      },
       "models": [
         {
           "id": "gpt-4o",

@@ -159,6 +159,7 @@ VibeCoding 使用两个配置文件:
 | `apiKey` | string | — | `""` | API 密钥 (见[认证配置](#认证配置)) |
 | `api` | string | — | 自动检测 | API 协议: `"openai-chat"`、`"openai-responses"`、`"anthropic-messages"`、`"google-gemini"` 或 `"google-vertex"` |
 | `httpProxy` | string | — | `""` | 可选的 provider 级 HTTP 代理 URL，例如 `"http://127.0.0.1:7890"` |
+| `headers` | object | — | `{}` | 可选自定义 HTTP 请求头，会附加到每次 provider 请求；值支持与 `apiKey` 相同的 `${ENV}` 和 `!cmd` 解析 |
 | `thinkingFormat` | string | — | 自动检测 | 思考参数格式 (见下文) |
 | `cacheControl` | bool | — | `false` | 启用 Anthropic 提示缓存；使用 Claude 模型时设为 `true` |
 | `models` | array | — | `[]` | 可用模型列表 |
@@ -183,6 +184,10 @@ VibeCoding 使用两个配置文件:
       "baseUrl": "https://api.deepseek.com",
       "apiKey": "${DEEPSEEK_API_KEY}",
       "api": "openai-chat",
+      "headers": {
+        "X-Request-Source": "vibecoding",
+        "X-Gateway-Token": "${MY_GATEWAY_TOKEN}"
+      },
       "models": [
         { "id": "deepseek-v4-flash", "name": "DeepSeek-V4-Flash", "contextWindow": 1000000 }
       ]
@@ -1061,9 +1066,11 @@ export DEEPSEEK_API_KEY=sk-...
 }
 ```
 
-### 自定义 API 端点 / HTTP 代理
+### 自定义 API 端点 / HTTP 代理 / Headers
 
 `baseUrl` 指向 API 端点或 API 网关；`httpProxy` 只配置该 provider 的网络代理。`httpProxy` 为空时，会保留 Go 默认的 `HTTP_PROXY` / `HTTPS_PROXY` 环境变量行为。
+
+使用 `headers` 可以为某个 provider 的每次请求附加自定义 HTTP header。Header 值支持与 `apiKey` 相同的解析规则，包括 `${ENV_VAR}` 和需显式开启的 `!cmd` shell 命令。自定义 header 会在 VibeCoding 默认 provider header 之后应用，因此必要时也可以覆盖 `Authorization`、`x-api-key` 或网关要求的特定 header。
 
 ```json
 {
@@ -1073,6 +1080,10 @@ export DEEPSEEK_API_KEY=sk-...
       "api": "openai-chat",
       "apiKey": "${MY_PROXY_API_KEY}",
       "httpProxy": "http://127.0.0.1:7890",
+      "headers": {
+        "X-Gateway-Token": "${MY_GATEWAY_TOKEN}",
+        "X-Request-Source": "vibecoding"
+      },
       "models": [
         {
           "id": "gpt-4o",

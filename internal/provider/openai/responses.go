@@ -185,6 +185,7 @@ func (p *Provider) chatResponses(ctx context.Context, params provider.ChatParams
 			req.Header.Set("Authorization", "Bearer "+p.apiKey)
 			req.Header.Set("Accept", "text/event-stream")
 			req.Header.Set("User-Agent", ua.ProviderUserAgent())
+			provider.ApplyHeaders(req, p.headers)
 
 			resp, err := p.client.Do(req)
 			if err != nil {

@@ -366,6 +366,35 @@ func TestResolveKey(t *testing.T) {
 	}
 }
 
+func TestResolveProviderHeaders(t *testing.T) {
+	t.Setenv("CUSTOM_HEADER_VALUE", "env-header-value")
+	s := &Settings{
+		Providers: map[string]*ProviderConfig{
+			"test": {
+				Headers: map[string]string{
+					"X-Static": "static-value",
+					"X-Env":    "${CUSTOM_HEADER_VALUE}",
+					" ":        "ignored",
+				},
+			},
+		},
+	}
+
+	headers := s.ResolveProviderHeaders("test")
+	if headers["X-Static"] != "static-value" {
+		t.Fatalf("X-Static = %q, want static-value", headers["X-Static"])
+	}
+	if headers["X-Env"] != "env-header-value" {
+		t.Fatalf("X-Env = %q, want env-header-value", headers["X-Env"])
+	}
+	if _, ok := headers[""]; ok {
+		t.Fatal("expected empty header name to be ignored")
+	}
+	if got := s.ResolveProviderHeaders("missing"); got != nil {
+		t.Fatalf("missing headers = %#v, want nil", got)
+	}
+}
+
 func TestGetShell(t *testing.T) {
 	s := &Settings{}
 

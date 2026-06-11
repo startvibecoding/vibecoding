@@ -24,6 +24,10 @@
 - **Dispatcher 重构**
   - 将 `buildAgent()` 从 `runAgent()` 中提取，改善消息平台与 WebSocket 路径间的 agent 创建复用
 
+- **Provider 自定义 Header**
+  - 新增 `providers.<name>.headers`，支持为 provider 请求携带自定义 HTTP header
+  - Header 值支持与 `apiKey` 相同的 `${ENV}` 和需显式开启的 `!cmd` 解析
+
 ### 🧪 测试
 
 - 新增 WebSocket Gateway 服务器测试，覆盖连接、认证、聊天、审批、提问和命令流程

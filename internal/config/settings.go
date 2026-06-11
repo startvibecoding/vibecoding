@@ -38,15 +38,16 @@ type Settings struct {
 }
 
 type ProviderConfig struct {
-	Vendor         string          `json:"vendor,omitempty"` // Explicit vendor adapter (Decision 12/13)
-	APIKey         string          `json:"apiKey,omitempty"`
-	BaseURL        string          `json:"baseUrl,omitempty"`
-	HTTPProxy      string          `json:"httpProxy,omitempty"` // optional per-provider HTTP proxy URL, e.g. http://127.0.0.1:7890
-	API            string          `json:"api,omitempty"`
-	ThinkingFormat string          `json:"thinkingFormat,omitempty"` // "", "openai", "anthropic", "deepseek", "xiaomi"
-	CacheControl   *bool           `json:"cacheControl,omitempty"`   // enable Anthropic prompt caching (nil/false=off, true=on; set true for Claude models)
-	Responses      ResponsesConfig `json:"responses,omitempty"`
-	Models         []ModelConfig   `json:"models"`
+	Vendor         string            `json:"vendor,omitempty"`    // Explicit vendor adapter (Decision 12/13)
+	APIKey         string            `json:"apiKey,omitempty"`    // API key or env/shell reference
+	BaseURL        string            `json:"baseUrl,omitempty"`   // API base URL
+	HTTPProxy      string            `json:"httpProxy,omitempty"` // optional per-provider HTTP proxy URL, e.g. http://127.0.0.1:7890
+	Headers        map[string]string `json:"headers,omitempty"`   // optional per-provider HTTP headers
+	API            string            `json:"api,omitempty"`
+	ThinkingFormat string            `json:"thinkingFormat,omitempty"` // "", "openai", "anthropic", "deepseek", "xiaomi"
+	CacheControl   *bool             `json:"cacheControl,omitempty"`   // enable Anthropic prompt caching (nil/false=off, true=on; set true for Claude models)
+	Responses      ResponsesConfig   `json:"responses,omitempty"`
+	Models         []ModelConfig     `json:"models"`
 }
 
 type ResponsesConfig struct {
@@ -444,6 +445,27 @@ func (s *Settings) ResolveKey(providerName string) string {
 		return v
 	}
 	return ""
+}
+
+// ResolveProviderHeaders resolves configured per-provider HTTP header values.
+// Header values use the same env-var and shell-command resolution rules as apiKey.
+func (s *Settings) ResolveProviderHeaders(providerName string) map[string]string {
+	if s == nil {
+		return nil
+	}
+	pc := s.GetProviderConfig(providerName)
+	if pc == nil || len(pc.Headers) == 0 {
+		return nil
+	}
+	headers := make(map[string]string, len(pc.Headers))
+	for name, value := range pc.Headers {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		headers[name] = resolveKeyValue(value)
+	}
+	return headers
 }
 
 // providerToEnvVar converts a provider name to a conventional environment variable name.

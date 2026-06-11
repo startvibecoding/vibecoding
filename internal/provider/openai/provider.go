@@ -23,6 +23,7 @@ type Provider struct {
 	apiKey  string
 	baseURL string
 	client  *http.Client
+	headers map[string]string
 
 	// Configuration options
 	disableReasoning bool   // Disable reasoning_content support for incompatible APIs
@@ -139,6 +140,11 @@ func (p *Provider) DisableReasoning() {
 // SetRetryConfig sets the retry configuration for this provider.
 func (p *Provider) SetRetryConfig(cfg *provider.RetryConfig) {
 	p.retryConfig = cfg
+}
+
+// SetHeaders sets custom HTTP headers applied to every provider request.
+func (p *Provider) SetHeaders(headers map[string]string) {
+	p.headers = cloneHeaders(headers)
 }
 
 // IsReasoningDisabled returns whether reasoning support is disabled.
@@ -351,6 +357,7 @@ func (p *Provider) chatCompletions(ctx context.Context, params provider.ChatPara
 			req.Header.Set("Authorization", "Bearer "+p.apiKey)
 			req.Header.Set("Accept", "text/event-stream")
 			req.Header.Set("User-Agent", ua.ProviderUserAgent())
+			provider.ApplyHeaders(req, p.headers)
 
 			resp, err := p.client.Do(req)
 			if err != nil {
@@ -509,6 +516,17 @@ func (p *Provider) parseSSE(ctx context.Context, body io.Reader, ch chan<- provi
 		ch <- provider.StreamEvent{Type: provider.StreamUsage, Usage: usage}
 	}
 	ch <- provider.StreamEvent{Type: provider.StreamDone, StopReason: stopReason}
+}
+
+func cloneHeaders(headers map[string]string) map[string]string {
+	if len(headers) == 0 {
+		return nil
+	}
+	cloned := make(map[string]string, len(headers))
+	for name, value := range headers {
+		cloned[name] = value
+	}
+	return cloned
 }
 
 func mergeOpenAIUsage(dst **provider.Usage, src *openAIUsageResponse) {

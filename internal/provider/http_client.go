@@ -25,3 +25,14 @@ func NewHTTPClient(timeout time.Duration, proxyURL string) (*http.Client, error)
 	}
 	return &http.Client{Timeout: timeout, Transport: transport}, nil
 }
+
+// ApplyHeaders applies configured custom headers after provider defaults.
+func ApplyHeaders(req *http.Request, headers map[string]string) {
+	for name, value := range headers {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		req.Header.Set(name, value)
+	}
+}

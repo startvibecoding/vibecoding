@@ -22,6 +22,7 @@ type Provider struct {
 	apiKey  string
 	baseURL string
 	client  *http.Client
+	headers map[string]string
 
 	thinkingFormat      string // "", "anthropic", "deepseek", "xiaomi"
 	cacheControlEnabled *bool  // nil=off (must be explicitly enabled), true=on, false=off
@@ -103,6 +104,11 @@ func (p *Provider) SetThinkingFormat(format string) {
 // SetRetryConfig sets the retry configuration for this provider.
 func (p *Provider) SetRetryConfig(cfg *provider.RetryConfig) {
 	p.retryConfig = cfg
+}
+
+// SetHeaders sets custom HTTP headers applied to every provider request.
+func (p *Provider) SetHeaders(headers map[string]string) {
+	p.headers = cloneHeaders(headers)
 }
 
 // SetCacheControlEnabled sets whether to use cache_control markers.
@@ -333,6 +339,7 @@ func (p *Provider) Chat(ctx context.Context, params provider.ChatParams) <-chan 
 			req.Header.Set("anthropic-version", "2023-06-01")
 			req.Header.Set("Accept", "text/event-stream")
 			req.Header.Set("User-Agent", ua.ProviderUserAgent())
+			provider.ApplyHeaders(req, p.headers)
 
 			resp, err := p.client.Do(req)
 			if err != nil {
@@ -392,6 +399,17 @@ func (p *Provider) Chat(ctx context.Context, params provider.ChatParams) <-chan 
 		ch <- provider.StreamEvent{Type: provider.StreamError, Error: fmt.Errorf("all %d retry attempts exhausted", maxRetries)}
 	}()
 	return ch
+}
+
+func cloneHeaders(headers map[string]string) map[string]string {
+	if len(headers) == 0 {
+		return nil
+	}
+	cloned := make(map[string]string, len(headers))
+	for name, value := range headers {
+		cloned[name] = value
+	}
+	return cloned
 }
 
 func (p *Provider) parseSSE(ctx context.Context, body io.Reader, ch chan<- provider.StreamEvent, params provider.ChatParams) {

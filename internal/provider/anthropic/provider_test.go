@@ -71,6 +71,29 @@ func TestAnthropicProviderHTTPProxy(t *testing.T) {
 	}
 }
 
+func TestAnthropicCustomHeaders(t *testing.T) {
+	p := newMockAnthropicProvider(t, []*provider.Model{{ID: "claude-test"}}, "data: {\"type\":\"message_stop\"}\n", nil, func(r *http.Request) {
+		if r.Header.Get("X-Custom-Header") != "custom-value" {
+			t.Fatalf("X-Custom-Header = %q, want custom-value", r.Header.Get("X-Custom-Header"))
+		}
+		if r.Header.Get("anthropic-version") != "2024-01-01" {
+			t.Fatalf("anthropic-version = %q, want 2024-01-01", r.Header.Get("anthropic-version"))
+		}
+	})
+	p.SetHeaders(map[string]string{
+		"X-Custom-Header":   "custom-value",
+		"anthropic-version": "2024-01-01",
+	})
+
+	params := provider.ChatParams{
+		ModelID:  "claude-test",
+		Messages: []provider.Message{provider.NewUserMessage("hi")},
+		Abort:    make(chan struct{}),
+	}
+	for range p.Chat(context.Background(), params) {
+	}
+}
+
 func mustUsage(t *testing.T, events []provider.StreamEvent) *provider.Usage {
 	t.Helper()
 	for _, e := range events {

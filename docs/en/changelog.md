@@ -24,6 +24,10 @@
 - **Dispatcher Refactor**
   - Extracted `buildAgent()` from `runAgent()` for agent creation and cleanup, improving reuse between messaging and WebSocket paths
 
+- **Provider Custom Headers**
+  - Added `providers.<name>.headers` for custom HTTP headers on provider requests
+  - Header values support the same `${ENV}` and opt-in `!cmd` resolution as `apiKey`
+
 ### 🧪 Tests
 
 - Added WebSocket gateway server tests for connection, auth, chat, approval, question, and command flows

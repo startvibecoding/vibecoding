@@ -31,6 +31,7 @@ type Provider struct {
 	client        *http.Client
 	retryConfig   *provider.RetryConfig
 	cachedContent string
+	headers       map[string]string
 }
 
 func DefaultModels(providerName string) []*provider.Model {
@@ -109,6 +110,11 @@ func newProviderWithHTTPClient(name string, kind APIKind, apiKey, baseURL, defau
 
 func (p *Provider) SetRetryConfig(cfg *provider.RetryConfig) {
 	p.retryConfig = cfg
+}
+
+// SetHeaders sets custom HTTP headers applied to every provider request.
+func (p *Provider) SetHeaders(headers map[string]string) {
+	p.headers = cloneHeaders(headers)
 }
 
 // SetCachedContent sets an explicit Google cached content resource to reuse.
@@ -322,6 +328,18 @@ func (p *Provider) setHeaders(req *http.Request) {
 	default:
 		req.Header.Set("x-goog-api-key", p.apiKey)
 	}
+	provider.ApplyHeaders(req, p.headers)
+}
+
+func cloneHeaders(headers map[string]string) map[string]string {
+	if len(headers) == 0 {
+		return nil
+	}
+	cloned := make(map[string]string, len(headers))
+	for name, value := range headers {
+		cloned[name] = value
+	}
+	return cloned
 }
 
 func (p *Provider) streamEndpoint(modelID string) string {

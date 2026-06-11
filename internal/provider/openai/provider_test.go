@@ -84,6 +84,50 @@ func TestOpenAIProviderHTTPProxy(t *testing.T) {
 	}
 }
 
+func TestOpenAICustomHeaders(t *testing.T) {
+	p := newMockOpenAIProvider(t, []*provider.Model{{ID: "gpt-test"}}, "data: [DONE]\n", nil, func(r *http.Request) {
+		if r.Header.Get("X-Custom-Header") != "custom-value" {
+			t.Fatalf("X-Custom-Header = %q, want custom-value", r.Header.Get("X-Custom-Header"))
+		}
+		if r.Header.Get("Authorization") != "Bearer override-key" {
+			t.Fatalf("Authorization = %q, want Bearer override-key", r.Header.Get("Authorization"))
+		}
+	})
+	p.SetHeaders(map[string]string{
+		"X-Custom-Header": "custom-value",
+		"Authorization":   "Bearer override-key",
+	})
+
+	params := provider.ChatParams{
+		ModelID:  "gpt-test",
+		Messages: []provider.Message{provider.NewUserMessage("hi")},
+		Abort:    make(chan struct{}),
+	}
+	for range p.Chat(context.Background(), params) {
+	}
+}
+
+func TestOpenAIResponsesCustomHeaders(t *testing.T) {
+	p := newMockOpenAIProvider(t, []*provider.Model{{ID: "gpt-test"}}, "data: [DONE]\n", nil, func(r *http.Request) {
+		if r.URL.Path != "/v1/responses" {
+			t.Fatalf("path = %q, want /v1/responses", r.URL.Path)
+		}
+		if r.Header.Get("X-Responses-Header") != "responses-value" {
+			t.Fatalf("X-Responses-Header = %q, want responses-value", r.Header.Get("X-Responses-Header"))
+		}
+	})
+	p.SetUseResponsesAPI(true)
+	p.SetHeaders(map[string]string{"X-Responses-Header": "responses-value"})
+
+	params := provider.ChatParams{
+		ModelID:  "gpt-test",
+		Messages: []provider.Message{provider.NewUserMessage("hi")},
+		Abort:    make(chan struct{}),
+	}
+	for range p.Chat(context.Background(), params) {
+	}
+}
+
 func TestOpenAIThinkingFormatDeepSeekAutoDetect(t *testing.T) {
 	bodyCh := make(chan string, 1)
 	p := newMockOpenAIProvider(t, []*provider.Model{

@@ -72,6 +72,33 @@ func TestGoogleProviderHTTPProxy(t *testing.T) {
 	}
 }
 
+func TestGoogleCustomHeaders(t *testing.T) {
+	p := newMockGoogleProvider(t,
+		NewGeminiProviderWithModels("fake-key", "https://generativelanguage.googleapis.com/v1beta/models", []*provider.Model{{ID: "gemini-test"}}),
+		"data: {\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"ok\"}]},\"finishReason\":\"STOP\"}]}\n",
+		nil,
+		func(r *http.Request) {
+			if r.Header.Get("X-Custom-Header") != "custom-value" {
+				t.Fatalf("X-Custom-Header = %q, want custom-value", r.Header.Get("X-Custom-Header"))
+			}
+			if r.Header.Get("x-goog-api-key") != "override-key" {
+				t.Fatalf("x-goog-api-key = %q, want override-key", r.Header.Get("x-goog-api-key"))
+			}
+		})
+	p.SetHeaders(map[string]string{
+		"X-Custom-Header": "custom-value",
+		"x-goog-api-key":  "override-key",
+	})
+
+	params := provider.ChatParams{
+		ModelID:  "gemini-test",
+		Messages: []provider.Message{provider.NewUserMessage("hi")},
+		Abort:    make(chan struct{}),
+	}
+	for range p.Chat(context.Background(), params) {
+	}
+}
+
 func TestGoogleGeminiRequest(t *testing.T) {
 	bodyCh := make(chan string, 1)
 	p := newMockGoogleProvider(t,
