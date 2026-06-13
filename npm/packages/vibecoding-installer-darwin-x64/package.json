@@ -2,15 +2,9 @@
   "name": "vibecoding-installer-darwin-x64",
   "version": "0.1.37",
   "description": "VibeCoding native binary for darwin-x64",
-  "os": [
-    "darwin"
-  ],
-  "cpu": [
-    "x64"
-  ],
-  "files": [
-    "bin/"
-  ],
+  "os": ["darwin"],
+  "cpu": ["x64"],
+  "files": ["bin/"],
   "license": "MIT",
   "repository": {
     "type": "git",
