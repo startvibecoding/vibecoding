@@ -359,4 +359,4 @@ vibecoding doctor
 
 ### Q: 当前版本是什么?
 
-A: 当前版本是 v0.1.36。详见 [更新日志](changelog.md) 了解版本历史。
+A: 当前版本是 v0.1.37。详见 [更新日志](changelog.md) 了解版本历史。
