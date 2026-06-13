@@ -215,18 +215,44 @@ func TestGoogleRequestCachedContent(t *testing.T) {
 	}
 }
 
-func TestGoogleVertexAuthorizationHeader(t *testing.T) {
+func TestGoogleVertexAPIKeyHeaderAndEndpoint(t *testing.T) {
 	bodyCh := make(chan string, 1)
 	p := newMockGoogleProvider(t,
-		NewVertexProviderWithModels("fake-token", "https://aiplatform.googleapis.com/v1/projects/test/locations/global/publishers/google/models", []*provider.Model{{ID: "gemini-test"}}),
+		NewVertexProviderWithModels("fake-key", "https://aiplatform.googleapis.com/v1/projects/test/locations/global/publishers/google/models", []*provider.Model{{ID: "gemini-test"}}),
+		"data: {}\n",
+		bodyCh,
+		func(r *http.Request) {
+			if r.URL.Path != "/v1/publishers/google/models/gemini-test:streamGenerateContent" {
+				t.Fatalf("path = %q, want Vertex API key streamGenerateContent path", r.URL.Path)
+			}
+			if r.Header.Get("x-goog-api-key") != "fake-key" {
+				t.Fatalf("x-goog-api-key = %q, want fake-key", r.Header.Get("x-goog-api-key"))
+			}
+			if r.Header.Get("Authorization") != "" {
+				t.Fatalf("Authorization = %q, want empty", r.Header.Get("Authorization"))
+			}
+		})
+
+	for range p.Chat(context.Background(), provider.ChatParams{
+		ModelID:  "gemini-test",
+		Messages: []provider.Message{provider.NewUserMessage("hi")},
+		Abort:    make(chan struct{}),
+	}) {
+	}
+}
+
+func TestGoogleVertexOAuthAuthorizationHeader(t *testing.T) {
+	bodyCh := make(chan string, 1)
+	p := newMockGoogleProvider(t,
+		NewVertexProviderWithModels("ya29.fake-token", "https://aiplatform.googleapis.com/v1/projects/test/locations/global/publishers/google/models", []*provider.Model{{ID: "gemini-test"}}),
 		"data: {}\n",
 		bodyCh,
 		func(r *http.Request) {
 			if r.URL.Path != "/v1/projects/test/locations/global/publishers/google/models/gemini-test:streamGenerateContent" {
-				t.Fatalf("path = %q, want Vertex streamGenerateContent path", r.URL.Path)
+				t.Fatalf("path = %q, want Vertex OAuth streamGenerateContent path", r.URL.Path)
 			}
-			if r.Header.Get("Authorization") != "Bearer fake-token" {
-				t.Fatalf("Authorization = %q, want Bearer fake-token", r.Header.Get("Authorization"))
+			if r.Header.Get("Authorization") != "Bearer ya29.fake-token" {
+				t.Fatalf("Authorization = %q, want Bearer ya29.fake-token", r.Header.Get("Authorization"))
 			}
 		})
 

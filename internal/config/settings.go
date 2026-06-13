@@ -210,8 +210,8 @@ func DefaultSettings() *Settings {
 				},
 			},
 			"google-vertex": &ProviderConfig{
-				BaseURL: "https://aiplatform.googleapis.com/v1/projects/YOUR_PROJECT/locations/global/publishers/google/models",
-				APIKey:  "${GOOGLE_VERTEX_ACCESS_TOKEN}",
+				BaseURL: "https://aiplatform.googleapis.com/v1/publishers/google/models",
+				APIKey:  "${GOOGLE_CLOUD_API_KEY}",
 				API:     "google-vertex",
 				Models: []ModelConfig{
 					{ID: "gemini-2.5-pro", Name: "Gemini 2.5 Pro", Reasoning: true, ContextWindow: 1000000, MaxTokens: 65536, Input: []string{"text", "image"}},

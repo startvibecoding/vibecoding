@@ -70,13 +70,13 @@ func NewVertexProvider(apiKey, baseURL string) *Provider {
 func NewVertexProviderWithModels(apiKey, baseURL string, models []*provider.Model) *Provider {
 	p, err := NewVertexProviderWithModelsAndProxy(apiKey, baseURL, "", models)
 	if err != nil {
-		return newProviderWithHTTPClient("google-vertex", APIKindVertex, apiKey, baseURL, "https://aiplatform.googleapis.com/v1/projects/YOUR_PROJECT/locations/global/publishers/google/models", models, &http.Client{Timeout: 30 * time.Minute})
+		return newProviderWithHTTPClient("google-vertex", APIKindVertex, apiKey, baseURL, "https://aiplatform.googleapis.com/v1/publishers/google/models", models, &http.Client{Timeout: 30 * time.Minute})
 	}
 	return p
 }
 
 func NewVertexProviderWithModelsAndProxy(apiKey, baseURL, proxyURL string, models []*provider.Model) (*Provider, error) {
-	return newProvider("google-vertex", APIKindVertex, apiKey, baseURL, "https://aiplatform.googleapis.com/v1/projects/YOUR_PROJECT/locations/global/publishers/google/models", proxyURL, models)
+	return newProvider("google-vertex", APIKindVertex, apiKey, baseURL, "https://aiplatform.googleapis.com/v1/publishers/google/models", proxyURL, models)
 }
 
 func newProvider(name string, kind APIKind, apiKey, baseURL, defaultBaseURL, proxyURL string, models []*provider.Model) (*Provider, error) {
@@ -96,7 +96,10 @@ func newProviderWithHTTPClient(name string, kind APIKind, apiKey, baseURL, defau
 		case APIKindGemini:
 			apiKey = os.Getenv("GOOGLE_API_KEY")
 		case APIKindVertex:
-			apiKey = os.Getenv("GOOGLE_VERTEX_ACCESS_TOKEN")
+			apiKey = os.Getenv("GOOGLE_CLOUD_API_KEY")
+			if apiKey == "" {
+				apiKey = os.Getenv("GOOGLE_VERTEX_ACCESS_TOKEN")
+			}
 		}
 	}
 	return &Provider{
@@ -324,11 +327,20 @@ func (p *Provider) setHeaders(req *http.Request) {
 	req.Header.Set("User-Agent", ua.ProviderUserAgent())
 	switch p.apiKind {
 	case APIKindVertex:
-		req.Header.Set("Authorization", "Bearer "+p.apiKey)
+		if isGoogleOAuthToken(p.apiKey) {
+			req.Header.Set("Authorization", "Bearer "+p.apiKey)
+		} else {
+			req.Header.Set("x-goog-api-key", p.apiKey)
+		}
 	default:
 		req.Header.Set("x-goog-api-key", p.apiKey)
 	}
 	provider.ApplyHeaders(req, p.headers)
+}
+
+func isGoogleOAuthToken(token string) bool {
+	token = strings.TrimSpace(token)
+	return strings.HasPrefix(token, "ya29.") || strings.HasPrefix(token, "gya29.")
 }
 
 func cloneHeaders(headers map[string]string) map[string]string {
@@ -344,11 +356,27 @@ func cloneHeaders(headers map[string]string) map[string]string {
 
 func (p *Provider) streamEndpoint(modelID string) string {
 	base := strings.TrimRight(p.baseURL, "/")
+	if p.apiKind == APIKindVertex && !isGoogleOAuthToken(p.apiKey) {
+		base = vertexAPIKeyBaseURL(base)
+	}
 	model := strings.TrimPrefix(modelID, "models/")
 	if strings.Contains(model, "/") {
 		model = strings.Trim(model, "/")
 	}
 	return base + "/" + model + ":streamGenerateContent?alt=sse"
+}
+
+func vertexAPIKeyBaseURL(base string) string {
+	if base == "" || strings.Contains(base, "/projects/") {
+		return "https://aiplatform.googleapis.com/v1/publishers/google/models"
+	}
+	if strings.HasSuffix(base, "/publishers/google/models") {
+		return base
+	}
+	if strings.HasSuffix(base, "/publishers/google") {
+		return base + "/models"
+	}
+	return base
 }
 
 func (p *Provider) generationConfig(params provider.ChatParams, model *provider.Model) *googleGenerationConf {

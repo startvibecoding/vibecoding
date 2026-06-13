@@ -252,8 +252,8 @@ Google 原生 provider 可以直接配置：
       ]
     },
     "google-vertex": {
-      "baseUrl": "https://aiplatform.googleapis.com/v1/projects/YOUR_PROJECT/locations/global/publishers/google/models",
-      "apiKey": "!gcloud auth print-access-token",
+      "baseUrl": "https://aiplatform.googleapis.com/v1/publishers/google/models",
+      "apiKey": "${GOOGLE_CLOUD_API_KEY}",
       "api": "google-vertex",
       "models": [
         { "id": "gemini-2.5-flash", "name": "Gemini 2.5 Flash", "reasoning": true, "contextWindow": 1000000, "maxTokens": 65536 }
@@ -263,7 +263,7 @@ Google 原生 provider 可以直接配置：
 }
 ```
 
-上面的 `!gcloud auth print-access-token` 示例使用 shell 命令解析。使用 `!command` 值前需要设置 `VIBECODING_ALLOW_SHELL_CONFIG=1`，也可以改用 `${GOOGLE_VERTEX_TOKEN}` 这样的环境变量引用。
+对 `google-vertex`，`${GOOGLE_CLOUD_API_KEY}` 会走 Vertex AI API key 路径，不需要 `gcloud`，URL 里也不需要 project/location。OAuth access token 仍然支持：使用 `https://aiplatform.googleapis.com/v1/projects/YOUR_PROJECT/locations/global/publishers/google/models` 这样的 project-scoped URL，并把 token 配成 `!gcloud auth print-access-token`。使用 `!command` 值前需要设置 `VIBECODING_ALLOW_SHELL_CONFIG=1`。
 
 #### thinkingFormat 字段
 

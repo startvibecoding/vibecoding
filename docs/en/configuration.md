@@ -252,8 +252,8 @@ Google native providers can be configured directly:
       ]
     },
     "google-vertex": {
-      "baseUrl": "https://aiplatform.googleapis.com/v1/projects/YOUR_PROJECT/locations/global/publishers/google/models",
-      "apiKey": "!gcloud auth print-access-token",
+      "baseUrl": "https://aiplatform.googleapis.com/v1/publishers/google/models",
+      "apiKey": "${GOOGLE_CLOUD_API_KEY}",
       "api": "google-vertex",
       "models": [
         { "id": "gemini-2.5-flash", "name": "Gemini 2.5 Flash", "reasoning": true, "contextWindow": 1000000, "maxTokens": 65536 }
@@ -263,7 +263,7 @@ Google native providers can be configured directly:
 }
 ```
 
-The `!gcloud auth print-access-token` example uses shell command resolution. Set `VIBECODING_ALLOW_SHELL_CONFIG=1` before using `!command` values, or replace it with an environment-variable reference such as `${GOOGLE_VERTEX_TOKEN}`.
+For `google-vertex`, `${GOOGLE_CLOUD_API_KEY}` uses the Vertex AI API key path and does not require `gcloud`, project, or location in the URL. OAuth access tokens are still supported by using a project-scoped URL such as `https://aiplatform.googleapis.com/v1/projects/YOUR_PROJECT/locations/global/publishers/google/models` and an access token value such as `!gcloud auth print-access-token`. Set `VIBECODING_ALLOW_SHELL_CONFIG=1` before using `!command` values.
 
 #### thinkingFormat field
 
