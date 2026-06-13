@@ -338,19 +338,16 @@ func (a *App) handleCommand(cmd string) tea.Cmd {
 			a.listSkills()
 		}
 	case "/compact":
-		if a.agent == nil {
+		if a.isThinking {
+			a.addMessage(errorStyle.Render("Cannot compact while the agent is running."))
+		} else if a.agent == nil {
 			a.addMessage(errorStyle.Render("Nothing to compact: no active conversation."))
 		} else {
 			msgs := a.agent.GetMessages()
 			if len(msgs) < 2 {
 				a.addMessage(errorStyle.Render("Nothing to compact: conversation is too short."))
 			} else {
-				a.agent.SetForceCompact()
-				if usage := a.agent.GetContextUsage(); usage != nil && usage.Percent != nil {
-					a.addMessage(statusStyle.Render(fmt.Sprintf("✅ Context compaction will be triggered on the next message. (current: %d tokens, %.0f%% used)", usage.Tokens, *usage.Percent)))
-				} else {
-					a.addMessage(statusStyle.Render("✅ Context compaction will be triggered on the next message."))
-				}
+				return a.startManualCompaction()
 			}
 		}
 	case "/clear":

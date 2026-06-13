@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/startvibecoding/vibecoding/internal/agent"
 	"github.com/startvibecoding/vibecoding/internal/config"
+	ctxpkg "github.com/startvibecoding/vibecoding/internal/context"
 	"github.com/startvibecoding/vibecoding/internal/provider"
 	"github.com/startvibecoding/vibecoding/internal/session"
 	"github.com/startvibecoding/vibecoding/internal/tools"
@@ -686,6 +687,64 @@ func TestListenEventsPassesThroughDoneAndError(t *testing.T) {
 	msg = app.listenAgentEvents()()
 	if _, ok := msg.(agentDoneMsg); !ok {
 		t.Fatalf("third msg = %#v, want agentDoneMsg", msg)
+	}
+}
+
+func TestCompactCommandStartsImmediateCompaction(t *testing.T) {
+	mockProvider := provider.NewMockProvider("mock", []*provider.Model{
+		{ID: "m1", Name: "Model 1", ContextWindow: 100000},
+	}, []provider.StreamEvent{
+		{Type: provider.StreamTextDelta, TextDelta: "## Goal\nCompacted summary"},
+		{Type: provider.StreamDone},
+	})
+	model := mockProvider.Models()[0]
+	settings := config.DefaultSettings()
+	registry := tools.NewRegistry(t.TempDir(), nil)
+	app := NewApp(mockProvider, model, settings, nil, registry, "", "", nil, "agent", false, nil, nil, nil)
+	app.agent = agent.New(agent.Config{
+		Provider: mockProvider,
+		Model:    model,
+		Mode:     "agent",
+		Settings: settings,
+		CompactionSettings: ctxpkg.CompactionSettings{
+			Enabled:          true,
+			ReserveTokens:    100,
+			KeepRecentTokens: 1,
+		},
+	}, registry)
+	app.agent.LoadHistoryMessages([]provider.Message{
+		provider.NewUserMessage("old user message"),
+		provider.NewAssistantMessage([]provider.ContentBlock{{Type: "text", Text: "old assistant message"}}),
+		provider.NewUserMessage("recent user message"),
+		provider.NewAssistantMessage([]provider.ContentBlock{{Type: "text", Text: "recent assistant message"}}),
+	})
+
+	cmd := app.handleCommand("/compact")
+	if cmd == nil {
+		t.Fatal("/compact returned nil command, want immediate compaction command")
+	}
+	startMsg := cmd()
+	if _, ok := startMsg.(compactionStartMsg); !ok {
+		t.Fatalf("/compact command message = %#v, want compactionStartMsg", startMsg)
+	}
+
+	msg := app.listenAgentEvents()()
+	if ev, ok := msg.(agentEventMsg); !ok || ev.event.Type != agent.EventCompactionStart {
+		t.Fatalf("first compaction event = %#v, want EventCompactionStart", msg)
+	}
+	msg = app.listenAgentEvents()()
+	if ev, ok := msg.(agentEventMsg); !ok || ev.event.Type != agent.EventCompactionEnd || ev.event.Error != nil {
+		t.Fatalf("second compaction event = %#v, want successful EventCompactionEnd", msg)
+	}
+	if got := mockProvider.GetCallCount(); got != 1 {
+		t.Fatalf("provider call count = %d, want 1", got)
+	}
+	msgs := app.agent.GetMessages()
+	if len(msgs) != 3 {
+		t.Fatalf("compacted messages len = %d, want 3", len(msgs))
+	}
+	if !msgs[0].SystemInjected || !strings.Contains(msgs[0].Content, "Compacted summary") {
+		t.Fatalf("first compacted message = %#v, want system-injected summary", msgs[0])
 	}
 }
 

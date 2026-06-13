@@ -608,6 +608,13 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.addMessage(userStyle.Render("You: ") + msg.input)
 		return a, tea.Batch(a.listenAgentEvents(), a.tickSpinner(), a.timer.Reset(), a.timer.Start())
 
+	case compactionStartMsg:
+		a.isThinking = true
+		a.spinnerIndex = 0
+		a.requestStart = time.Now()
+		a.lastDuration = 0
+		return a, tea.Batch(a.listenAgentEvents(), a.tickSpinner(), a.timer.Reset(), a.timer.Start())
+
 	case agentEventMsg:
 		return a, a.handleAgentEvent(msg.event)
 
@@ -879,4 +886,5 @@ func (a *App) markAssistantRenderedDirty() {
 
 // Message types
 type agentStartMsg struct{ input string }
+type compactionStartMsg struct{}
 type renderRequestMsg struct{}

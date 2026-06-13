@@ -511,7 +511,7 @@ func New(cfg Config, registry *tools.Registry) *Agent {
 		registry:         registry,
 		abort:            make(chan struct{}),
 		pendingApprovals: make(map[string]chan bool),
-		pendingQuestions:  make(map[string]chan string),
+		pendingQuestions: make(map[string]chan string),
 		context: &AgentContext{
 			Messages: make([]provider.Message, 0),
 		},
@@ -544,7 +544,7 @@ func NewWithLoopConfig(cfg AgentLoopConfig, registry *tools.Registry) *Agent {
 		registry:         registry,
 		abort:            make(chan struct{}),
 		pendingApprovals: make(map[string]chan bool),
-		pendingQuestions:  make(map[string]chan string),
+		pendingQuestions: make(map[string]chan string),
 		context: &AgentContext{
 			Messages: make([]provider.Message, 0),
 		},
@@ -1368,6 +1368,16 @@ func (a *Agent) Compact(ctx context.Context, ch chan<- Event) error {
 		return fmt.Errorf("no model set for compaction")
 	}
 
+	compactCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	go func() {
+		select {
+		case <-a.abort:
+			cancel()
+		case <-compactCtx.Done():
+		}
+	}()
+
 	ch <- Event{Type: EventCompactionStart}
 
 	// Snapshot messages under lock
@@ -1386,7 +1396,7 @@ func (a *Agent) Compact(ctx context.Context, ch chan<- Event) error {
 	}
 
 	// Use Insert-then-Compress with the SAME system prompt and tools (R4.1)
-	result, err := ctxpkg.Compact(ctx, msgs, a.config.Provider, a.config.Model,
+	result, err := ctxpkg.Compact(compactCtx, msgs, a.config.Provider, a.config.Model,
 		a.frozenSystemPrompt, a.frozenToolDefs,
 		a.config.CompactionSettings, previousSummary)
 	if err != nil {

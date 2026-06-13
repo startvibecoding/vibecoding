@@ -222,6 +222,9 @@ func (a *App) handleAgentEvent(event agent.Event) tea.Cmd {
 		return a.listenAgentEvents()
 
 	case agent.EventCompactionEnd:
+		if event.Error == nil && a.agent != nil {
+			a.contextUsage = a.agent.GetContextUsage()
+		}
 		if event.Error != nil {
 			a.addMessage(errorStyle.Render("Compaction failed: ") + event.Error.Error())
 		} else if event.StatusMessage != "" {

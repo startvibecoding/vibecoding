@@ -292,3 +292,16 @@ func (a *App) processInput(input string) tea.Cmd {
 		a.listenAgentEvents(),
 	)
 }
+
+func (a *App) startManualCompaction() tea.Cmd {
+	compactAgent := a.agent
+	eventCh := make(chan agent.Event, 100)
+	a.eventCh = eventCh
+
+	go func() {
+		defer close(eventCh)
+		_ = compactAgent.Compact(context.Background(), eventCh)
+	}()
+
+	return func() tea.Msg { return compactionStartMsg{} }
+}
