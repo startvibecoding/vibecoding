@@ -215,6 +215,45 @@ func TestGoogleRequestCachedContent(t *testing.T) {
 	}
 }
 
+func TestGoogleAssistantToolCallIncludesThoughtSignature(t *testing.T) {
+	p := NewGeminiProviderWithModels("fake-key", "https://generativelanguage.googleapis.com/v1beta/models", []*provider.Model{{ID: "gemini-test"}})
+	contents := p.convertMessages(provider.ChatParams{
+		Messages: []provider.Message{
+			provider.NewAssistantMessage([]provider.ContentBlock{
+				{
+					Type:      "thinking",
+					Thinking:  "thinking",
+					Signature: "think-sig",
+				},
+				{
+					Type: "toolCall",
+					ToolCall: &provider.ToolCallBlock{
+						ID:               "call_1",
+						Name:             "bash",
+						Arguments:        json.RawMessage(`{"command":"pwd"}`),
+						ThoughtSignature: "tool-sig",
+					},
+				},
+			}),
+		},
+	})
+
+	if len(contents) != 1 || len(contents[0].Parts) != 2 {
+		t.Fatalf("contents = %#v, want thinking and tool call parts", contents)
+	}
+	thinkingPart := contents[0].Parts[0]
+	if thinkingPart.Text != "thinking" || !thinkingPart.Thought || thinkingPart.ThoughtSignature != "think-sig" {
+		t.Fatalf("thinking part = %#v, want signed thought", thinkingPart)
+	}
+	part := contents[0].Parts[1]
+	if part.FunctionCall == nil || part.FunctionCall.Name != "bash" {
+		t.Fatalf("functionCall = %#v, want bash", part.FunctionCall)
+	}
+	if part.ThoughtSignature != "tool-sig" {
+		t.Fatalf("thoughtSignature = %q, want tool-sig", part.ThoughtSignature)
+	}
+}
+
 func TestGoogleVertexAPIKeyHeaderAndEndpoint(t *testing.T) {
 	bodyCh := make(chan string, 1)
 	p := newMockGoogleProvider(t,
@@ -266,7 +305,7 @@ func TestGoogleVertexOAuthAuthorizationHeader(t *testing.T) {
 
 func TestGoogleStreamTextThinkToolCallAndUsage(t *testing.T) {
 	sse := "data: {\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"thinking\",\"thought\":true,\"thoughtSignature\":\"sig-1\"},{\"text\":\"Hello \"}]}}]}\n" +
-		"data: {\"candidates\":[{\"content\":{\"parts\":[{\"functionCall\":{\"name\":\"read\",\"args\":{\"path\":\"main.go\"}}}]},\"finishReason\":\"STOP\"}],\"usageMetadata\":{\"promptTokenCount\":10,\"candidatesTokenCount\":5,\"thoughtsTokenCount\":2,\"cachedContentTokenCount\":7,\"totalTokenCount\":17}}\n"
+		"data: {\"candidates\":[{\"content\":{\"parts\":[{\"thoughtSignature\":\"tool-sig\",\"functionCall\":{\"name\":\"read\",\"args\":{\"path\":\"main.go\"}}}]},\"finishReason\":\"STOP\"}],\"usageMetadata\":{\"promptTokenCount\":10,\"candidatesTokenCount\":5,\"thoughtsTokenCount\":2,\"cachedContentTokenCount\":7,\"totalTokenCount\":17}}\n"
 	p := newMockGoogleProvider(t,
 		NewGeminiProviderWithModels("fake-key", "https://generativelanguage.googleapis.com/v1beta/models", []*provider.Model{{ID: "gemini-test"}}),
 		sse,
@@ -313,6 +352,9 @@ func TestGoogleStreamTextThinkToolCallAndUsage(t *testing.T) {
 	}
 	if tool == nil || tool.Name != "read" || string(tool.Arguments) != `{"path":"main.go"}` {
 		t.Fatalf("tool = %#v, want read path", tool)
+	}
+	if tool.ThoughtSignature != "tool-sig" {
+		t.Fatalf("tool thought signature = %q, want tool-sig", tool.ThoughtSignature)
 	}
 	if usage == nil || usage.Input != 10 || usage.Output != 5 || usage.Reasoning != 2 || usage.CacheRead != 7 || usage.TotalTokens != 17 {
 		t.Fatalf("usage = %#v, want token counts", usage)

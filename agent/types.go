@@ -113,9 +113,10 @@ type ContentBlock struct {
 
 // ToolCallBlock represents a tool call requested by the LLM.
 type ToolCallBlock struct {
-	ID        string
-	Name      string
-	Arguments []byte
+	ID               string
+	Name             string
+	Arguments        []byte
+	ThoughtSignature string
 }
 
 // ImageContent represents an image in a content block.

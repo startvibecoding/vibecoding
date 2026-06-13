@@ -67,6 +67,51 @@ func TestRenderEditToolResultShowsCompactDiff(t *testing.T) {
 	}
 }
 
+func TestRenderBashToolResultKeepsOutputRaw(t *testing.T) {
+	app := &App{}
+	summary := "[stdout]\n\u001b[32m+added\u001b[0m\n context\r\n[exit_code]\n0"
+	got := app.renderToolResult(toolResult{
+		toolName: "bash",
+		summary:  summary,
+	})
+
+	parts := strings.SplitN(got, "\n", 2)
+	if len(parts) != 2 {
+		t.Fatalf("renderToolResult(bash) = %q, want header and body", got)
+	}
+	if parts[1] != summary {
+		t.Fatalf("bash output body was modified:\n got %q\nwant %q", parts[1], summary)
+	}
+	if strings.Contains(parts[1], "\x1b[3m") {
+		t.Fatalf("bash output body should not inherit TUI italic styling: %q", parts[1])
+	}
+}
+
+func TestRenderExpandedBashToolResultKeepsDetailsRaw(t *testing.T) {
+	app := &App{}
+	output := "\u001b[31m-deleted\u001b[0m\r\n+added"
+	got := app.renderExpandedToolResult(toolResult{
+		toolName:    "bash",
+		fullContent: output,
+	})
+
+	if !strings.HasSuffix(got, "---\n"+output) {
+		t.Fatalf("expanded bash output was modified: %q", got)
+	}
+	body := got[strings.Index(got, "\n")+1:]
+	if strings.Contains(body, "\x1b[3m") {
+		t.Fatalf("expanded bash output body should not inherit TUI italic styling: %q", body)
+	}
+}
+
+func TestNormalizeHistoryLineEndingsOnlyCollapsesCRLF(t *testing.T) {
+	got := normalizeHistoryLineEndings("a\r\nb\rc")
+	want := "a\nb\rc"
+	if got != want {
+		t.Fatalf("normalizeHistoryLineEndings() = %q, want %q", got, want)
+	}
+}
+
 func TestAssistantMarkdownRendererUsesViewportWidth(t *testing.T) {
 	app := &App{
 		width:               60,

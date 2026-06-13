@@ -30,9 +30,10 @@ type ImageContent struct {
 
 // ToolCallBlock represents a tool call in an assistant message.
 type ToolCallBlock struct {
-	ID        string          `json:"id"`
-	Name      string          `json:"name"`
-	Arguments json.RawMessage `json:"arguments"`
+	ID               string          `json:"id"`
+	Name             string          `json:"name"`
+	Arguments        json.RawMessage `json:"arguments"`
+	ThoughtSignature string          `json:"thoughtSignature,omitempty"`
 }
 
 // Message represents a conversation message.

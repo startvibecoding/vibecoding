@@ -440,13 +440,20 @@ func (p *Provider) convertMessages(params provider.ChatParams) []googleContent {
 				if block.Text != "" {
 					content.Parts = append(content.Parts, googlePart{Text: block.Text})
 				}
+			case "thinking":
+				if block.Thinking != "" || block.Signature != "" {
+					content.Parts = append(content.Parts, googlePart{Text: block.Thinking, Thought: true, ThoughtSignature: block.Signature})
+				}
 			case "image":
 				if block.Image != nil {
 					content.Parts = append(content.Parts, googlePart{InlineData: &googleInlineData{MimeType: block.Image.MimeType, Data: block.Image.Data}})
 				}
 			case "toolCall":
 				if block.ToolCall != nil {
-					content.Parts = append(content.Parts, googlePart{FunctionCall: &googleFunctionCall{Name: block.ToolCall.Name, Args: block.ToolCall.Arguments}})
+					content.Parts = append(content.Parts, googlePart{
+						ThoughtSignature: block.ToolCall.ThoughtSignature,
+						FunctionCall:     &googleFunctionCall{Name: block.ToolCall.Name, Args: block.ToolCall.Arguments},
+					})
 				}
 			}
 		}
@@ -548,7 +555,7 @@ func (p *Provider) parseSSE(ctx context.Context, body io.Reader, ch chan<- provi
 						ch <- provider.StreamEvent{Type: provider.StreamTextDelta, TextDelta: part.Text}
 					}
 				}
-				if part.ThoughtSignature != "" {
+				if part.ThoughtSignature != "" && part.FunctionCall == nil {
 					ch <- provider.StreamEvent{Type: provider.StreamThinkSignature, ThinkSignature: part.ThoughtSignature}
 				}
 				if part.FunctionCall != nil {
@@ -558,9 +565,10 @@ func (p *Provider) parseSSE(ctx context.Context, body io.Reader, ch chan<- provi
 						args = json.RawMessage(`{}`)
 					}
 					tc := &provider.ToolCallBlock{
-						ID:        fmt.Sprintf("google_toolcall_%d", toolCallIndex),
-						Name:      part.FunctionCall.Name,
-						Arguments: args,
+						ID:               fmt.Sprintf("google_toolcall_%d", toolCallIndex),
+						Name:             part.FunctionCall.Name,
+						Arguments:        args,
+						ThoughtSignature: part.ThoughtSignature,
 					}
 					ch <- provider.StreamEvent{Type: provider.StreamToolCall, ToolCall: tc}
 				}

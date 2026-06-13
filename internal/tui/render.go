@@ -29,6 +29,9 @@ func (a *App) renderToolResult(result toolResult) string {
 		}
 		return toolStyle.Render(formatEditedToolResult(result))
 	}
+	if result.toolName == "bash" {
+		return renderBashToolResult(result)
+	}
 	summary := result.summary
 	if summary == "" {
 		summary = "..."
@@ -38,6 +41,18 @@ func (a *App) renderToolResult(result toolResult) string {
 		sep = "\n"
 	}
 	return toolStyle.Render(fmt.Sprintf("%s%s%s", formatToolHeader(result), sep, summary))
+}
+
+func renderBashToolResult(result toolResult) string {
+	summary := result.summary
+	if summary == "" {
+		summary = "..."
+	}
+	header := toolStyle.Render(formatToolHeader(result))
+	if strings.Contains(summary, "\n") {
+		return header + "\n" + summary
+	}
+	return header + " " + summary
 }
 
 func (a *App) renderAssistantMessage(idx int) string {

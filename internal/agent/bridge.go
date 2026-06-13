@@ -70,9 +70,10 @@ func ContentBlockToPublic(cb provider.ContentBlock) agentpkg.ContentBlock {
 	}
 	if cb.ToolCall != nil {
 		pub.ToolCall = &agentpkg.ToolCallBlock{
-			ID:        cb.ToolCall.ID,
-			Name:      cb.ToolCall.Name,
-			Arguments: cb.ToolCall.Arguments,
+			ID:               cb.ToolCall.ID,
+			Name:             cb.ToolCall.Name,
+			Arguments:        cb.ToolCall.Arguments,
+			ThoughtSignature: cb.ToolCall.ThoughtSignature,
 		}
 	}
 	if cb.Image != nil {
@@ -97,9 +98,10 @@ func ContentBlockFromPublic(cb agentpkg.ContentBlock) provider.ContentBlock {
 	}
 	if cb.ToolCall != nil {
 		internal.ToolCall = &provider.ToolCallBlock{
-			ID:        cb.ToolCall.ID,
-			Name:      cb.ToolCall.Name,
-			Arguments: cb.ToolCall.Arguments,
+			ID:               cb.ToolCall.ID,
+			Name:             cb.ToolCall.Name,
+			Arguments:        cb.ToolCall.Arguments,
+			ThoughtSignature: cb.ToolCall.ThoughtSignature,
 		}
 	}
 	if cb.Image != nil {
@@ -299,9 +301,10 @@ func StreamEventFromPublic(e agentpkg.StreamEvent) provider.StreamEvent {
 	}
 	if e.ToolCall != nil {
 		ev.ToolCall = &provider.ToolCallBlock{
-			ID:        e.ToolCall.ID,
-			Name:      e.ToolCall.Name,
-			Arguments: e.ToolCall.Arguments,
+			ID:               e.ToolCall.ID,
+			Name:             e.ToolCall.Name,
+			Arguments:        e.ToolCall.Arguments,
+			ThoughtSignature: e.ToolCall.ThoughtSignature,
 		}
 	}
 	if e.Usage != nil {

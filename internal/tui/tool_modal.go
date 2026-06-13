@@ -80,6 +80,9 @@ func (a *App) renderExpandedToolResult(result toolResult) string {
 	if strings.TrimSpace(details) != "" {
 		content += "\n" + details
 	}
+	if result.toolName == "bash" {
+		return toolStyle.Render(formatToolHeader(result)) + "\n" + details
+	}
 	return toolStyle.Render(content)
 }
 

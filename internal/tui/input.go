@@ -20,6 +20,7 @@ func (a *App) addMessage(msg string) {
 }
 
 func (a *App) printHistory(msg string) {
+	msg = normalizeHistoryLineEndings(msg)
 	if strings.TrimSpace(msg) == "" {
 		return
 	}
@@ -43,6 +44,10 @@ func (a *App) printHistory(msg string) {
 		}
 	}
 	a.pendingPrints = append(a.pendingPrints, msg)
+}
+
+func normalizeHistoryLineEndings(msg string) string {
+	return strings.ReplaceAll(msg, "\r\n", "\n")
 }
 
 func (a *App) printMessageOnce(idx int) {
