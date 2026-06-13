@@ -3,6 +3,7 @@ package tui
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/startvibecoding/vibecoding/internal/tools"
@@ -20,20 +21,8 @@ func (a *App) showNextApproval() {
 	a.pendingApprovalID = next.approvalID
 	a.waitingForApproval = true
 
-	// Build all lines into one message to preserve order.
-	var sb strings.Builder
-	if len(a.approvalQueue) > 0 {
-		sb.WriteString(warningStyle.Render(fmt.Sprintf("⚠️  Approval required for [%s] (%d more pending)", next.toolName, len(a.approvalQueue))))
-	} else {
-		sb.WriteString(warningStyle.Render(fmt.Sprintf("⚠️  Approval required for [%s]", next.toolName)))
-	}
-	sb.WriteByte('\n')
-	if len(next.args) > 0 {
-		sb.WriteString(warningStyle.Render(formatApprovalArgs(next.toolName, next.args)))
-		sb.WriteByte('\n')
-	}
-	sb.WriteString(warningStyle.Render("Approve? (y/n): "))
-	a.addMessage(sb.String())
+	a.addMessage(a.renderApprovalRequest(next, len(a.approvalQueue)))
+	a.scheduleRender()
 }
 
 func (a *App) clearApprovalState() {
@@ -81,11 +70,69 @@ func (a *App) clearQuestionState() {
 	a.questionQueue = a.questionQueue[:0]
 }
 
-func formatApprovalArgs(toolName string, args map[string]any) string {
-	if toolName == "edit" {
-		return formatEditApprovalArgs(args)
+func (a *App) renderApprovalRequest(next pendingApproval, remaining int) string {
+	var sb strings.Builder
+	title := fmt.Sprintf("! Approval required: %s", next.toolName)
+	if remaining > 0 {
+		title += fmt.Sprintf(" (%d more pending)", remaining)
+	}
+	sb.WriteString(warningStyle.Render(title))
+	sb.WriteByte('\n')
+
+	if detail := formatApprovalArgs(next.toolName, next.args); strings.TrimSpace(detail) != "" {
+		sb.WriteString(detail)
+		sb.WriteByte('\n')
 	}
 
+	sb.WriteString(warningStyle.Render("Approve? "))
+	sb.WriteString(statusStyle.Render("y = approve, n = deny"))
+	return sb.String()
+}
+
+func formatApprovalArgs(toolName string, args map[string]any) string {
+	switch toolName {
+	case "bash":
+		return formatBashApprovalArgs(args)
+	case "edit":
+		return formatEditApprovalArgs(args)
+	case "write":
+		return formatWriteApprovalArgs(args)
+	}
+
+	return formatGenericApprovalArgs(args)
+}
+
+func formatBashApprovalArgs(args map[string]any) string {
+	var lines []string
+	if command, ok := args["command"].(string); ok && command != "" {
+		lines = append(lines, statusStyle.Render("command:"))
+		lines = append(lines, indentLines(command, "  "))
+	}
+	if timeout, ok := args["timeout"]; ok {
+		lines = append(lines, fmt.Sprintf("timeout: %v", timeout))
+	}
+	if async, ok := args["async"]; ok {
+		lines = append(lines, fmt.Sprintf("async: %v", async))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func formatWriteApprovalArgs(args map[string]any) string {
+	var lines []string
+	if path, ok := args["path"].(string); ok && path != "" {
+		lines = append(lines, fmt.Sprintf("path: %s", path))
+	}
+	if content, ok := args["content"]; ok {
+		text := fmt.Sprintf("%v", content)
+		lines = append(lines, fmt.Sprintf("content: (%d bytes)", len(text)))
+	}
+	if len(lines) == 0 {
+		return formatGenericApprovalArgs(args)
+	}
+	return strings.Join(lines, "\n")
+}
+
+func formatGenericApprovalArgs(args map[string]any) string {
 	safeArgs := make(map[string]any, len(args))
 	for k, v := range args {
 		if k == "content" {
@@ -95,14 +142,42 @@ func formatApprovalArgs(toolName string, args map[string]any) string {
 		}
 		safeArgs[k] = v
 	}
-	var buf strings.Builder
-	enc := json.NewEncoder(&buf)
-	enc.SetEscapeHTML(false)
-	enc.SetIndent("", "  ")
-	if err := enc.Encode(safeArgs); err != nil {
-		return fmt.Sprintf("%v", safeArgs)
+
+	keys := make([]string, 0, len(safeArgs))
+	for k := range safeArgs {
+		keys = append(keys, k)
 	}
-	return strings.TrimRight(buf.String(), "\n")
+	sort.Strings(keys)
+
+	lines := make([]string, 0, len(keys))
+	for _, k := range keys {
+		lines = append(lines, fmt.Sprintf("%s: %s", k, formatApprovalValue(safeArgs[k])))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func formatApprovalValue(v any) string {
+	switch val := v.(type) {
+	case string:
+		if strings.Contains(val, "\n") {
+			return "\n" + indentLines(val, "  ")
+		}
+		return val
+	default:
+		b, err := json.Marshal(val)
+		if err != nil {
+			return fmt.Sprintf("%v", val)
+		}
+		return string(b)
+	}
+}
+
+func indentLines(s, prefix string) string {
+	lines := strings.Split(s, "\n")
+	for i, line := range lines {
+		lines[i] = prefix + line
+	}
+	return strings.Join(lines, "\n")
 }
 
 func formatEditApprovalArgs(args map[string]any) string {

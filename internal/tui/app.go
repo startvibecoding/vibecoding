@@ -410,8 +410,8 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, tea.Batch(cmds...)
 
 	case spinnerTickMsg:
-		// Update spinner animation if still thinking
-		if a.isThinking {
+		// Update timed UI affordances while the agent is active or user input is pending.
+		if a.isThinking || a.waitingForApproval {
 			a.spinnerIndex = (a.spinnerIndex + 1) % len(spinnerChars)
 			cmds = append(cmds, a.tickSpinner())
 		}

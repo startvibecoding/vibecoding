@@ -229,6 +229,9 @@ func (a *App) renderFooter() string {
 	}
 
 	status := fmt.Sprintf(" %s | %s | %s%s%s", modeStr, modelName, cwd, contextStr, cacheStr)
+	if a.waitingForApproval {
+		status += " | " + a.renderApprovalFooterAlert()
+	}
 	if a.isThinking {
 		status += " | " + spinnerChars[a.spinnerIndex] + " " + formatDuration(a.timer.Elapsed())
 	} else {
@@ -243,4 +246,12 @@ func (a *App) renderFooter() string {
 	}
 
 	return footerStyle.Width(a.width).Render(status)
+}
+
+func (a *App) renderApprovalFooterAlert() string {
+	const alert = "! APPROVAL REQUIRED: y/n"
+	if a.spinnerIndex%2 == 0 {
+		return warningStyle.Render(alert)
+	}
+	return strings.Repeat(" ", lipgloss.Width(alert))
 }

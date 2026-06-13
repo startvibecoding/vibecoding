@@ -125,7 +125,10 @@ func (a *App) handleAgentEvent(event agent.Event) tea.Cmd {
 			a.showNextApproval()
 		}
 		a.scheduleRender()
-		return a.listenAgentEvents()
+		if a.isThinking {
+			return a.listenAgentEvents()
+		}
+		return tea.Batch(a.listenAgentEvents(), a.tickSpinner())
 
 	case agent.EventQuestionRequest:
 		a.commitActiveStream()

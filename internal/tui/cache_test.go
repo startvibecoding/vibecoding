@@ -490,6 +490,23 @@ func TestCacheHighlightThreshold(t *testing.T) {
 	}
 }
 
+func TestRenderFooterShowsBlinkingApprovalAlert(t *testing.T) {
+	a := &App{
+		waitingForApproval: true,
+		spinnerIndex:       0,
+	}
+	visible := stripANSI(a.renderFooter())
+	if !strings.Contains(visible, "! APPROVAL REQUIRED: y/n") {
+		t.Fatalf("approval footer alert missing: %q", visible)
+	}
+
+	a.spinnerIndex = 1
+	hidden := stripANSI(a.renderFooter())
+	if strings.Contains(hidden, "! APPROVAL REQUIRED: y/n") {
+		t.Fatalf("approval footer alert should blink off on odd tick: %q", hidden)
+	}
+}
+
 func TestHandleAgentEventReservesAssistantSlotBeforeTextDelta(t *testing.T) {
 	a := &App{
 		messages:          []string{"You: hi"},
@@ -539,7 +556,7 @@ func TestHandleAgentEventCommitsStreamBeforeApproval(t *testing.T) {
 	joined := stripANSI(strings.Join(a.pendingPrints, "\n"))
 	thinkAt := strings.Index(joined, "think: thinking")
 	assistantAt := strings.Index(joined, "Assistant: I need to run a command.")
-	approvalAt := strings.Index(joined, "Approval required for [bash]")
+	approvalAt := strings.Index(joined, "Approval required: bash")
 	if thinkAt < 0 || assistantAt < 0 || approvalAt < 0 {
 		t.Fatalf("pending prints missing expected content: %q", joined)
 	}
@@ -548,6 +565,37 @@ func TestHandleAgentEventCommitsStreamBeforeApproval(t *testing.T) {
 	}
 	if a.currentThinkIdx != -1 || a.currentAssistantIdx != -1 {
 		t.Fatalf("active stream indices = think %d assistant %d, want both reset", a.currentThinkIdx, a.currentAssistantIdx)
+	}
+}
+
+func TestFormatApprovalArgsBashShowsCommandWithoutJSON(t *testing.T) {
+	got := stripANSI(formatApprovalArgs("bash", map[string]any{
+		"command": "git diff\nmake test",
+		"timeout": float64(30),
+	}))
+
+	if strings.Contains(got, "{") || strings.Contains(got, `"command"`) {
+		t.Fatalf("formatApprovalArgs(bash) should not render raw JSON: %q", got)
+	}
+	if !strings.Contains(got, "command:\n  git diff\n  make test") {
+		t.Fatalf("formatApprovalArgs(bash) missing formatted command: %q", got)
+	}
+	if !strings.Contains(got, "timeout: 30") {
+		t.Fatalf("formatApprovalArgs(bash) missing timeout: %q", got)
+	}
+}
+
+func TestFormatApprovalArgsWriteRedactsContent(t *testing.T) {
+	got := formatApprovalArgs("write", map[string]any{
+		"path":    "README.md",
+		"content": "secret content",
+	})
+
+	if strings.Contains(got, "secret content") {
+		t.Fatalf("formatApprovalArgs(write) leaked content: %q", got)
+	}
+	if !strings.Contains(got, "path: README.md") || !strings.Contains(got, "content: (14 bytes)") {
+		t.Fatalf("formatApprovalArgs(write) missing path/content summary: %q", got)
 	}
 }
 
