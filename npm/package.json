@@ -1,6 +1,6 @@
 {
   "name": "vibecoding-installer",
-  "version": "0.1.37",
+  "version": "0.1.38",
   "description": "AI coding assistant for the terminal",
   "bin": {
     "vibecoding": "bin/vibecoding"
@@ -30,13 +30,13 @@
     "node": ">=14"
   },
   "optionalDependencies": {
-    "vibecoding-installer-linux-x64": "0.1.37",
-    "vibecoding-installer-linux-arm64": "0.1.37",
-    "vibecoding-installer-linux-loong64": "0.1.37",
-    "vibecoding-installer-linux-musl-x64": "0.1.37",
-    "vibecoding-installer-darwin-x64": "0.1.37",
-    "vibecoding-installer-darwin-arm64": "0.1.37",
-    "vibecoding-installer-win32-x64": "0.1.37",
-    "vibecoding-installer-win32-arm64": "0.1.37"
+    "vibecoding-installer-linux-x64": "0.1.38",
+    "vibecoding-installer-linux-arm64": "0.1.38",
+    "vibecoding-installer-linux-loong64": "0.1.38",
+    "vibecoding-installer-linux-musl-x64": "0.1.38",
+    "vibecoding-installer-darwin-x64": "0.1.38",
+    "vibecoding-installer-darwin-arm64": "0.1.38",
+    "vibecoding-installer-win32-x64": "0.1.38",
+    "vibecoding-installer-win32-arm64": "0.1.38"
   }
 }

@@ -1,11 +1,19 @@
 {
   "name": "vibecoding-installer-linux-loong64",
-  "version": "0.1.37",
+  "version": "0.1.38",
   "description": "VibeCoding native binary for linux-loong64",
-  "os": ["linux"],
-  "cpu": ["loong64"],
-  "libc": ["glibc"],
-  "files": ["bin/"],
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "loong64"
+  ],
+  "libc": [
+    "glibc"
+  ],
+  "files": [
+    "bin/"
+  ],
   "license": "MIT",
   "repository": {
     "type": "git",

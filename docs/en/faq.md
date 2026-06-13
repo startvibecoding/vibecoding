@@ -359,4 +359,4 @@ This checks OS info, config files, providers, models, sandbox, MCP servers, sess
 
 ### Q: What is the current version?
 
-A: The current version is v0.1.37. See the [Changelog](changelog.md) for version history.
+A: The current version is v0.1.38. See the [Changelog](changelog.md) for version history.
